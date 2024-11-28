@@ -19,9 +19,9 @@
 
     extraAstalPackages = with ags.packages.${system}; [
       battery
+      bluetooth
       hyprland
       mpris
-      bluetooth
       network
       tray
       wireplumber
