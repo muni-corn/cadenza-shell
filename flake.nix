@@ -1,5 +1,5 @@
 {
-  description = "muse desktop shell";
+  description = "muni's desktop shell";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
@@ -16,18 +16,25 @@
   }: let
     system = "x86_64-linux";
     pkgs = nixpkgs.legacyPackages.${system};
+
+    extraAstalPackages = with ags.packages.${system}; [
+      battery
+      hyprland
+      mpris
+      bluetooth
+      network
+      tray
+      wireplumber
+    ];
   in {
     packages.${system}.default = ags.lib.bundle {
       inherit pkgs;
       src = ./.;
-      name = "my-shell";
+      name = "muse-shell";
       entry = "app.ts";
 
       # additional libraries and executables to add to gjs' runtime
-      extraPackages = [
-        # ags.packages.${system}.battery
-        # pkgs.fzf
-      ];
+      extraPackages = extraAstalPackages;
     };
 
     devShells.${system}.default = pkgs.mkShell {
@@ -37,9 +44,7 @@
 
         # includes astal3 astal4 astal-io by default
         (ags.packages.${system}.default.override {
-          extraPackages = [
-            # cherry pick packages
-          ];
+          extraPackages = extraAstalPackages;
         })
       ];
     };
