@@ -1,6 +1,6 @@
 import Hyprland from "gi://AstalHyprland";
 import { bind } from "astal";
-import { SingleMonitorProps } from "./utils";
+import { SingleMonitorProps, trunc } from "./utils";
 import { Gdk } from "astal/gtk3";
 
 export function Workspaces({ gdkmonitor }: SingleMonitorProps) {
@@ -35,11 +35,14 @@ export function FocusedClient({ gdkmonitor }: SingleMonitorProps) {
   const monitorName = getMonitorName(gdkmonitor);
 
   return (
-    <box visible={focused.as((f) => f.monitor.name === monitorName)}>
+    <box visible={focused.as((f) => f && f.monitor.name === monitorName)}>
       {focused.as(
         (client) =>
           client && (
-            <label className="dim" label={bind(client, "title").as(String)} />
+            <label
+              className="dim"
+              label={bind(client, "title").as((s) => trunc(s || ""))}
+            />
           ),
       )}
     </box>
