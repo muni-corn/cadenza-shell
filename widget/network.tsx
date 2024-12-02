@@ -1,9 +1,7 @@
 import { bind, Variable } from "astal";
-import { makeTile, percentageToIconFromList, Tile } from "./utils";
+import { makeTile, percentageToIconFromList, Tile, unreachable } from "./utils";
 
 import AstalNetwork from "gi://AstalNetwork";
-
-const network = AstalNetwork.get_default();
 
 const WIFI_ICONS = {
   connected: ["\u{F092F}", "\u{F091F}", "\u{F0922}", "\u{F0925}", "\u{F0928}"],
@@ -13,23 +11,15 @@ const WIFI_ICONS = {
   disabled: "\u{F092E}",
   unknown: "\u{F092B}",
 };
-function getWifiIcon(): string {
-  const wifi = network.wifi;
-
-  switch (wifi.state) {
+function getWifiIcon({ state, internet, strength }: AstalNetwork.Wifi): string {
+  switch (state) {
     case AstalNetwork.DeviceState.ACTIVATED:
-      if (wifi.internet === AstalNetwork.Internet.DISCONNECTED) {
-        return percentageToIconFromList(
-          wifi.strength / 100,
-          WIFI_ICONS.packetLoss,
-        );
+      if (internet === AstalNetwork.Internet.DISCONNECTED) {
+        return percentageToIconFromList(strength / 100, WIFI_ICONS.packetLoss);
         // } else if (network.vpn.activated_connections.length > 0) {
         //   return percentageToIconFromList(wifi.strength, WIFI_ICONS.vpn);
       } else {
-        return percentageToIconFromList(
-          wifi.strength / 100,
-          WIFI_ICONS.connected,
-        );
+        return percentageToIconFromList(strength / 100, WIFI_ICONS.connected);
       }
     case AstalNetwork.DeviceState.UNAVAILABLE:
       return WIFI_ICONS.disabled;
@@ -47,12 +37,10 @@ const WIRED_ICONS = {
   disabled: "\u{F0A8E}",
   unknown: "\u{F0A39}",
 };
-function getWiredIcon(): string {
-  const wired = network.wired;
-
-  switch (wired.state) {
+function getWiredIcon({ state, internet }: AstalNetwork.Wired): string {
+  switch (state) {
     case AstalNetwork.DeviceState.ACTIVATED:
-      if (wired.internet === AstalNetwork.Internet.DISCONNECTED) {
+      if (internet === AstalNetwork.Internet.DISCONNECTED) {
         return WIRED_ICONS.packetLoss;
         // } else if (network.vpn.activated_connections.length > 0) {
         //   return WIRED_ICONS.vpn;
@@ -67,45 +55,85 @@ function getWiredIcon(): string {
   }
 }
 
-function transformState(state: AstalNetwork.Wifi["state"]): string {
+function transformState(state: AstalNetwork.DeviceState): string {
   switch (state) {
     case AstalNetwork.DeviceState.ACTIVATED:
       return "";
-    case AstalNetwork.DeviceState.NEED_AUTH:
-      return "Sign-in needed";
     case AstalNetwork.DeviceState.CONFIG:
       return "Configuring";
-    case AstalNetwork.DeviceState.PREPARE:
-      return "Preparing";
-    case AstalNetwork.DeviceState.SECONDARIES:
-      return "Waiting for secondaries";
+    case AstalNetwork.DeviceState.DEACTIVATING:
+      return "Deactivating";
+    case AstalNetwork.DeviceState.DISCONNECTED:
+      return "Disconnected";
+    case AstalNetwork.DeviceState.FAILED:
+      return "Failed";
     case AstalNetwork.DeviceState.IP_CHECK:
       return "Checking IP";
     case AstalNetwork.DeviceState.IP_CONFIG:
       return "Configuring IP";
+    case AstalNetwork.DeviceState.NEED_AUTH:
+      return "Sign-in needed";
+    case AstalNetwork.DeviceState.PREPARE:
+      return "Preparing";
+    case AstalNetwork.DeviceState.SECONDARIES:
+      return "Waiting for secondaries";
+    case AstalNetwork.DeviceState.UNAVAILABLE:
+      return "Unavailable";
+    case AstalNetwork.DeviceState.UNKNOWN:
+      return "Unknown";
+    case AstalNetwork.DeviceState.UNMANAGED:
+      return "Unmanaged";
     default:
-      let transformed = state.toString();
-      transformed = transformed.replace("_", " ");
-      transformed = transformed.replace("ip", "IP");
-      transformed = transformed.charAt(0).toUpperCase() + transformed.slice(1);
-
-      return transformed;
+      return unreachable(state);
   }
 }
 
 export function Network() {
+  const network = AstalNetwork.get_default();
+  const wifi = network.wifi;
+  const wired = network.wired;
+
+  let wifiVar: Variable<AstalNetwork.Wifi | null> = Variable(null);
+  if (wifi)
+    wifiVar = Variable.derive(
+      [
+        bind(wifi, "internet"),
+        bind(wifi, "ssid"),
+        bind(wifi, "state"),
+        bind(wifi, "strength"),
+      ],
+      () => network.get_wifi(),
+    );
+
+  let wiredVar: Variable<AstalNetwork.Wired | null> = Variable(null);
+  if (wired)
+    wiredVar = Variable.derive(
+      [bind(wired, "internet"), bind(wired, "state")],
+      () => network.get_wired(),
+    );
+
   let tile: Variable<Tile> = Variable.derive(
-    [bind(network, "primary"), bind(network, "wifi"), bind(network, "wired")],
+    [bind(network, "primary"), wifiVar, wiredVar],
     (primary, wifi, wired) => {
+      const icon =
+        primary === AstalNetwork.Primary.WIRED && wired
+          ? getWiredIcon(wired)
+          : wifi
+            ? getWifiIcon(wifi)
+            : "";
+
+      const secondary = transformState(
+        primary === AstalNetwork.Primary.WIRED && wired
+          ? wired.get_state()
+          : wifi
+            ? wifi.get_state()
+            : -999,
+      );
       return {
-        icon:
-          primary === AstalNetwork.Primary.WIRED
-            ? getWiredIcon()
-            : getWifiIcon(),
-        primary: primary === AstalNetwork.Primary.WIRED ? "" : wifi.ssid || "",
-        secondary: transformState(
-          primary === AstalNetwork.Primary.WIRED ? wired.state : wifi.state,
-        ),
+        icon,
+        primary:
+          primary === AstalNetwork.Primary.WIRED ? "" : wifi?.get_ssid() || "",
+        secondary,
       };
     },
   );
