@@ -1,4 +1,4 @@
-import { Variable, bind } from "astal";
+import { bind, Variable } from "astal";
 import { ProgressTile, makeProgressTile } from "./utils";
 import Wp from "gi://AstalWp";
 
@@ -10,28 +10,32 @@ export function Volume(): JSX.Element {
   const audio = Wp.get_default();
 
   if (audio) {
-    const getIcon = (): string => {
-      if (audio.default_speaker.mute) {
+    const getIcon = (speaker: Wp.Endpoint): string => {
+      if (speaker.mute) {
         return MUTE_ICON;
-      } else if (audio.default_speaker.volume === 0) {
+      } else if (speaker.volume === 0) {
         return ZERO_ICON;
       } else {
-        let index = Math.floor(
-          audio.default_speaker.volume * VOLUME_ICONS.length,
-        );
+        let index = Math.floor(speaker.volume * VOLUME_ICONS.length);
         return VOLUME_ICONS[Math.min(index, VOLUME_ICONS.length - 1)];
       }
     };
 
-    const getProgressTile = (): ProgressTile => ({
-      icon: getIcon(),
-      progress: audio?.default_speaker.volume || 0,
+    const getProgressTile = (speaker: Wp.Endpoint): ProgressTile => ({
+      icon: getIcon(speaker),
+      progress: speaker.volume || 0,
       visible: true,
     });
 
-    const tile = bind(audio, "default_speaker").as(getProgressTile);
+    const tile = Variable.derive(
+      [
+        bind(audio.default_speaker, "volume"),
+        bind(audio.default_speaker, "mute"),
+      ],
+      () => getProgressTile(audio.default_speaker),
+    );
 
-    return makeProgressTile(tile);
+    return makeProgressTile(tile());
   } else {
     return <label label="No audio" className="dim" />;
   }
