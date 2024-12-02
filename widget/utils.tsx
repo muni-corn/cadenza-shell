@@ -84,3 +84,7 @@ export function percentageToIconFromList(percentage: number, icons: string[]) {
 export function trunc(s: string, n = 32) {
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
+
+export function unreachable(_: never): never {
+  throw new Error("unreachable case reached");
+}
