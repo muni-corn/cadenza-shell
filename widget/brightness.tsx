@@ -4,17 +4,21 @@ import { bind, exec, execAsync, monitorFile, Variable } from "astal";
 
 @register({ GTypeName: "BrilloObj" })
 export class BrilloObj extends GObject.Object {
-  // this Object assumes only one device with backlight
-  #interface = exec("sh -c 'ls -w1 /sys/class/backlight | head -1'");
+  static instance: BrilloObj;
+  static get_default() {
+    if (!this.instance) this.instance = new BrilloObj();
+    return this.instance;
+  }
 
+  // this Object assumes only one device with backlight
   #rawScreenValue = 0;
-  #min = Number(exec("brillo -rc")) || 0;
-  #max = Number(exec("brillo -rm")) || 1;
+
+  #interface: string = "";
+  #min: number = 0;
+  #max: number = 0;
 
   @property(Boolean)
-  get available() {
-    return this.#interface.trim() !== "";
-  }
+  declare available: boolean;
 
   @property(Number)
   get screenValue() {
@@ -34,12 +38,23 @@ export class BrilloObj extends GObject.Object {
   constructor() {
     super();
 
-    // setup monitor
-    const brightness = `/sys/class/backlight/${this.#interface}/brightness`;
-    monitorFile(brightness, () => this.#onChange());
+    try {
+      this.#interface = exec("sh -c 'ls -w1 /sys/class/backlight | head -1'");
+      this.#min = Number(exec("brillo -rc")) || 0;
+      this.#max = Number(exec("brillo -rm")) || 1;
+      this.available = true;
+    } catch (e) {
+      this.available = false;
+    }
 
-    // initialize
-    this.#onChange();
+    if (this.available) {
+      // setup monitor
+      const brightness = `/sys/class/backlight/${this.#interface}/brightness`;
+      monitorFile(brightness, () => this.#onChange());
+
+      // initialize
+      this.#onChange();
+    }
   }
 
   #onChange() {
@@ -58,13 +73,16 @@ const BRIGHTNESS_ICONS = [
 ];
 
 export function Brightness(): JSX.Element {
-  const brightness = new BrilloObj();
+  const brightness = BrilloObj.get_default();
 
-  let tile = bind(brightness, "screenValue").as((value) => ({
-    icon: percentageToIconFromList(value, BRIGHTNESS_ICONS) || "",
-    progress: value,
-    visible: brightness.available,
-  }));
-
-  return makeProgressTile(tile);
+  if (brightness.available) {
+    let tile = bind(brightness, "screenValue").as((value) => ({
+      icon: percentageToIconFromList(value, BRIGHTNESS_ICONS) || "",
+      progress: value,
+      visible: brightness.available,
+    }));
+    return makeProgressTile(tile);
+  } else {
+    return null;
+  }
 }
