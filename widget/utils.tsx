@@ -1,5 +1,6 @@
 import { Binding } from "astal";
 import { Gdk, Gtk } from "astal/gtk3";
+import { ProgressBar } from "./progress";
 
 export type SingleMonitorProps = { gdkmonitor: Gdk.Monitor };
 
@@ -69,7 +70,7 @@ export function makeProgressTile(data: Binding<ProgressTile>) {
         className={"icon dim"}
         widthRequest={16}
       />
-      <circularprogress value={progress} valign={Gtk.Align.CENTER} />
+      <ProgressBar fraction={progress} valign={Gtk.Align.CENTER} widthRequest={16} />
     </box>
   );
 }

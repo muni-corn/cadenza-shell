@@ -19,20 +19,45 @@ button {
 
 progressbar {
   background-color: transparent;
-}
 
-progress,
-trough {
-  min-height: 2px;
-}
+  progress,
+  trough {
+    min-height: 2px;
+  }
 
-trough {
-  min-width: 32px;
-  background-color: rgba(255, 255, 255, 0.1);
-}
+  trough {
+    min-width: 32px;
+    background-color: rgba(255, 255, 255, 0.1);
 
-progress {
-  background-color: rgba(255, 255, 255, 0.5);
+    progress {
+      background-color: rgba(255, 255, 255, 0.5);
+    }
+
+    &.full progress {
+      background-color: #ffaa00;
+    }
+  }
+
+  &.dim {
+    transition: all 1s linear;
+  }
+
+  &.bright {
+    transition: all 250ms linear;
+
+    trough {
+      min-width: 128px;
+      background-color: rgba(255, 255, 255, 0.5);
+
+      progress {
+        background-color: rgba(255, 255, 255, 1);
+      }
+
+      &.full progress {
+        background-color: #ffaa00;
+      }
+    }
+  }
 }
 
 .workspaces {
