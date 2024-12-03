@@ -75,14 +75,10 @@ const BRIGHTNESS_ICONS = [
 export function Brightness(): JSX.Element {
   const brightness = BrilloObj.get_default();
 
-  if (brightness.available) {
-    let tile = bind(brightness, "screenValue").as((value) => ({
-      icon: percentageToIconFromList(value, BRIGHTNESS_ICONS) || "",
-      progress: value,
-      visible: brightness.available,
-    }));
-    return makeProgressTile(tile);
-  } else {
-    return null;
-  }
+  let tile = bind(brightness, "screenValue").as((value) => ({
+    icon: percentageToIconFromList(value, BRIGHTNESS_ICONS) || "",
+    progress: value,
+    visible: brightness.available,
+  }));
+  return makeProgressTile(tile);
 }
