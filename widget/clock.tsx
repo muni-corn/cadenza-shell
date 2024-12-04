@@ -21,8 +21,8 @@ const CLOCK_ICONS = [
 export function Clock(): JSX.Element {
   const date = Variable({
     icon: "",
-    primary: "Hello",
-    secondary: "",
+    primary: "",
+    secondary: getGreeting(),
   }).poll(1000, () => {
     const now = GLib.DateTime.new_now_local();
     const icon = CLOCK_ICONS[new Date().getHours() % 12];
@@ -37,4 +37,15 @@ export function Clock(): JSX.Element {
   });
 
   return makeTile(date());
+}
+
+export function getGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour >= 3 && hour < 12) {
+    return "Good morning";
+  } else if (hour >= 12 && hour < 17) {
+    return "Good afternoon";
+  } else {
+    return "Good evening";
+  }
 }
