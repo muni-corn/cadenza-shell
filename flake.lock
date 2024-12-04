@@ -2,7 +2,9 @@
   "nodes": {
     "ags": {
       "inputs": {
-        "astal": "astal",
+        "astal": [
+          "astal"
+        ],
         "nixpkgs": [
           "nixpkgs"
         ]
@@ -23,26 +25,40 @@
     },
     "astal": {
       "inputs": {
-        "nixpkgs": [
-          "ags",
-          "nixpkgs"
-        ]
+        "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1731952585,
-        "narHash": "sha256-Sh1E7sJd8JJM3PCU1ZOei/QWz97OLCENIi2rTRoaniw=",
-        "owner": "aylur",
+        "lastModified": 1733341150,
+        "narHash": "sha256-IJ+nkPR3yvC+OGWDp7Kqa3VJ2i5SaMFQqyG+mh8pUAA=",
+        "owner": "muni-corn",
         "repo": "astal",
-        "rev": "664c7a4ddfcf48c6e8accd3c33bb94424b0e8609",
+        "rev": "cc4676d7d358982fde6f387f3ebf16fd2dcac1b6",
         "type": "github"
       },
       "original": {
-        "owner": "aylur",
+        "owner": "muni-corn",
+        "ref": "network-enum-fix",
         "repo": "astal",
         "type": "github"
       }
     },
     "nixpkgs": {
+      "locked": {
+        "lastModified": 1729256560,
+        "narHash": "sha256-/uilDXvCIEs3C9l73JTACm4quuHUsIHcns1c+cHUJwA=",
+        "owner": "nixos",
+        "repo": "nixpkgs",
+        "rev": "4c2fcb090b1f3e5b47eaa7bd33913b574a11e0a0",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nixos",
+        "ref": "nixos-unstable",
+        "repo": "nixpkgs",
+        "type": "github"
+      }
+    },
+    "nixpkgs_2": {
       "locked": {
         "lastModified": 1733212471,
         "narHash": "sha256-M1+uCoV5igihRfcUKrr1riygbe73/dzNnzPsmaLCmpo=",
@@ -61,7 +77,8 @@
     "root": {
       "inputs": {
         "ags": "ags",
-        "nixpkgs": "nixpkgs"
+        "astal": "astal",
+        "nixpkgs": "nixpkgs_2"
       }
     }
   },

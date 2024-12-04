@@ -3,9 +3,11 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    astal.url = "github:muni-corn/astal/network-enum-fix";
     ags = {
       url = "github:aylur/ags";
       inputs.nixpkgs.follows = "nixpkgs";
+      inputs.astal.follows = "astal";
     };
   };
 
