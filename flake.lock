@@ -28,11 +28,11 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1733341150,
-        "narHash": "sha256-IJ+nkPR3yvC+OGWDp7Kqa3VJ2i5SaMFQqyG+mh8pUAA=",
+        "lastModified": 1733344197,
+        "narHash": "sha256-Coo9jvWvVfCb/2MPgNh9A2bZxPW+2cRLrHk1KWVatW4=",
         "owner": "muni-corn",
         "repo": "astal",
-        "rev": "cc4676d7d358982fde6f387f3ebf16fd2dcac1b6",
+        "rev": "cf2c7215a7605a6d3513fd4f36536929a4832d2d",
         "type": "github"
       },
       "original": {
