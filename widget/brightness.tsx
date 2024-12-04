@@ -1,6 +1,8 @@
-import GObject, { register, property, signal } from "astal/gobject";
-import { makeProgressTile, percentageToIconFromList } from "./utils";
-import { bind, exec, execAsync, monitorFile, Variable } from "astal";
+import GObject, { register, property } from "astal/gobject";
+import { percentageToIconFromList } from "./utils";
+import { bind, exec, execAsync, monitorFile, timeout, Variable } from "astal";
+import { ProgressBar } from "./progress";
+import Gtk from "gi://Gtk";
 
 @register({ GTypeName: "BrilloObj" })
 export class BrilloObj extends GObject.Object {
@@ -72,13 +74,40 @@ const BRIGHTNESS_ICONS = [
   "\u{F00E0}",
 ];
 
-export function Brightness(): JSX.Element {
+export function Brightness(): JSX.Element | null {
   const brightness = BrilloObj.get_default();
 
-  let tile = bind(brightness, "screenValue").as((value) => ({
-    icon: percentageToIconFromList(value, BRIGHTNESS_ICONS) || "",
-    progress: value,
-    visible: brightness.available,
-  }));
-  return makeProgressTile(tile);
+    // for fade effects
+  let lastChangeTime = 0;
+  let extraClasses: Variable<"dim" | "bright"> = Variable("dim");
+  bind(brightness, "screenValue").subscribe(() => {
+    extraClasses.set("bright");
+    lastChangeTime = Date.now();
+
+    timeout(3000, () => {
+      if (Date.now() - lastChangeTime >= 3000) {
+        extraClasses.set("dim");
+      }
+    });
+  });
+
+  let screenValue = bind(brightness, "screenValue");
+
+  return (
+    <box spacing={8} visible={brightness.available}>
+      <label
+        label={screenValue.as(
+          (v) => percentageToIconFromList(v, BRIGHTNESS_ICONS) || "",
+        )}
+        className={extraClasses((c) => `icon ${c}`)}
+        widthRequest={16}
+      />
+      <ProgressBar
+        className={extraClasses()}
+        fraction={screenValue}
+        valign={Gtk.Align.CENTER}
+        widthRequest={16}
+      />
+    </box>
+  );
 }

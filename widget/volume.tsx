@@ -1,6 +1,7 @@
-import { bind, Variable } from "astal";
-import { ProgressTile, makeProgressTile } from "./utils";
+import { bind, timeout, Variable } from "astal";
 import Wp from "gi://AstalWp";
+import Gtk from "gi://Gtk";
+import { ProgressBar } from "./progress";
 
 const VOLUME_ICONS = ["\u{F057F}", "\u{F0580}", "\u{F057E}"];
 const MUTE_ICON = "\u{F0581}";
@@ -10,33 +11,56 @@ export function Volume(): JSX.Element {
   const audio = Wp.get_default();
 
   if (audio) {
-    const getIcon = (speaker: Wp.Endpoint): string => {
-      if (speaker.mute) {
-        return MUTE_ICON;
-      } else if (speaker.volume === 0) {
-        return ZERO_ICON;
-      } else {
-        let index = Math.floor(speaker.volume * VOLUME_ICONS.length);
-        return VOLUME_ICONS[Math.min(index, VOLUME_ICONS.length - 1)];
-      }
-    };
+    const volume = bind(audio.default_speaker, "volume");
+    const mute = bind(audio.default_speaker, "mute");
+    const state = Variable.derive([volume, mute], (volume, mute) => ({
+      volume,
+      mute,
+    }))();
 
-    const getProgressTile = (speaker: Wp.Endpoint): ProgressTile => ({
-      icon: getIcon(speaker),
-      progress: speaker.volume || 0,
-      visible: true,
+    // for fade effects
+    let lastChangeTime = 0;
+    let extraClasses: Variable<"dim" | "bright"> = Variable("dim");
+    state.subscribe(() => {
+      // because `icon` reacts to changes to both `volume` and `mute`, we
+      // can just reuse its binding to make fade animations
+      extraClasses.set("bright");
+      lastChangeTime = Date.now();
+
+      timeout(3000, () => {
+        if (Date.now() - lastChangeTime >= 3000) {
+          extraClasses.set("dim");
+        }
+      });
     });
 
-    const tile = Variable.derive(
-      [
-        bind(audio.default_speaker, "volume"),
-        bind(audio.default_speaker, "mute"),
-      ],
-      () => getProgressTile(audio.default_speaker),
+    return (
+      <box spacing={8}>
+        <label
+          label={state.as(getIcon)}
+          className={extraClasses((c) => `icon ${c}`)}
+          widthRequest={16}
+        />
+        <ProgressBar
+          className={extraClasses()}
+          fraction={volume}
+          valign={Gtk.Align.CENTER}
+          widthRequest={16}
+        />
+      </box>
     );
-
-    return makeProgressTile(tile());
   } else {
     return <label label="No audio" className="dim" />;
+  }
+}
+
+function getIcon({ volume, mute }: { volume: number; mute: boolean }): string {
+  if (mute) {
+    return MUTE_ICON;
+  } else if (volume === 0) {
+    return ZERO_ICON;
+  } else {
+    let index = Math.floor(volume * VOLUME_ICONS.length);
+    return VOLUME_ICONS[Math.min(index, VOLUME_ICONS.length - 1)];
   }
 }
