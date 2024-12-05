@@ -44,7 +44,7 @@ export function makeTile(data: Binding<Tile>): JSX.Element {
       />
       <label
         label={secondary}
-        visible={secondary.as((s) => s.length > 0)}
+        visible={secondary.as((s) => (s && s.length > 0) || false)}
         className={className("secondary")}
       />
     </box>
@@ -70,7 +70,10 @@ export function makeProgressTile(data: Binding<ProgressTile>) {
         className={"icon dim"}
         widthRequest={16}
       />
-      <ProgressBar fraction={progress} valign={Gtk.Align.CENTER} widthRequest={16} />
+      <ProgressBar
+        fraction={progress}
+        valign={Gtk.Align.CENTER}
+      />
     </box>
   );
 }
@@ -83,7 +86,7 @@ export function percentageToIconFromList(percentage: number, icons: string[]) {
 }
 
 export function trunc(s: string, n = 32) {
-  return s.length > n ? s.slice(0, n) + "…" : s;
+  return s && s.length > n ? s.slice(0, n) + "…" : s || "";
 }
 
 export function unreachable(_: never): never {
