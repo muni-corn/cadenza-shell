@@ -25,6 +25,7 @@
       hyprland
       mpris
       network
+      notifd
       tray
       wireplumber
     ];
