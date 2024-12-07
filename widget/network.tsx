@@ -1,5 +1,5 @@
 import { bind, Variable } from "astal";
-import { makeTile, percentageToIconFromList, Tile, unreachable } from "./utils";
+import { percentageToIconFromList, unreachable } from "./utils";
 
 import AstalNetwork from "gi://AstalNetwork";
 
@@ -22,8 +22,12 @@ function getIcon({
   connectivity,
   primary,
   state,
-  wifi: { strength },
+  wifi: { strength = 0 },
 }: AstalNetwork.Network): string {
+  if (primary === AstalNetwork.Primary.UNKNOWN) {
+    return WIRED_ICONS.disabled;
+  }
+
   let wifiConnectedIcon = percentageToIconFromList(
     strength / 100,
     WIFI_ICONS.connected,
@@ -75,9 +79,14 @@ function getStatusText({
   primary,
   state,
 }: AstalNetwork.Network): string {
+  if (
+    state === AstalNetwork.State.ASLEEP ||
+    primary === AstalNetwork.Primary.UNKNOWN
+  ) {
+    return "";
+  }
+
   switch (state) {
-    case AstalNetwork.State.ASLEEP:
-      return "Off";
     case AstalNetwork.State.CONNECTING:
       return "Connecting";
     case AstalNetwork.State.DISCONNECTED:
@@ -113,27 +122,48 @@ function getStatusText({
 export function Network() {
   const network = AstalNetwork.get_default();
 
-  let networkVar: Variable<AstalNetwork.Network> = Variable.derive(
+  let tile = Variable.derive(
     [
       bind(network, "primary"),
-      bind(network, "connectivity"),
       bind(network, "state"),
+      bind(network, "connectivity"),
     ],
-    () => network,
+    (primary, state) => {
+      const icon = getIcon(network);
+      const ssid =
+        (network.primary === AstalNetwork.Primary.WIFI &&
+          network.get_wifi()?.get_ssid()) ||
+        "";
+      const status = getStatusText(network);
+      return {
+        isOff:
+          state === AstalNetwork.State.ASLEEP ||
+          primary === AstalNetwork.Primary.UNKNOWN,
+        icon,
+        ssid,
+        status,
+      };
+    },
   );
 
-  let tile: Variable<Tile> = Variable.derive([networkVar], (network) => {
-    const icon = getIcon(network);
-    const secondary = getStatusText(network);
-    return {
-      icon,
-      primary:
-        network.primary === AstalNetwork.Primary.WIRED
-          ? ""
-          : network.get_wifi()?.get_ssid() || "",
-      secondary,
-    };
-  });
-
-  return makeTile(tile());
+  return (
+    <>
+      {tile(({ isOff, icon, ssid, status }) => (
+        <box spacing={12}>
+          <label
+            label={icon}
+            visible={icon.length > 0}
+            className={isOff ? "icon dim" : "icon"}
+            widthRequest={16}
+          />
+          <label label={ssid} visible={ssid.length > 0} className={"primary"} />
+          <label
+            label={status}
+            visible={status.length > 0}
+            className={"secondary"}
+          />
+        </box>
+      ))}
+    </>
+  );
 }
