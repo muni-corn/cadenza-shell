@@ -1,4 +1,3 @@
-import { Tile, makeTile } from "./utils";
 import { bind, Variable } from "astal";
 import AstalBluetooth from "gi://AstalBluetooth";
 
@@ -19,44 +18,29 @@ const BLUETOOTH_BATTERY_UNKNOWN_ICON = "\u{F094A}";
 export function Bluetooth() {
   const bluetooth = AstalBluetooth.Bluetooth.get_default();
 
-  const tile = Variable.derive(
-    [bind(bluetooth, "adapters"), bind(bluetooth, "devices")],
-    (adapters, devices): Tile => {
-      if (!adapters.some((a) => a.powered)) {
-        return {
-          icon: "\u{F00B2}",
-          primary: "",
-          secondary: "",
-          visible: true,
-        };
-      } else {
-        const connectedDevices = devices.filter((d) => d.connected);
-        switch (connectedDevices.length) {
-          case 0:
-            return {
-              icon: "\u{F00AF}",
-              primary: "",
-              secondary: "",
-              visible: true,
-            };
-          case 1:
-            return {
-              icon: "\u{F00B1}",
-              primary: connectedDevices[0].name,
-              secondary: "",
-              visible: true,
-            };
-          default:
-            return {
-              icon: "\u{F00B1}",
-              primary: "",
-              secondary: `${connectedDevices.length} devices`,
-              visible: true,
-            };
+  if (bluetooth?.adapter) {
+    const powered = bind(bluetooth, "is_powered");
+    const icon = Variable.derive(
+      [powered, bind(bluetooth, "is_connected")],
+      (powered, connected) => {
+        if (!powered) {
+          return "\u{F00B2}";
+        } else if (connected) {
+          return "\u{F00B1}";
+        } else {
+          return "\u{F00AF}";
         }
-      }
-    },
-  );
+      },
+    );
 
-  return makeTile(tile());
+    return (
+      <label
+        label={icon()}
+        className={powered.as((p) => (p ? "icon" : "icon dim"))}
+        widthRequest={16}
+      />
+    );
+  }
+
+  return undefined;
 }
