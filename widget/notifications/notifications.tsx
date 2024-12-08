@@ -39,6 +39,7 @@ export class NotificationMap implements Subscribable {
       let action = notification.actions[0];
       if (action) {
         notification.invoke(action.id);
+        this.delete(id);
       }
     }
   }
