@@ -35,8 +35,6 @@ export default function Bar(gdkmonitor: Gdk.Monitor) {
   );
 }
 
-// ----------------------------------8<------------------------------------
-
 // layout of the bar
 function Left({ gdkmonitor }: SingleMonitorProps): JSX.Element {
   return (

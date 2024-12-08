@@ -42,5 +42,5 @@ export function Bluetooth() {
     );
   }
 
-  return undefined;
+  return null;
 }
