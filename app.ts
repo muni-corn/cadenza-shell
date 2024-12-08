@@ -8,21 +8,18 @@ import NotificationPopups, {
 App.start({
   css: style,
   instanceName: "muse-shell",
-  main(...args: string[]) {
-    print("args", args);
-    App.get_monitors().map(Bar);
+  main() {
+    let monitors = App.get_monitors();
 
-    // put notifications on the top-left-most monitor
-    NotificationPopups(
-      App.get_monitors().sort((a, b) => {
-        const dx = a.get_geometry().x - b.get_geometry().x;
-        if (!dx) {
-          return a.get_geometry().y - b.get_geometry().y;
-        } else {
-          return dx;
-        }
-      })[0],
-    );
+    monitors.map(Bar);
+
+    for (const m of App.get_monitors()) {
+      const g = m.get_geometry();
+      print(`${m.get_manufacturer()}: ${g.x},${g.y} ${g.width}x${g.height}`);
+    }
+
+    // show notifications on last monitor
+    NotificationPopups(monitors[monitors.length - 1]);
   },
 
   // this runs in the main instance
