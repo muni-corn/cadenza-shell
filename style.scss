@@ -1,15 +1,18 @@
 // https://gitlab.gnome.org/GNOME/gtk/-/blob/gtk-3-24/gtk/theme/Adwaita/_colors-public.scss
+
+@use "sass:string";
+
 window.bar {
   background-color: rgba(0, 0, 0, 0.5);
-}
 
-button {
-  min-width: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  background-color: transparent;
-  border-radius: 0;
-  box-shadow: none;
+  button {
+    min-width: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    background-color: transparent;
+    border-radius: 0;
+    box-shadow: none;
+  }
 }
 
 .dim,
@@ -102,4 +105,134 @@ progressbar {
 
 .warning {
   color: #ffaa00;
+}
+
+@function gtkalpha($c, $a) {
+  @return string.unquote("alpha(#{$c},#{$a})");
+}
+
+// https://gitlab.gnome.org/GNOME/gtk/-/blob/gtk-3-24/gtk/theme/Adwaita/_colors-public.scss
+$error: #ffaa00;
+
+window.notifications {
+  // all: unset;
+}
+
+eventbox.notification-card {
+  button {
+    padding: 0;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  &:first-child > box {
+    margin-top: 16px;
+  }
+
+  &:last-child > box {
+    margin-bottom: 16px;
+  }
+
+  // eventboxes can not take margins so we style its inner box instead
+  > box {
+    min-width: 400px;
+    border-radius: 12px;
+    background-color: rgba(0, 0, 0, 0.5);
+    margin: 8px 16px;
+    box-shadow: 0px 4px 8px gtkalpha(black, 0.5);
+    border: 2px solid gtkalpha(white, 0.25);
+  }
+
+  &.critical > box {
+    border: 2px solid $error;
+
+    .header {
+      .app-name {
+        color: $error;
+      }
+
+      .app-icon {
+        color: $error;
+      }
+    }
+  }
+
+  .header {
+    padding-top: 4px;
+    color: gtkalpha(white, 0.5);
+
+    .app-icon {
+      margin: 0 16px;
+    }
+
+    .app-name {
+      font-weight: bold;
+
+      &:first-child {
+        margin-left: 16px;
+      }
+    }
+
+    .time {
+      margin-left: 16px;
+      margin-right: 4px;
+    }
+
+    button {
+      padding: 8px;
+      margin-right: 4px;
+      min-width: 0;
+      min-height: 0;
+      border-radius: 99px;
+    }
+  }
+
+  separator {
+    margin: 0 16px;
+    background-color: gtkalpha(white, 0.25);
+  }
+
+  .content {
+    margin: 16px;
+    margin-top: 4px;
+
+    .summary {
+      margin-bottom: 4px;
+      font-weight: bold;
+      color: white;
+    }
+
+    .body {
+      color: gtkalpha(white, 0.75);
+    }
+
+    .image {
+      margin-right: 16px;
+      border-radius: 12px;
+      min-width: 48px;
+      min-height: 48px;
+      background-size: cover;
+      background-position: center;
+    }
+  }
+
+  .actions {
+    margin: 16px;
+    margin-top: 0;
+
+    button {
+      margin: 0 8px;
+      padding: 6px;
+      border-radius: 8px;
+      background-color: gtkalpha(white, 0.05);
+
+      &:first-child {
+        margin-left: 0;
+      }
+
+      &:last-child {
+        margin-right: 0;
+      }
+    }
+  }
 }
