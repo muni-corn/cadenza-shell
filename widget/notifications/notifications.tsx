@@ -61,14 +61,6 @@ export class NotificationMap implements Subscribable {
         NotificationCard({
           notification: notifd.get_notification(id)!,
 
-          // once hovering over the notification is done
-          // destroy the widget without calling notification.dismiss()
-          // so that it acts as a "popup" and we can still display it
-          // in a notification center like widget
-          // but clicking on the close button will close it
-          onHoverLost: () => {},
-          // onHoverLost: () => this.delete(id),
-
           // notifd by default does not close notifications
           // until user input or the timeout specified by sender
           // which we set to ignore above

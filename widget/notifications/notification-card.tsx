@@ -26,13 +26,12 @@ const urgency = (n: Notifd.Notification) => {
 
 type Props = {
   setup(self: EventBox): void;
-  onHoverLost(self: EventBox): void;
   onActionExecution(): void;
   notification: Notifd.Notification;
 };
 
 export default function NotificationCard(props: Props) {
-  const { notification: n, onHoverLost, setup, onActionExecution } = props;
+  const { notification: n, setup, onActionExecution } = props;
   const { START, CENTER, END } = Gtk.Align;
 
   const content = (
@@ -94,7 +93,6 @@ export default function NotificationCard(props: Props) {
     <eventbox
       className={`notification-card ${urgency(n)}`}
       setup={setup}
-      onHoverLost={onHoverLost}
     >
       <box vertical>
         <box className="header">
