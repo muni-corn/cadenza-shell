@@ -11,12 +11,8 @@ App.start({
   main() {
     let monitors = App.get_monitors();
 
+    // show bar on all monitors
     monitors.map(Bar);
-
-    for (const m of App.get_monitors()) {
-      const g = m.get_geometry();
-      print(`${m.get_manufacturer()}: ${g.x},${g.y} ${g.width}x${g.height}`);
-    }
 
     // show notifications on last monitor
     NotificationPopups(monitors[monitors.length - 1]);
@@ -24,10 +20,8 @@ App.start({
 
   // this runs in the main instance
   requestHandler(request: string, res: (response: any) => void) {
-    print("in request handler");
     switch (request) {
       case "noti-act":
-        print("executing noti-act");
         NotificationMap.get_default().activateTopNotification();
         res("done");
         break;
@@ -35,13 +29,6 @@ App.start({
   },
 
   client(message: (msg: string) => string, ...args: string[]): void {
-    print("args:", args.join(" "));
-    if (args[0] === "noti" && args[1] === "act") {
-      print("sending noti-act message");
-      let res = message("noti-act");
-      print(res);
-    } else {
-      printerr("no commands with that name");
-    }
+    if (args[0] === "noti" && args[1] === "act") message("noti-act");
   },
 });
