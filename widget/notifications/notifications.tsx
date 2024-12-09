@@ -37,7 +37,7 @@ export class NotificationMap implements Subscribable {
     if (id != null) {
       let notification = Notifd.get_default().get_notification(id);
       let action = notification.actions[0];
-      if (action) {
+      if (action != null) {
         notification.invoke(action.id);
         this.delete(id);
       }
