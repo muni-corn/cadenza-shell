@@ -35,6 +35,61 @@ export default function NotificationCard(props: Props) {
   const { notification: n, onHoverLost, setup, onActionExecution } = props;
   const { START, CENTER, END } = Gtk.Align;
 
+  const content = (
+    <box className="content">
+      {n.image && fileExists(n.image) && (
+        <box
+          valign={START}
+          className="image"
+          css={`
+            background-image: url("${n.image}");
+          `}
+        />
+      )}
+      {n.image && isIcon(n.image) && (
+        <box expand={false} valign={START} className="icon-image">
+          <icon icon={n.image} expand halign={CENTER} valign={CENTER} />
+        </box>
+      )}
+      <box vertical>
+        <label
+          className="summary"
+          halign={START}
+          xalign={0}
+          label={n.summary}
+          truncate
+        />
+        {n.body && (
+          <label
+            className="body"
+            wrap
+            useMarkup
+            halign={START}
+            xalign={0}
+            label={n.body}
+          />
+        )}
+      </box>
+    </box>
+  );
+
+  // wrap content in a button if it is actionable
+  const cardBody =
+    n.get_actions().length > 0 ? (
+      <button
+        onClicked={() => {
+          if (n.get_actions()[0]) {
+            n.invoke(n.get_actions()[0].id);
+            onActionExecution();
+          }
+        }}
+      >
+        {content}
+      </button>
+    ) : (
+      content
+    );
+
   return (
     <eventbox
       className={`notification-card ${urgency(n)}`}
@@ -61,50 +116,7 @@ export default function NotificationCard(props: Props) {
             <icon icon="window-close-symbolic" />
           </button>
         </box>
-        <button
-          onClicked={() => {
-            if (n.get_actions()[0]) {
-              n.invoke(n.get_actions()[0].id);
-              onActionExecution();
-            }
-          }}
-        >
-          <box className="content">
-            {n.image && fileExists(n.image) && (
-              <box
-                valign={START}
-                className="image"
-                css={`
-                  background-image: url("${n.image}");
-                `}
-              />
-            )}
-            {n.image && isIcon(n.image) && (
-              <box expand={false} valign={START} className="icon-image">
-                <icon icon={n.image} expand halign={CENTER} valign={CENTER} />
-              </box>
-            )}
-            <box vertical>
-              <label
-                className="summary"
-                halign={START}
-                xalign={0}
-                label={n.summary}
-                truncate
-              />
-              {n.body && (
-                <label
-                  className="body"
-                  wrap
-                  useMarkup
-                  halign={START}
-                  xalign={0}
-                  label={n.body}
-                />
-              )}
-            </box>
-          </box>
-        </button>
+        {cardBody}
         {n.get_actions().length > 1 && (
           <box className="actions">
             {n.get_actions().map(({ label, id }) => (
