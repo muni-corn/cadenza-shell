@@ -108,7 +108,7 @@ export default function NotificationCard(props: Props) {
             className="app-name"
             halign={START}
             truncate
-            label={n.appName || "Unknown"}
+            label={n.appName || ""}
           />
           <label className="time" hexpand halign={END} label={time(n.time)} />
           <button className="closeButton" onClicked={() => n.dismiss()}>
