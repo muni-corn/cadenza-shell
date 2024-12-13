@@ -53,10 +53,12 @@ export default function NotificationCard(props: Props) {
       <box vertical>
         <label
           className="summary"
+          wrap
           halign={START}
           xalign={0}
           label={n.summary}
           truncate
+          lines={2}
         />
         {n.body && (
           <label
@@ -66,6 +68,8 @@ export default function NotificationCard(props: Props) {
             halign={START}
             xalign={0}
             label={n.body}
+            truncate
+            lines={6}
           />
         )}
       </box>
@@ -90,10 +94,7 @@ export default function NotificationCard(props: Props) {
     );
 
   return (
-    <eventbox
-      className={`notification-card ${urgency(n)}`}
-      setup={setup}
-    >
+    <eventbox className={`notification-card ${urgency(n)}`} setup={setup}>
       <box vertical>
         <box className="header">
           {(n.appIcon || n.desktopEntry) && (
