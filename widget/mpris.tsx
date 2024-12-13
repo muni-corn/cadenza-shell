@@ -1,5 +1,5 @@
-import { makeTile } from "./utils";
-import { Variable, bind } from "astal";
+import { trunc } from "./utils";
+import { bind } from "astal";
 import Mpris from "gi://AstalMpris";
 import AstalMpris from "gi://AstalMpris?version=0.1";
 
@@ -24,9 +24,10 @@ export function Media(): JSX.Element {
               : MPRIS_PAUSED_ICON,
           );
           const title = bind(player, "title").as(
-            (t) => t || `Media is ${statusToString(player.playback_status)}`,
+            (t) =>
+              trunc(t) || `Media is ${statusToString(player.playback_status)}`,
           );
-          const artist = bind(player, "artist").as((a) => a || "");
+          const artist = bind(player, "artist").as((a) => trunc(a) || "");
           let visible = bind(player, "playback_status").as(
             (s) => s !== AstalMpris.PlaybackStatus.STOPPED,
           );
