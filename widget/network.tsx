@@ -22,18 +22,18 @@ function getIcon({
   connectivity,
   primary,
   state,
-  wifi: { strength = 0 },
+  wifi,
 }: AstalNetwork.Network): string {
   if (primary === AstalNetwork.Primary.UNKNOWN) {
     return WIRED_ICONS.disabled;
   }
 
   let wifiConnectedIcon = percentageToIconFromList(
-    strength / 100,
+    wifi?.strength || 0 / 100,
     WIFI_ICONS.connected,
   );
   let wifiConnectedPacketLossIcon = percentageToIconFromList(
-    strength / 100,
+    wifi?.strength || 0 / 100,
     WIFI_ICONS.packetLoss,
   );
 
