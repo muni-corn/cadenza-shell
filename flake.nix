@@ -3,11 +3,13 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    astal.url = "github:Aylur/astal/main";
+    astal = {
+      url = "github:Aylur/astal";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     ags = {
       url = "github:aylur/ags";
       inputs.nixpkgs.follows = "nixpkgs";
-      inputs.astal.follows = "astal";
     };
   };
 
@@ -42,9 +44,6 @@
 
     devShells.${system}.default = pkgs.mkShell {
       buildInputs = [
-        # includes all Astal libraries
-        # ags.packages.${system}.agsFull
-
         # includes astal3 astal4 astal-io by default
         (ags.packages.${system}.default.override {
           extraPackages = extraAstalPackages;
