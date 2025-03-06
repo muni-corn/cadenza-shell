@@ -42,5 +42,5 @@ export function Bluetooth() {
     );
   }
 
-  return null;
+  return <label visible={false} />;
 }
