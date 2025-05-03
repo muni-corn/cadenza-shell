@@ -1,5 +1,5 @@
-import { bind } from "astal";
 import Tray from "gi://AstalTray";
+import { bind } from "astal";
 
 export function SysTray() {
   const tray = Tray.get_default();

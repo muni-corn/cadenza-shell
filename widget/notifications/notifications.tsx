@@ -1,7 +1,7 @@
-import { Astal, Gtk, Gdk } from "astal/gtk3";
 import Notifd from "gi://AstalNotifd";
-import { type Subscribable } from "astal/binding";
 import { Variable, bind, timeout } from "astal";
+import type { Subscribable } from "astal/binding";
+import { Astal, type Gdk, type Gtk } from "astal/gtk3";
 import NotificationCard from "./notification-card";
 
 // see comment below in constructor
@@ -13,11 +13,11 @@ const TIMEOUT_DELAY = 10000;
 export class NotificationMap implements Subscribable {
   private static instance: NotificationMap;
   static get_default() {
-    if (!this.instance) {
-      this.instance = new NotificationMap();
+    if (!NotificationMap.instance) {
+      NotificationMap.instance = new NotificationMap();
     }
 
-    return this.instance;
+    return NotificationMap.instance;
   }
 
   // the underlying map to keep track of id widget pairs
@@ -33,10 +33,10 @@ export class NotificationMap implements Subscribable {
   }
 
   activateTopNotification() {
-    let id = [...this.map.keys()].reverse()[0];
+    const id = [...this.map.keys()].reverse()[0];
     if (id != null) {
-      let notification = Notifd.get_default().get_notification(id);
-      let action = notification.actions[0];
+      const notification = Notifd.get_default().get_notification(id);
+      const action = notification.actions[0];
       if (action != null) {
         notification.invoke(action.id);
         this.delete(id);
@@ -59,7 +59,7 @@ export class NotificationMap implements Subscribable {
       this.set(
         id,
         NotificationCard({
-          notification: notifd.get_notification(id)!,
+          notification: notifd.get_notification(id),
 
           // notifd by default does not close notifications
           // until user input or the timeout specified by sender
@@ -118,7 +118,7 @@ export default function NotificationPopups(gdkmonitor: Gdk.Monitor) {
       anchor={TOP | RIGHT}
       widthRequest={432}
     >
-      <box vertical>{bind(notifs)}</box>
+      <box vertical={true}>{bind(notifs)}</box>
     </window>
   );
 }

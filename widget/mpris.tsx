@@ -1,7 +1,7 @@
-import { trunc } from "./utils";
-import { bind } from "astal";
 import Mpris from "gi://AstalMpris";
 import AstalMpris from "gi://AstalMpris?version=0.1";
+import { bind } from "astal";
+import { trunc } from "./utils";
 
 const mpris = Mpris.get_default();
 
@@ -12,7 +12,7 @@ export function Media(): JSX.Element {
   return (
     <>
       {bind(mpris, "players").as((players) => {
-        let player =
+        const player =
           players.find(
             (p) => p.playback_status === AstalMpris.PlaybackStatus.PLAYING,
           ) || players[0];
@@ -28,7 +28,7 @@ export function Media(): JSX.Element {
               trunc(t) || `Media is ${statusToString(player.playback_status)}`,
           );
           const artist = bind(player, "artist").as((a) => trunc(a) || "");
-          let visible = bind(player, "playback_status").as(
+          const visible = bind(player, "playback_status").as(
             (s) => s !== AstalMpris.PlaybackStatus.STOPPED,
           );
 

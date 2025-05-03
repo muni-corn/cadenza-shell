@@ -1,5 +1,5 @@
-import { bind, Variable } from "astal";
 import AstalBluetooth from "gi://AstalBluetooth";
+import { Variable, bind } from "astal";
 
 const BLUETOOTH_BATTERY_ICONS = [
   "\u{F093E}",

@@ -1,5 +1,5 @@
-import { Binding } from "astal";
-import { Gdk, Gtk } from "astal/gtk3";
+import type { Binding } from "astal";
+import { type Gdk, Gtk } from "astal/gtk3";
 import { ProgressBar } from "./progress";
 
 export type SingleMonitorProps = { gdkmonitor: Gdk.Monitor };
@@ -19,15 +19,15 @@ export interface Tile {
 }
 
 export function makeTile(data: Binding<Tile>): JSX.Element {
-  let className = (otherClasses: string = "") =>
+  const className = (otherClasses = "") =>
     data.as((d) =>
       d.attention ? `${otherClasses} ${d.attention}` : otherClasses,
     );
 
-  let icon = data.as((d) => trunc(d.icon));
-  let primary = data.as((d) => trunc(d.primary));
-  let secondary = data.as((d) => trunc(d.secondary));
-  let visible = data.as((d) => d.visible ?? true);
+  const icon = data.as((d) => trunc(d.icon));
+  const primary = data.as((d) => trunc(d.primary));
+  const secondary = data.as((d) => trunc(d.secondary));
+  const visible = data.as((d) => d.visible ?? true);
 
   return (
     <box spacing={12} visible={visible}>
@@ -58,9 +58,9 @@ export interface ProgressTile {
 }
 
 export function makeProgressTile(data: Binding<ProgressTile>) {
-  let icon = data.as((d) => trunc(d.icon));
-  let progress = data.as((d) => d.progress);
-  let visible = data.as((d) => d.visible ?? true);
+  const icon = data.as((d) => trunc(d.icon));
+  const progress = data.as((d) => d.progress);
+  const visible = data.as((d) => d.visible ?? true);
 
   return (
     <box spacing={8} visible={visible}>
@@ -70,10 +70,7 @@ export function makeProgressTile(data: Binding<ProgressTile>) {
         className={"icon dim"}
         widthRequest={16}
       />
-      <ProgressBar
-        fraction={progress}
-        valign={Gtk.Align.CENTER}
-      />
+      <ProgressBar fraction={progress} valign={Gtk.Align.CENTER} />
     </box>
   );
 }

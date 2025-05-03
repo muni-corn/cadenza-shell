@@ -1,15 +1,15 @@
-import { App, Astal, Gdk, Gtk } from "astal/gtk3";
-import { Clock } from "./clock";
-import { Weather } from "./weather";
-import { Media } from "./mpris";
-import { Brightness } from "./brightness";
-import { Volume } from "./volume";
-import { Bluetooth } from "./bluetooth";
-import { Network } from "./network";
+import { App, Astal, type Gdk, Gtk } from "astal/gtk3";
 import { Battery } from "./battery";
-import { SysTray } from "./tray";
+import { Bluetooth } from "./bluetooth";
+import { Brightness } from "./brightness";
+import { Clock } from "./clock";
 import { FocusedClient, Workspaces } from "./hyprland";
-import { SingleMonitorProps } from "./utils";
+import { Media } from "./mpris";
+import { Network } from "./network";
+import { SysTray } from "./tray";
+import type { SingleMonitorProps } from "./utils";
+import { Volume } from "./volume";
+import { Weather } from "./weather";
 
 export default function Bar(gdkmonitor: Gdk.Monitor) {
   return (

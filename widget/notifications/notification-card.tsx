@@ -1,7 +1,7 @@
-import { GLib } from "astal";
-import { Gtk, Astal } from "astal/gtk3";
-import { type EventBox } from "astal/gtk3/widget";
 import Notifd from "gi://AstalNotifd";
+import { GLib } from "astal";
+import { Astal, Gtk } from "astal/gtk3";
+import type { EventBox } from "astal/gtk3/widget";
 
 const isIcon = (icon: string) => !!Astal.Icon.lookup_icon(icon);
 
@@ -47,28 +47,28 @@ export default function NotificationCard(props: Props) {
       )}
       {n.image && isIcon(n.image) && (
         <box expand={false} valign={START} className="icon-image">
-          <icon icon={n.image} expand halign={CENTER} valign={CENTER} />
+          <icon icon={n.image} expand={true} halign={CENTER} valign={CENTER} />
         </box>
       )}
-      <box vertical>
+      <box vertical={true}>
         <label
           className="summary"
-          wrap
+          wrap={true}
           halign={START}
           xalign={0}
           label={n.summary}
-          truncate
+          truncate={true}
           lines={2}
         />
         {n.body && (
           <label
             className="body"
-            wrap
-            useMarkup
+            wrap={true}
+            useMarkup={true}
             halign={START}
             xalign={0}
             label={n.body}
-            truncate
+            truncate={true}
             lines={6}
           />
         )}
@@ -95,7 +95,7 @@ export default function NotificationCard(props: Props) {
 
   return (
     <eventbox className={`notification-card ${urgency(n)}`} setup={setup}>
-      <box vertical>
+      <box vertical={true}>
         <box className="header">
           {(n.appIcon || n.desktopEntry) && (
             <icon
@@ -107,10 +107,15 @@ export default function NotificationCard(props: Props) {
           <label
             className="app-name"
             halign={START}
-            truncate
+            truncate={true}
             label={n.appName || ""}
           />
-          <label className="time" hexpand halign={END} label={time(n.time)} />
+          <label
+            className="time"
+            hexpand={true}
+            halign={END}
+            label={time(n.time)}
+          />
           <button className="closeButton" onClicked={() => n.dismiss()}>
             <icon icon="window-close-symbolic" />
           </button>
@@ -119,8 +124,8 @@ export default function NotificationCard(props: Props) {
         {n.get_actions().length > 1 && (
           <box className="actions">
             {n.get_actions().map(({ label, id }) => (
-              <button hexpand onClicked={() => n.invoke(id)}>
-                <label label={label} halign={CENTER} hexpand />
+              <button hexpand={true} onClicked={() => n.invoke(id)}>
+                <label label={label} halign={CENTER} hexpand={true} />
               </button>
             ))}
           </box>

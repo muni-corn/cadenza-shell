@@ -1,4 +1,4 @@
-import { bind, Variable } from "astal";
+import { Variable, bind } from "astal";
 import { percentageToIconFromList, unreachable } from "./utils";
 
 import AstalNetwork from "gi://AstalNetwork";
@@ -28,11 +28,11 @@ function getIcon({
     return WIRED_ICONS.disabled;
   }
 
-  let wifiConnectedIcon = percentageToIconFromList(
+  const wifiConnectedIcon = percentageToIconFromList(
     wifi?.strength || 0 / 100,
     WIFI_ICONS.connected,
   );
-  let wifiConnectedPacketLossIcon = percentageToIconFromList(
+  const wifiConnectedPacketLossIcon = percentageToIconFromList(
     wifi?.strength || 0 / 100,
     WIFI_ICONS.packetLoss,
   );
@@ -122,7 +122,7 @@ function getStatusText({
 export function Network() {
   const network = AstalNetwork.get_default();
 
-  let tile = Variable.derive(
+  const tile = Variable.derive(
     [
       bind(network, "primary"),
       bind(network, "state"),

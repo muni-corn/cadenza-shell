@@ -1,10 +1,10 @@
+import { Variable, exec, interval } from "astal";
 import { makeTile } from "../utils";
-import { exec, interval, Variable } from "astal";
-import { Astronomy, WttrReport } from "./types";
 import { DAY_WEATHER_ICONS, NIGHT_WEATHER_ICONS } from "./icons";
+import type { Astronomy, WttrReport } from "./types";
 
 export function Weather() {
-  let currentWeather = Variable(null as WttrReport | null);
+  const currentWeather = Variable(null as WttrReport | null);
   let lastUpdate: number | null = null;
   function updateWeather() {
     // only update if it's been longer than 10 minutes
@@ -13,8 +13,8 @@ export function Weather() {
     }
 
     try {
-      let rawResponse = exec(["curl", "https://v2.wttr.in/?format=j1"]);
-      let data: WttrReport = JSON.parse(rawResponse);
+      const rawResponse = exec(["curl", "https://v2.wttr.in/?format=j1"]);
+      const data: WttrReport = JSON.parse(rawResponse);
       currentWeather.set(data);
       lastUpdate = Date.now();
     } catch (e) {

@@ -1,6 +1,6 @@
-import { Attention, makeTile, percentageToIconFromList } from "./utils";
 import AstalBattery from "gi://AstalBattery";
-import { bind, Variable } from "astal";
+import { Variable, bind } from "astal";
+import { Attention, makeTile, percentageToIconFromList } from "./utils";
 
 const battery = AstalBattery.get_default();
 
@@ -73,7 +73,7 @@ export function Battery() {
     }
   }
 
-  let tile = Variable.derive(
+  const tile = Variable.derive(
     [
       bind(battery, "is_present"),
       bind(battery, "state"),

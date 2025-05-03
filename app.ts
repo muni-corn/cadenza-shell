@@ -9,7 +9,7 @@ App.start({
   css: style,
   instanceName: "muse-shell",
   main() {
-    let monitors = App.get_monitors();
+    const monitors = App.get_monitors();
 
     // show bar on all monitors
     monitors.map(Bar);

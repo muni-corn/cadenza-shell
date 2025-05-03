@@ -1,8 +1,8 @@
-import GObject, { register, property } from "astal/gobject";
-import { percentageToIconFromList } from "./utils";
-import { bind, exec, execAsync, monitorFile, timeout, Variable } from "astal";
-import { ProgressBar } from "./progress";
 import Gtk from "gi://Gtk";
+import { Variable, bind, exec, execAsync, monitorFile, timeout } from "astal";
+import GObject, { register, property } from "astal/gobject";
+import { ProgressBar } from "./progress";
+import { percentageToIconFromList } from "./utils";
 
 @register({ GTypeName: "BrilloObj" })
 export class BrilloObj extends GObject.Object {
@@ -15,9 +15,9 @@ export class BrilloObj extends GObject.Object {
   // this Object assumes only one device with backlight
   #rawScreenValue = 0;
 
-  #interface: string = "";
-  #min: number = 0;
-  #max: number = 0;
+  #interface = "";
+  #min = 0;
+  #max = 0;
 
   @property(Boolean)
   declare available: boolean;
@@ -28,11 +28,11 @@ export class BrilloObj extends GObject.Object {
   }
 
   set screenValue(percent) {
-    let raw_value = this.#min + (this.#max - this.#min) * percent;
-    if (raw_value < this.#min) raw_value = this.#min;
-    else if (raw_value > this.#max) raw_value = this.#max;
+    let rawValue = this.#min + (this.#max - this.#min) * percent;
+    if (rawValue < this.#min) rawValue = this.#min;
+    else if (rawValue > this.#max) rawValue = this.#max;
 
-    execAsync(`brillo -Sr ${raw_value}`);
+    execAsync(`brillo -Sr ${rawValue}`);
 
     // the file monitor will handle calling the signal
   }
@@ -77,9 +77,9 @@ const BRIGHTNESS_ICONS = [
 export function Brightness(): JSX.Element | null {
   const brightness = BrilloObj.get_default();
 
-    // for fade effects
+  // for fade effects
   let lastChangeTime = 0;
-  let extraClasses: Variable<"dim" | "bright"> = Variable("dim");
+  const extraClasses: Variable<"dim" | "bright"> = Variable("dim");
   bind(brightness, "screenValue").subscribe(() => {
     extraClasses.set("bright");
     lastChangeTime = Date.now();
@@ -91,7 +91,7 @@ export function Brightness(): JSX.Element | null {
     });
   });
 
-  let screenValue = bind(brightness, "screenValue");
+  const screenValue = bind(brightness, "screenValue");
 
   return (
     <box spacing={8} visible={brightness.available}>
