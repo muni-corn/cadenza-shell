@@ -13,42 +13,42 @@
     };
   };
 
-  outputs = {
-    nixpkgs,
-    ags,
-    ...
-  }: let
-    system = "x86_64-linux";
-    pkgs = nixpkgs.legacyPackages.${system};
+  outputs =
+    {
+      nixpkgs,
+      ags,
+      ...
+    }:
+    let
+      system = "x86_64-linux";
+      pkgs = nixpkgs.legacyPackages.${system};
 
-    extraAstalPackages = with ags.packages.${system}; [
-      battery
-      bluetooth
-      hyprland
-      mpris
-      network
-      notifd
-      tray
-      wireplumber
-    ];
-  in {
-    packages.${system}.default = ags.lib.bundle {
-      inherit pkgs;
-      src = ./.;
-      name = "muse-shell";
-      entry = "app.ts";
-
-      # additional libraries and executables to add to gjs' runtime
-      extraPackages = extraAstalPackages;
-    };
-
-    devShells.${system}.default = pkgs.mkShell {
-      buildInputs = [
-        # includes astal3 astal4 astal-io by default
-        (ags.packages.${system}.default.override {
-          extraPackages = extraAstalPackages;
-        })
+      extraAstalPackages = with ags.packages.${system}; [
+        battery
+        bluetooth
+        hyprland
+        mpris
+        network
+        notifd
+        tray
+        wireplumber
       ];
+    in
+    {
+      packages.${system}.default = ags.lib.bundle {
+        inherit pkgs;
+        src = ./.;
+        name = "muse-shell";
+        entry = "app.ts";
+
+        # additional libraries and executables to add to gjs' runtime
+        extraPackages = extraAstalPackages;
+      };
+
+      devShells.${system}.default = pkgs.mkShell {
+        buildInputs = [
+          (ags.packages.${system}.agsFull)
+        ];
+      };
     };
-  };
 }
