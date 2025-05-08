@@ -39,9 +39,8 @@ export function Media(): JSX.Element {
               <label label={artist} className={"secondary"} />
             </box>
           );
-        } else {
-          return <></>;
         }
+        return <></>;
       })}
     </>
   );

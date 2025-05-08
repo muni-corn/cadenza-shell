@@ -1,15 +1,17 @@
 import Gtk from "gi://Gtk";
 import { Variable, bind, exec, execAsync, monitorFile, timeout } from "astal";
 import GObject, { register, property } from "astal/gobject";
-import { ProgressBar } from "./progress";
-import { percentageToIconFromList } from "./utils";
+import { ProgressBar } from "./progress.ts";
+import { percentageToIconFromList } from "./utils.ts";
 
 @register({ GTypeName: "BrilloObj" })
 export class BrilloObj extends GObject.Object {
   static instance: BrilloObj;
   static get_default() {
-    if (!this.instance) this.instance = new BrilloObj();
-    return this.instance;
+    if (!BrilloObj.instance) {
+      BrilloObj.instance = new BrilloObj();
+    }
+    return BrilloObj.instance;
   }
 
   // this Object assumes only one device with backlight
@@ -29,8 +31,11 @@ export class BrilloObj extends GObject.Object {
 
   set screenValue(percent) {
     let rawValue = this.#min + (this.#max - this.#min) * percent;
-    if (rawValue < this.#min) rawValue = this.#min;
-    else if (rawValue > this.#max) rawValue = this.#max;
+    if (rawValue < this.#min) {
+      rawValue = this.#min;
+    } else if (rawValue > this.#max) {
+      rawValue = this.#max;
+    }
 
     execAsync(`brillo -Sr ${rawValue}`);
 
@@ -45,7 +50,7 @@ export class BrilloObj extends GObject.Object {
       this.#min = Number(exec("brillo -rc")) || 0;
       this.#max = Number(exec("brillo -rm")) || 1;
       this.available = true;
-    } catch (e) {
+    } catch (_e) {
       this.available = false;
     }
 

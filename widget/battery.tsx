@@ -44,9 +44,11 @@ export function Battery() {
   function getIcon(state: AstalBattery.State, percent: number) {
     if (state === AstalBattery.State.FULLY_CHARGED) {
       return ICONS.full;
-    } else if (state === AstalBattery.State.CHARGING) {
+    }
+    if (state === AstalBattery.State.CHARGING) {
       return percentageToIconFromList(percent, ICONS.charging);
-    } else return percentageToIconFromList(percent, ICONS.discharging);
+    }
+    return percentageToIconFromList(percent, ICONS.discharging);
   }
 
   function getReadableTime(
@@ -55,22 +57,20 @@ export function Battery() {
   ): string {
     if (state === AstalBattery.State.FULLY_CHARGED) {
       return "Plugged in";
-    } else if (secondsRemaining > 0) {
+    }
+    if (secondsRemaining > 0) {
       if (secondsRemaining < 30 * 60) {
         const minutes = Math.ceil(secondsRemaining / 60);
         return `${minutes} min left`;
-      } else {
-        const timeToCompletion = new Date(Date.now() + secondsRemaining * 1000);
-        const formatted = DATE_FORMAT.format(timeToCompletion).toLowerCase();
-        if (state === AstalBattery.State.CHARGING) {
-          return `Full at ${formatted}`;
-        } else {
-          return `Until ${formatted}`;
-        }
       }
-    } else {
-      return "";
+      const timeToCompletion = new Date(Date.now() + secondsRemaining * 1000);
+      const formatted = DATE_FORMAT.format(timeToCompletion).toLowerCase();
+      if (state === AstalBattery.State.CHARGING) {
+        return `Full at ${formatted}`;
+      }
+      return `Until ${formatted}`;
     }
+    return "";
   }
 
   const tile = Variable.derive(

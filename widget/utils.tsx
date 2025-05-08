@@ -83,7 +83,7 @@ export function percentageToIconFromList(percentage: number, icons: string[]) {
 }
 
 export function trunc(s: string, n = 32) {
-  return s && s.length > n ? s.slice(0, n) + "…" : s || "";
+  return s && s.length > n ? `${s.slice(0, n)}…` : s || "";
 }
 
 export function unreachable(_: never): never {

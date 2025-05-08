@@ -3,7 +3,7 @@ import { type ConstructProps, Gtk, astalify } from "astal/gtk3";
 
 export class ProgressBar extends astalify(Gtk.ProgressBar) {
   static {
-    GObject.registerClass(this);
+    GObject.registerClass(ProgressBar);
   }
 
   constructor(

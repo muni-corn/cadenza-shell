@@ -19,16 +19,16 @@ App.start({
   },
 
   // this runs in the main instance
-  requestHandler(request: string, res: (response: any) => void) {
-    switch (request) {
-      case "noti-act":
-        NotificationMap.get_default().activateTopNotification();
-        res("done");
-        break;
+  requestHandler(request: string, res: (response: unknown) => void) {
+    if (request === "noti-act") {
+      NotificationMap.get_default().activateTopNotification();
+      res("done");
     }
   },
 
   client(message: (msg: string) => string, ...args: string[]): void {
-    if (args[0] === "noti" && args[1] === "act") message("noti-act");
+    if (args[0] === "noti" && args[1] === "act") {
+      message("noti-act");
+    }
   },
 });

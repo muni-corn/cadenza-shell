@@ -18,7 +18,6 @@ const urgency = (n: Notifd.Notification) => {
       return "low";
     case CRITICAL:
       return "critical";
-    case NORMAL:
     default:
       return "normal";
   }

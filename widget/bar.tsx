@@ -1,4 +1,4 @@
-import { App, Astal, type Gdk, Gtk } from "astal/gtk3";
+import { App, Astal, type Gdk, Gtk, Widget } from "astal/gtk3";
 import { Battery } from "./battery";
 import { Bluetooth } from "./bluetooth";
 import { Brightness } from "./brightness";
@@ -10,8 +10,9 @@ import { SysTray } from "./tray";
 import type { SingleMonitorProps } from "./utils";
 import { Volume } from "./volume";
 import { Weather } from "./weather";
+import { Box } from "astal/gtk3/widget";
 
-export default function Bar(gdkmonitor: Gdk.Monitor) {
+export function Bar(gdkmonitor: Gdk.Monitor) {
   return (
     <window
       className="bar"

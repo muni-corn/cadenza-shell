@@ -49,18 +49,17 @@ export function Volume(): JSX.Element {
         />
       </box>
     );
-  } else {
-    return <label label="No audio" className="dim" />;
   }
+  return <label label="No audio" className="dim" />;
 }
 
 function getIcon({ volume, mute }: { volume: number; mute: boolean }): string {
   if (mute) {
     return MUTE_ICON;
-  } else if (volume === 0) {
-    return ZERO_ICON;
-  } else {
-    const index = Math.floor(volume * VOLUME_ICONS.length);
-    return VOLUME_ICONS[Math.min(index, VOLUME_ICONS.length - 1)];
   }
+  if (volume === 0) {
+    return ZERO_ICON;
+  }
+  const index = Math.floor(volume * VOLUME_ICONS.length);
+  return VOLUME_ICONS[Math.min(index, VOLUME_ICONS.length - 1)];
 }

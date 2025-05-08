@@ -41,7 +41,7 @@ export function Weather() {
         weather.current_condition[0].weatherCode,
         weather.weather[0].astronomy[0],
       );
-      const primary = weather.current_condition[0].temp_F + "°";
+      const primary = `${weather.current_condition[0].temp_F}°`;
       const secondary = weather.current_condition[0].weatherDesc[0].value;
 
       return {
@@ -58,9 +58,8 @@ const UNKNOWN_ICON = "\u{F1BF9}";
 function getIcon(code: string, sunTimes: Astronomy): string {
   if (isDark(sunTimes)) {
     return NIGHT_WEATHER_ICONS[code] || DAY_WEATHER_ICONS[code] || UNKNOWN_ICON;
-  } else {
-    return DAY_WEATHER_ICONS[code] || UNKNOWN_ICON;
   }
+  return DAY_WEATHER_ICONS[code] || UNKNOWN_ICON;
 }
 
 function parseTime(str: string): [number, number] {

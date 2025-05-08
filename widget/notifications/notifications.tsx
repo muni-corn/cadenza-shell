@@ -25,7 +25,7 @@ export class NotificationMap implements Subscribable {
 
   // it makes sense to use a Variable under the hood and use its
   // reactivity implementation instead of keeping track of subscribers ourselves
-  private var: Variable<Array<Gtk.Widget>> = Variable([]);
+  private var: Variable<Gtk.Widget[]> = Variable([]);
 
   // notify subscribers to rerender when state changes
   private notify() {
@@ -100,7 +100,7 @@ export class NotificationMap implements Subscribable {
   }
 
   // needed by the Subscribable interface
-  subscribe(callback: (list: Array<Gtk.Widget>) => void) {
+  subscribe(callback: (list: Gtk.Widget[]) => void) {
     return this.var.subscribe(callback);
   }
 }

@@ -50,21 +50,21 @@ function getIcon({
         : WIFI_ICONS.disconnected;
     case AstalNetwork.State.CONNECTED_GLOBAL:
     case AstalNetwork.State.CONNECTED_LOCAL:
-    case AstalNetwork.State.CONNECTED_SITE:
+    case AstalNetwork.State.CONNECTED_SITE: {
       if (primary === AstalNetwork.Primary.WIRED) {
         return WIRED_ICONS.connected;
-      } else {
-        switch (connectivity) {
-          case AstalNetwork.Connectivity.FULL:
-            return wifiConnectedIcon;
-          case AstalNetwork.Connectivity.LIMITED:
-          case AstalNetwork.Connectivity.PORTAL:
-          case AstalNetwork.Connectivity.UNKNOWN:
-            return wifiConnectedPacketLossIcon;
-          case AstalNetwork.Connectivity.NONE:
-            return WIFI_ICONS.disconnected;
-        }
       }
+      switch (connectivity) {
+        case AstalNetwork.Connectivity.FULL:
+          return wifiConnectedIcon;
+        case AstalNetwork.Connectivity.LIMITED:
+        case AstalNetwork.Connectivity.PORTAL:
+        case AstalNetwork.Connectivity.UNKNOWN:
+          return wifiConnectedPacketLossIcon;
+        case AstalNetwork.Connectivity.NONE:
+          return WIFI_ICONS.disconnected;
+      }
+    }
     case AstalNetwork.State.UNKNOWN:
       return primary === AstalNetwork.Primary.WIRED
         ? WIRED_ICONS.unknown
@@ -95,23 +95,23 @@ function getStatusText({
       return "Disconnecting";
     case AstalNetwork.State.CONNECTED_GLOBAL:
     case AstalNetwork.State.CONNECTED_LOCAL:
-    case AstalNetwork.State.CONNECTED_SITE:
+    case AstalNetwork.State.CONNECTED_SITE: {
       if (primary === AstalNetwork.Primary.WIRED) {
         return "Connected";
-      } else {
-        switch (connectivity) {
-          case AstalNetwork.Connectivity.FULL:
-            return "";
-          case AstalNetwork.Connectivity.LIMITED:
-            return "Limited";
-          case AstalNetwork.Connectivity.PORTAL:
-            return "Sign-in needed";
-          case AstalNetwork.Connectivity.UNKNOWN:
-            return "Connectivity unknown";
-          case AstalNetwork.Connectivity.NONE:
-            return "No connectivity";
-        }
       }
+      switch (connectivity) {
+        case AstalNetwork.Connectivity.FULL:
+          return "";
+        case AstalNetwork.Connectivity.LIMITED:
+          return "Limited";
+        case AstalNetwork.Connectivity.PORTAL:
+          return "Sign-in needed";
+        case AstalNetwork.Connectivity.UNKNOWN:
+          return "Connectivity unknown";
+        case AstalNetwork.Connectivity.NONE:
+          return "No connectivity";
+      }
+    }
     case AstalNetwork.State.UNKNOWN:
       return "State unknown";
     default:
