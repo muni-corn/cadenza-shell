@@ -2,7 +2,7 @@ import Notifd from "gi://AstalNotifd";
 import { Variable, bind, timeout } from "astal";
 import type { Subscribable } from "astal/binding";
 import { Astal, type Gdk, type Gtk } from "astal/gtk3";
-import NotificationCard from "./notification-card";
+import { NotificationCard } from "./notification-card.tsx";
 
 // see comment below in constructor
 const TIMEOUT_DELAY = 10000;
@@ -105,7 +105,7 @@ export class NotificationMap implements Subscribable {
   }
 }
 
-export default function NotificationPopups(gdkmonitor: Gdk.Monitor) {
+export function NotificationPopups(gdkmonitor: Gdk.Monitor) {
   const { TOP, RIGHT } = Astal.WindowAnchor;
   const notifs = new NotificationMap();
 

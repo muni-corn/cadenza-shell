@@ -1,5 +1,5 @@
 import { Variable, bind } from "astal";
-import { percentageToIconFromList, unreachable } from "./utils";
+import { percentageToIconFromList, unreachable } from "./utils.tsx";
 
 import AstalNetwork from "gi://AstalNetwork";
 
@@ -63,6 +63,8 @@ function getIcon({
           return wifiConnectedPacketLossIcon;
         case AstalNetwork.Connectivity.NONE:
           return WIFI_ICONS.disconnected;
+        default:
+          return WIFI_ICONS.unknown;
       }
     }
     case AstalNetwork.State.UNKNOWN:
@@ -106,10 +108,10 @@ function getStatusText({
           return "Limited";
         case AstalNetwork.Connectivity.PORTAL:
           return "Sign-in needed";
-        case AstalNetwork.Connectivity.UNKNOWN:
-          return "Connectivity unknown";
         case AstalNetwork.Connectivity.NONE:
           return "No connectivity";
+        default:
+          return "Connectivity unknown";
       }
     }
     case AstalNetwork.State.UNKNOWN:

@@ -1,5 +1,5 @@
 import { GLib, Variable } from "astal";
-import { makeTile } from "./utils";
+import { makeTile } from "./utils.tsx";
 
 const TIME_FORMAT = "%-I:%M %P";
 const DATE_FORMAT = "%a, %b %-d";
@@ -18,7 +18,7 @@ const CLOCK_ICONS = [
   "\u{F1455}",
 ];
 
-export function Clock(): JSX.Element {
+export function Clock() {
   const date = Variable({
     icon: "",
     primary: "",

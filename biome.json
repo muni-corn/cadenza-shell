@@ -20,6 +20,13 @@
     "enabled": true,
     "rules": {
       "all": true,
+      "a11y": {
+        "noLabelWithoutControl": "off",
+        "useButtonType": "off"
+      },
+      "correctness": {
+        "useJsxKeyInIterable": "off"
+      },
       "suspicious": {
         "noReactSpecificProps": "off",
         "noConsoleLog": "off",

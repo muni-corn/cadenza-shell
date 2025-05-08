@@ -1,7 +1,7 @@
 import Hyprland from "gi://AstalHyprland";
 import { bind } from "astal";
 import { Gdk } from "astal/gtk3";
-import { type SingleMonitorProps, trunc } from "./utils";
+import { type SingleMonitorProps, trunc } from "./utils.tsx";
 
 export function Workspaces({ gdkmonitor }: SingleMonitorProps) {
   const hypr = Hyprland.get_default();

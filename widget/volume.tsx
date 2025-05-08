@@ -1,7 +1,7 @@
 import Wp from "gi://AstalWp";
 import Gtk from "gi://Gtk";
 import { Variable, bind, timeout } from "astal";
-import { ProgressBar } from "./progress";
+import { ProgressBar } from "./progress.tsx";
 
 const VOLUME_ICONS = ["\u{F057F}", "\u{F0580}", "\u{F057E}"];
 const MUTE_ICON = "\u{F0581}";

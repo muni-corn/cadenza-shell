@@ -1,14 +1,14 @@
 import Mpris from "gi://AstalMpris";
 import AstalMpris from "gi://AstalMpris?version=0.1";
 import { bind } from "astal";
-import { trunc } from "./utils";
+import { trunc } from "./utils.tsx";
 
 const mpris = Mpris.get_default();
 
 const MPRIS_PLAYING_ICON = "\u{F0F74}";
 const MPRIS_PAUSED_ICON = "\u{F03E4}";
 
-export function Media(): JSX.Element {
+export function Media() {
   return (
     <>
       {bind(mpris, "players").as((players) => {
@@ -54,5 +54,7 @@ function statusToString(status: Mpris.PlaybackStatus) {
       return "paused";
     case Mpris.PlaybackStatus.STOPPED:
       return "stopped";
+    default:
+      return "unknown";
   }
 }

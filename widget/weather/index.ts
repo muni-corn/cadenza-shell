@@ -1,7 +1,7 @@
 import { Variable, exec, interval } from "astal";
-import { makeTile } from "../utils";
-import { DAY_WEATHER_ICONS, NIGHT_WEATHER_ICONS } from "./icons";
-import type { Astronomy, WttrReport } from "./types";
+import { makeTile } from "../utils.tsx";
+import { DAY_WEATHER_ICONS, NIGHT_WEATHER_ICONS } from "./icons.ts";
+import type { Astronomy, WttrReport } from "./types.ts";
 
 export function Weather() {
   const currentWeather = Variable(null as WttrReport | null);

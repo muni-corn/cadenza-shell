@@ -1,6 +1,6 @@
 import type { Binding } from "astal";
 import { type Gdk, Gtk } from "astal/gtk3";
-import { ProgressBar } from "./progress";
+import { ProgressBar } from "./progress.tsx";
 
 export type SingleMonitorProps = { gdkmonitor: Gdk.Monitor };
 
@@ -18,7 +18,7 @@ export interface Tile {
   attention?: Attention;
 }
 
-export function makeTile(data: Binding<Tile>): JSX.Element {
+export function makeTile(data: Binding<Tile>) {
   const className = (otherClasses = "") =>
     data.as((d) =>
       d.attention ? `${otherClasses} ${d.attention}` : otherClasses,
@@ -44,7 +44,7 @@ export function makeTile(data: Binding<Tile>): JSX.Element {
       />
       <label
         label={secondary}
-        visible={secondary.as((s) => (s && s.length > 0) || false)}
+        visible={secondary.as((s) => s?.length > 0)}
         className={className("secondary")}
       />
     </box>

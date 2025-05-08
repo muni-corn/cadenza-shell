@@ -11,7 +11,7 @@ const time = (time: number, format = "%-I:%M %P") =>
   GLib.DateTime.new_from_unix_local(time).format(format)!;
 
 const urgency = (n: Notifd.Notification) => {
-  const { LOW, NORMAL, CRITICAL } = Notifd.Urgency;
+  const { LOW, CRITICAL } = Notifd.Urgency;
   // match operator when?
   switch (n.urgency) {
     case LOW:
@@ -29,7 +29,7 @@ type Props = {
   notification: Notifd.Notification;
 };
 
-export default function NotificationCard(props: Props) {
+export function NotificationCard(props: Props) {
   const { notification: n, setup, onActionExecution } = props;
   const { START, CENTER, END } = Gtk.Align;
 

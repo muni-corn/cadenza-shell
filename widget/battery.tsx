@@ -1,6 +1,6 @@
 import AstalBattery from "gi://AstalBattery";
 import { Variable, bind } from "astal";
-import { Attention, makeTile, percentageToIconFromList } from "./utils";
+import { Attention, makeTile, percentageToIconFromList } from "./utils.tsx";
 
 const battery = AstalBattery.get_default();
 

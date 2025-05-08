@@ -1,16 +1,15 @@
-import { App, Astal, type Gdk, Gtk, Widget } from "astal/gtk3";
-import { Battery } from "./battery";
-import { Bluetooth } from "./bluetooth";
-import { Brightness } from "./brightness";
-import { Clock } from "./clock";
-import { FocusedClient, Workspaces } from "./hyprland";
-import { Media } from "./mpris";
-import { Network } from "./network";
-import { SysTray } from "./tray";
-import type { SingleMonitorProps } from "./utils";
-import { Volume } from "./volume";
-import { Weather } from "./weather";
-import { Box } from "astal/gtk3/widget";
+import { App, Astal, type Gdk, Gtk } from "astal/gtk3";
+import { Battery } from "./battery.tsx";
+import { Bluetooth } from "./bluetooth.tsx";
+import { Brightness } from "./brightness.tsx";
+import { Clock } from "./clock.tsx";
+import { FocusedClient, Workspaces } from "./hyprland.tsx";
+import { Media } from "./mpris.tsx";
+import { Network } from "./network.tsx";
+import { SysTray } from "./tray.tsx";
+import type { SingleMonitorProps } from "./utils.tsx";
+import { Volume } from "./volume.tsx";
+import { Weather } from "./weather/index.ts";
 
 export function Bar(gdkmonitor: Gdk.Monitor) {
   return (
@@ -37,7 +36,7 @@ export function Bar(gdkmonitor: Gdk.Monitor) {
 }
 
 // layout of the bar
-function Left({ gdkmonitor }: SingleMonitorProps): JSX.Element {
+function Left({ gdkmonitor }: SingleMonitorProps) {
   return (
     <box spacing={20} className="workspaces">
       <Workspaces gdkmonitor={gdkmonitor} />
@@ -46,7 +45,7 @@ function Left({ gdkmonitor }: SingleMonitorProps): JSX.Element {
   );
 }
 
-function Center(): JSX.Element {
+function Center() {
   return (
     <box spacing={20} halign={Gtk.Align.START}>
       <Clock />
@@ -56,7 +55,7 @@ function Center(): JSX.Element {
   );
 }
 
-function Right(): JSX.Element {
+function Right() {
   return (
     <box spacing={20} halign={Gtk.Align.END}>
       <Brightness />

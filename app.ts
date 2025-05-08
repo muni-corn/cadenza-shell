@@ -1,9 +1,10 @@
 import { App } from "astal/gtk3";
 import style from "./style.scss";
-import Bar from "./widget/bar";
-import NotificationPopups, {
+import { Bar } from "./widget/bar.tsx";
+import {
   NotificationMap,
-} from "./widget/notifications/notifications";
+  NotificationPopups,
+} from "./widget/notifications/notifications.tsx";
 
 App.start({
   css: style,

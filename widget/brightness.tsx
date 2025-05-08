@@ -1,8 +1,8 @@
 import Gtk from "gi://Gtk";
 import { Variable, bind, exec, execAsync, monitorFile, timeout } from "astal";
 import GObject, { register, property } from "astal/gobject";
-import { ProgressBar } from "./progress.ts";
-import { percentageToIconFromList } from "./utils.ts";
+import { ProgressBar } from "./progress.tsx";
+import { percentageToIconFromList } from "./utils.tsx";
 
 @register({ GTypeName: "BrilloObj" })
 export class BrilloObj extends GObject.Object {
@@ -79,7 +79,7 @@ const BRIGHTNESS_ICONS = [
   "\u{F00E0}",
 ];
 
-export function Brightness(): JSX.Element | null {
+export function Brightness() {
   const brightness = BrilloObj.get_default();
 
   // for fade effects

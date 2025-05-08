@@ -7,8 +7,13 @@ export class ProgressBar extends astalify(Gtk.ProgressBar) {
   }
 
   constructor(
-    props: ConstructProps<ProgressBar, Gtk.ProgressBar.ConstructorProps, {}>,
+    props: ConstructProps<
+      ProgressBar,
+      Gtk.ProgressBar.ConstructorProps,
+      Record<never, never>
+    >,
   ) {
+    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
     super(props as any);
   }
 }
