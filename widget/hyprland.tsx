@@ -16,7 +16,7 @@ export function Workspaces({ gdkmonitor }: SingleMonitorProps) {
           .map((ws) => (
             <button
               className={bind(hypr, "focusedWorkspace").as((fw) =>
-                ws === fw ? "primary" : "dim",
+                ws === fw ? "bright" : "dim",
               )}
               onClicked={() => ws.focus()}
             >
