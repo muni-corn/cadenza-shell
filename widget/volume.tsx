@@ -7,7 +7,7 @@ const VOLUME_ICONS = ["\u{F057F}", "\u{F0580}", "\u{F057E}"];
 const MUTE_ICON = "\u{F0581}";
 const ZERO_ICON = "\u{F0E08}";
 
-export function Volume(): JSX.Element {
+export function Volume() {
   const audio = Wp.get_default();
 
   if (audio) {
