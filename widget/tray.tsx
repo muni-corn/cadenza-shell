@@ -9,12 +9,10 @@ export function SysTray() {
       {bind(tray, "items").as((items) =>
         items.map((item) => (
           <menubutton
-            tooltipMarkup={bind(item, "tooltipMarkup")}
-            usePopover={false}
-            actionGroup={bind(item, "actionGroup").as((ag) => ["dbusmenu", ag])}
-            menuModel={bind(item, "menuModel")}
+            tooltip-text={bind(item, "tooltipMarkup")}
+            menuModel={bind(item, "menuModel").as((model) => model || null)}
           >
-            <icon gicon={bind(item, "gicon")} />
+            <image icon-name={bind(item, "gicon").as(String)} />
           </menubutton>
         )),
       )}

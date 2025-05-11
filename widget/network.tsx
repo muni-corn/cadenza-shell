@@ -155,14 +155,18 @@ export function Network() {
           <label
             label={icon}
             visible={icon.length > 0}
-            className={isOff ? "icon dim" : "icon"}
+            cssClasses={[isOff ? "icon dim" : "icon"]}
             widthRequest={16}
           />
-          <label label={ssid} visible={ssid.length > 0} className={"primary"} />
+          <label
+            label={ssid}
+            visible={ssid.length > 0}
+            cssClasses={["primary"]}
+          />
           <label
             label={status}
             visible={status.length > 0}
-            className={"secondary"}
+            cssClasses={["secondary"]}
           />
         </box>
       ))}

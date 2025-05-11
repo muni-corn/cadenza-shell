@@ -1,9 +1,9 @@
 {
+  "name": "muse-shell",
   "dependencies": {
-    "astal": "/nix/store/qcvx468clwcipgk9vh0qb5rzr4k23g6p-astal-gjs/share/astal/gjs"
+    "astal": "/nix/store/lyibsxcfsgajh6bkvz13z2s4ll1d1iqm-astal-gjs/share/astal/gjs"
   },
   "devDependencies": {
     "typescript": "^5.7.3"
-  },
-  "name": "muse-shell"
+  }
 }

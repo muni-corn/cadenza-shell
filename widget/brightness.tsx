@@ -104,11 +104,11 @@ export function Brightness() {
         label={screenValue.as(
           (v) => percentageToIconFromList(v, BRIGHTNESS_ICONS) || "",
         )}
-        className={extraClasses((c) => `icon ${c}`)}
+        cssClasses={extraClasses((c) => ["icon", c])}
         widthRequest={16}
       />
       <ProgressBar
-        className={extraClasses()}
+        cssClasses={extraClasses((c) => [c])}
         fraction={screenValue}
         valign={Gtk.Align.CENTER}
         widthRequest={16}

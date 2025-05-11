@@ -38,11 +38,11 @@ export function Volume() {
       <box spacing={8}>
         <label
           label={state.as(getIcon)}
-          className={extraClasses((c) => `icon ${c}`)}
+          cssClasses={extraClasses((c) => ["icon", c])}
           widthRequest={16}
         />
         <ProgressBar
-          className={extraClasses()}
+          cssClasses={extraClasses((c) => [c])}
           fraction={volume}
           valign={Gtk.Align.CENTER}
           widthRequest={16}
@@ -50,7 +50,7 @@ export function Volume() {
       </box>
     );
   }
-  return <label label="No audio" className="dim" />;
+  return <label label="No audio" cssClasses={["dim"]} />;
 }
 
 function getIcon({ volume, mute }: { volume: number; mute: boolean }): string {

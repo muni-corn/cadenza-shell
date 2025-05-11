@@ -1,7 +1,7 @@
 import Notifd from "gi://AstalNotifd";
 import { Variable, bind, timeout } from "astal";
 import type { Subscribable } from "astal/binding";
-import { Astal, type Gdk, type Gtk } from "astal/gtk3";
+import { Astal, type Gdk, type Gtk } from "astal/gtk4";
 import { NotificationCard } from "./notification-card.tsx";
 
 // see comment below in constructor
@@ -83,13 +83,11 @@ export class NotificationMap implements Subscribable {
 
   private set(key: number, value: Gtk.Widget) {
     // in case of replacecment destroy previous widget
-    this.map.get(key)?.destroy();
     this.map.set(key, value);
     this.notify();
   }
 
   private delete(key: number) {
-    this.map.get(key)?.destroy();
     this.map.delete(key);
     this.notify();
   }
@@ -111,7 +109,7 @@ export function NotificationPopups(gdkmonitor: Gdk.Monitor) {
 
   return (
     <window
-      className="notifications"
+      cssClasses={["notifications"]}
       namespace="notifications"
       gdkmonitor={gdkmonitor}
       exclusivity={Astal.Exclusivity.EXCLUSIVE}

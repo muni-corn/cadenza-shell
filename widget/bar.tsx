@@ -1,20 +1,20 @@
-import { App, Astal, type Gdk, Gtk } from "astal/gtk3";
-import { Battery } from "./battery.tsx";
-import { Bluetooth } from "./bluetooth.tsx";
-import { Brightness } from "./brightness.tsx";
+import { App, Astal, type Gdk, Gtk } from "astal/gtk4";
 import { Clock } from "./clock.tsx";
-import { FocusedClient, Workspaces } from "./hyprland.tsx";
-import { Media } from "./mpris.tsx";
-import { Network } from "./network.tsx";
 import { SysTray } from "./tray.tsx";
-import type { SingleMonitorProps } from "./utils.tsx";
+import { Battery } from "./battery.tsx";
+import { Network } from "./network.tsx";
+import { Bluetooth } from "./bluetooth.tsx";
 import { Volume } from "./volume.tsx";
+import { Brightness } from "./brightness.tsx";
+import { Media } from "./mpris.tsx";
 import { Weather } from "./weather/index.ts";
+import { FocusedClient, Workspaces } from "./hyprland.tsx";
 
 export function Bar(gdkmonitor: Gdk.Monitor) {
   return (
     <window
-      className="bar"
+      visible={true}
+      cssClasses={["bar"]}
       namespace="bar"
       gdkmonitor={gdkmonitor}
       exclusivity={Astal.Exclusivity.EXCLUSIVE}
@@ -26,7 +26,7 @@ export function Bar(gdkmonitor: Gdk.Monitor) {
       heightRequest={32}
       application={App}
     >
-      <centerbox spacing={40}>
+      <centerbox>
         <Left gdkmonitor={gdkmonitor} />
         <Center />
         <Right />
@@ -36,9 +36,9 @@ export function Bar(gdkmonitor: Gdk.Monitor) {
 }
 
 // layout of the bar
-function Left({ gdkmonitor }: SingleMonitorProps) {
+function Left({ gdkmonitor }: { gdkmonitor: Gdk.Monitor }) {
   return (
-    <box spacing={20} className="workspaces">
+    <box spacing={20} cssClasses={["workspaces"]}>
       <Workspaces gdkmonitor={gdkmonitor} />
       <FocusedClient gdkmonitor={gdkmonitor} />
     </box>

@@ -40,6 +40,7 @@
         src = ./.;
         name = "muse-shell";
         entry = "app.ts";
+        gtk4 = true;
 
         # additional libraries and executables to add to gjs' runtime
         extraPackages = extraAstalPackages;

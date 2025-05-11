@@ -36,7 +36,7 @@ export function Bluetooth() {
     return (
       <label
         label={icon()}
-        className={powered.as((p) => (p ? "icon" : "icon dim"))}
+        cssClasses={powered.as((p) => [p ? "icon" : "icon dim"])}
         widthRequest={16}
       />
     );

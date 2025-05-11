@@ -1,5 +1,5 @@
 import type { Binding } from "astal";
-import { type Gdk, Gtk } from "astal/gtk3";
+import { type Gdk, Gtk } from "astal/gtk4";
 import { ProgressBar } from "./progress.tsx";
 
 export type SingleMonitorProps = { gdkmonitor: Gdk.Monitor };
@@ -19,9 +19,9 @@ export interface Tile {
 }
 
 export function makeTile(data: Binding<Tile>) {
-  const className = (otherClasses = "") =>
+  const className = (otherClasses: string[] = []) =>
     data.as((d) =>
-      d.attention ? `${otherClasses} ${d.attention}` : otherClasses,
+      d.attention ? otherClasses.concat([d.attention]) : otherClasses,
     );
 
   const icon = data.as((d) => trunc(d.icon));
@@ -34,18 +34,18 @@ export function makeTile(data: Binding<Tile>) {
       <label
         label={icon}
         visible={icon.as((p) => p.length > 0)}
-        className={className("icon")}
+        cssClasses={className(["icon"])}
         widthRequest={16}
       />
       <label
         label={primary}
         visible={primary.as((p) => p.length > 0)}
-        className={className("primary")}
+        cssClasses={className(["primary"])}
       />
       <label
         label={secondary}
         visible={secondary.as((s) => s?.length > 0)}
-        className={className("secondary")}
+        cssClasses={className(["secondary"])}
       />
     </box>
   );
@@ -67,7 +67,7 @@ export function makeProgressTile(data: Binding<ProgressTile>) {
       <label
         label={icon}
         visible={icon.as((p) => p.length > 0)}
-        className={"icon dim"}
+        cssClasses={["icon", "dim"]}
         widthRequest={16}
       />
       <ProgressBar fraction={progress} valign={Gtk.Align.CENTER} />

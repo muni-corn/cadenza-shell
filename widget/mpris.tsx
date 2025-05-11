@@ -34,9 +34,9 @@ export function Media() {
 
           return (
             <box spacing={12} visible={visible}>
-              <label label={icon} className={"icon"} widthRequest={16} />
-              <label label={title} className={"primary"} />
-              <label label={artist} className={"secondary"} />
+              <label label={icon} cssClasses={["icon"]} widthRequest={16} />
+              <label label={title} cssClasses={["primary"]} />
+              <label label={artist} cssClasses={["secondary"]} />
             </box>
           );
         }
