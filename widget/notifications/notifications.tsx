@@ -109,7 +109,7 @@ export function NotificationPopups(gdkmonitor: Gdk.Monitor) {
 
   return (
     <window
-      visible={true}
+      visible={bind(notifs).as((l) => l.length > 0)}
       cssClasses={["notifications"]}
       namespace="notifications"
       gdkmonitor={gdkmonitor}
