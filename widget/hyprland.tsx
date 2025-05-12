@@ -33,9 +33,7 @@ export function FocusedClient({ gdkmonitor }: SingleMonitorProps) {
   const focused = bind(hypr, "focusedClient");
 
   return (
-    <box
-      visible={focused.as((f) => f && f.monitor.name === gdkmonitor.connector)}
-    >
+    <box visible={focused.as((f) => f?.monitor?.name === gdkmonitor.connector)}>
       {focused.as(
         (client) =>
           client && (
