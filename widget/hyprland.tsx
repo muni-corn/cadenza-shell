@@ -10,7 +10,7 @@ export function Workspaces({ gdkmonitor }: SingleMonitorProps) {
     <box cssClasses={["workspaces"]}>
       {bind(hypr, "workspaces").as((wss) =>
         wss
-          .filter((ws) => ws.id > 0 && ws.monitor.model === gdkmonitor.model)
+          .filter((ws) => ws.id > 0 && ws.monitor.name === gdkmonitor.connector)
           .sort((a, b) => a.id - b.id)
           .map((ws) => (
             <button
@@ -33,7 +33,9 @@ export function FocusedClient({ gdkmonitor }: SingleMonitorProps) {
   const focused = bind(hypr, "focusedClient");
 
   return (
-    <box visible={focused.as((f) => f && f.monitor.model === gdkmonitor.model)}>
+    <box
+      visible={focused.as((f) => f && f.monitor.name === gdkmonitor.connector)}
+    >
       {focused.as(
         (client) =>
           client && (
