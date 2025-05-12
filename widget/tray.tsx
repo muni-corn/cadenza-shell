@@ -1,5 +1,6 @@
 import Tray from "gi://AstalTray";
 import { bind } from "astal";
+import { Gtk } from "astal/gtk4";
 
 export function SysTray() {
   const tray = Tray.get_default();
@@ -11,8 +12,9 @@ export function SysTray() {
           <menubutton
             tooltip-text={bind(item, "tooltipMarkup")}
             menuModel={bind(item, "menuModel").as((model) => model || null)}
+            halign={Gtk.Align.END}
           >
-            <image icon-name={bind(item, "gicon").as(String)} />
+            <image gicon={bind(item, "gicon")} />
           </menubutton>
         )),
       )}
