@@ -109,6 +109,7 @@ export function NotificationPopups(gdkmonitor: Gdk.Monitor) {
 
   return (
     <window
+      visible={true}
       cssClasses={["notifications"]}
       namespace="notifications"
       gdkmonitor={gdkmonitor}
@@ -116,9 +117,7 @@ export function NotificationPopups(gdkmonitor: Gdk.Monitor) {
       anchor={TOP | RIGHT}
       widthRequest={432}
     >
-      <box vertical={true} noImplicitDestroy={true}>
-        {bind(notifs)}
-      </box>
+      <box vertical={true}>{bind(notifs)}</box>
     </window>
   );
 }
