@@ -79,7 +79,7 @@ const BRIGHTNESS_ICONS = [
   "\u{F00E0}",
 ];
 
-export function Brightness() {
+export const Brightness = () => {
   const brightness = BrilloObj.get_default();
 
   // for fade effects
@@ -115,4 +115,4 @@ export function Brightness() {
       />
     </box>
   );
-}
+};

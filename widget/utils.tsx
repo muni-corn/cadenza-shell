@@ -18,7 +18,7 @@ export interface Tile {
   attention?: Attention;
 }
 
-export function makeTile(data: Binding<Tile>) {
+export const makeTile = (data: Binding<Tile>) => {
   const className = (otherClasses: string[] = []) =>
     data.as((d) =>
       d.attention ? otherClasses.concat([d.attention]) : otherClasses,
@@ -49,7 +49,7 @@ export function makeTile(data: Binding<Tile>) {
       />
     </box>
   );
-}
+};
 
 export interface ProgressTile {
   icon: string;
@@ -57,7 +57,7 @@ export interface ProgressTile {
   visible?: boolean;
 }
 
-export function makeProgressTile(data: Binding<ProgressTile>) {
+export const makeProgressTile = (data: Binding<ProgressTile>) => {
   const icon = data.as((d) => trunc(d.icon));
   const progress = data.as((d) => d.progress);
   const visible = data.as((d) => d.visible ?? true);
@@ -73,7 +73,7 @@ export function makeProgressTile(data: Binding<ProgressTile>) {
       <ProgressBar fraction={progress} valign={Gtk.Align.CENTER} />
     </box>
   );
-}
+};
 
 /** Returns an icon from a list based on a percentage from 0 to 1. */
 export function percentageToIconFromList(percentage: number, icons: string[]) {

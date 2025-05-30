@@ -2,7 +2,7 @@ import Tray from "gi://AstalTray";
 import { bind, Variable } from "astal";
 import { Gtk } from "astal/gtk4";
 
-export function SysTray() {
+export const SysTray = () => {
   const tray = Tray.get_default();
 
   const expanded = Variable(false);
@@ -37,4 +37,4 @@ export function SysTray() {
       />
     </box>
   );
-}
+};

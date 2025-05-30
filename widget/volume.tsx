@@ -7,7 +7,7 @@ const VOLUME_ICONS = ["\u{F057F}", "\u{F0580}", "\u{F057E}"];
 const MUTE_ICON = "\u{F0581}";
 const ZERO_ICON = "\u{F0E08}";
 
-export function Volume() {
+export const Volume = () => {
   const audio = Wp.get_default();
 
   if (audio) {
@@ -51,7 +51,7 @@ export function Volume() {
     );
   }
   return <label label="No audio" cssClasses={["dim"]} />;
-}
+};
 
 function getIcon({ volume, mute }: { volume: number; mute: boolean }): string {
   if (mute) {

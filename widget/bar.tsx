@@ -10,7 +10,7 @@ import { Media } from "./mpris.tsx";
 import { Weather } from "./weather/index.ts";
 import { FocusedClient, Workspaces } from "./hyprland.tsx";
 
-export function Bar(gdkmonitor: Gdk.Monitor) {
+export const Bar = (gdkmonitor: Gdk.Monitor) => {
   return (
     <window
       visible={true}
@@ -33,7 +33,7 @@ export function Bar(gdkmonitor: Gdk.Monitor) {
       </centerbox>
     </window>
   );
-}
+};
 
 // layout of the bar
 function Left({ gdkmonitor }: { gdkmonitor: Gdk.Monitor }) {

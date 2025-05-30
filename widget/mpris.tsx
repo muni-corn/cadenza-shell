@@ -8,7 +8,7 @@ const mpris = Mpris.get_default();
 const MPRIS_PLAYING_ICON = "\u{F0F74}";
 const MPRIS_PAUSED_ICON = "\u{F03E4}";
 
-export function Media() {
+export const Media = () => {
   return (
     <>
       {bind(mpris, "players").as((players) => {
@@ -44,7 +44,7 @@ export function Media() {
       })}
     </>
   );
-}
+};
 
 function statusToString(status: Mpris.PlaybackStatus) {
   switch (status) {

@@ -28,7 +28,7 @@ type Props = {
   notification: Notifd.Notification;
 };
 
-export function NotificationCard(props: Props) {
+export const NotificationCard = (props: Props) => {
   const { notification: n, setup, onActionExecution } = props;
   const { START, CENTER, END } = Gtk.Align;
 
@@ -129,4 +129,4 @@ export function NotificationCard(props: Props) {
       </box>
     </box>
   );
-}
+};

@@ -3,7 +3,7 @@ import { makeTile } from "../utils.tsx";
 import { DAY_WEATHER_ICONS, NIGHT_WEATHER_ICONS } from "./icons.ts";
 import type { Astronomy, WttrReport } from "./types.ts";
 
-export function Weather() {
+export const Weather = () => {
   const currentWeather = Variable(null as WttrReport | null);
   let lastUpdate: number | null = null;
   function updateWeather() {
@@ -52,7 +52,7 @@ export function Weather() {
       };
     }),
   );
-}
+};
 
 const UNKNOWN_ICON = "\u{F1BF9}";
 function getIcon(code: string, sunTimes: Astronomy): string {

@@ -103,7 +103,7 @@ export class NotificationMap implements Subscribable {
   }
 }
 
-export function NotificationPopups(gdkmonitor: Gdk.Monitor) {
+export const NotificationPopups = (gdkmonitor: Gdk.Monitor) => {
   const { TOP, RIGHT } = Astal.WindowAnchor;
   const notifs = NotificationMap.get_default();
 
@@ -120,4 +120,4 @@ export function NotificationPopups(gdkmonitor: Gdk.Monitor) {
       <box vertical={true}>{bind(notifs)}</box>
     </window>
   );
-}
+};

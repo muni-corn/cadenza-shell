@@ -15,7 +15,7 @@ const _BLUETOOTH_BATTERY_ICONS = [
 ];
 const _BLUETOOTH_BATTERY_UNKNOWN_ICON = "\u{F094A}";
 
-export function Bluetooth() {
+export const Bluetooth = () => {
   const bluetooth = AstalBluetooth.Bluetooth.get_default();
 
   if (bluetooth?.adapter) {
@@ -43,4 +43,4 @@ export function Bluetooth() {
   }
 
   return <label visible={false} />;
-}
+};

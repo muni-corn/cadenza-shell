@@ -18,7 +18,7 @@ const CLOCK_ICONS = [
   "\u{F1455}",
 ];
 
-export function Clock() {
+export const Clock = () => {
   const date = Variable({
     icon: "",
     primary: "",
@@ -37,7 +37,7 @@ export function Clock() {
   });
 
   return makeTile(date());
-}
+};
 
 export function getGreeting(): string {
   const hour = new Date().getHours();

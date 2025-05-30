@@ -121,7 +121,7 @@ function getStatusText({
   }
 }
 
-export function Network() {
+export const Network = () => {
   const network = AstalNetwork.get_default();
 
   const tile = Variable.derive(
@@ -172,4 +172,4 @@ export function Network() {
       ))}
     </>
   );
-}
+};

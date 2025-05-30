@@ -40,7 +40,7 @@ const DATE_FORMAT = new Intl.DateTimeFormat("en-US", {
   minute: "numeric",
 });
 
-export function Battery() {
+export const Battery = () => {
   function getIcon(state: AstalBattery.State, percent: number) {
     if (state === AstalBattery.State.FULLY_CHARGED) {
       return ICONS.full;
@@ -111,4 +111,4 @@ export function Battery() {
   );
 
   return makeTile(tile());
-}
+};
