@@ -1,4 +1,4 @@
-import { Variable, exec, interval } from "astal";
+import { Variable, execAsync, interval } from "astal";
 import { makeTile } from "../utils.tsx";
 import { DAY_WEATHER_ICONS, NIGHT_WEATHER_ICONS } from "./icons.ts";
 import type { Astronomy, WttrReport } from "./types.ts";
@@ -6,21 +6,23 @@ import type { Astronomy, WttrReport } from "./types.ts";
 export const Weather = () => {
   const currentWeather = Variable(null as WttrReport | null);
   let lastUpdate: number | null = null;
+
   function updateWeather() {
     // only update if it's been longer than 10 minutes
     if (lastUpdate && Date.now() - lastUpdate < 600000) {
       return;
     }
 
-    try {
-      const rawResponse = exec(["curl", "https://v2.wttr.in/?format=j1"]);
-      const data: WttrReport = JSON.parse(rawResponse);
-      currentWeather.set(data);
-      lastUpdate = Date.now();
-    } catch (e) {
-      printerr("error fetching weather: ", e);
-      currentWeather.set(null);
-    }
+    execAsync(["curl", "https://v2.wttr.in/?format=j1"])
+      .then((rawResponse) => {
+        const data: WttrReport = JSON.parse(rawResponse);
+        currentWeather.set(data);
+        lastUpdate = Date.now();
+      })
+      .catch((e) => {
+        printerr("error fetching weather: ", e);
+        currentWeather.set(null);
+      });
   }
 
   // every minute, check if weather needs to be updated
