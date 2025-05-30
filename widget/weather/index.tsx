@@ -1,5 +1,5 @@
 import { Variable, execAsync, interval } from "astal";
-import { makeTile } from "../utils.tsx";
+import { Tile } from "../utils.tsx";
 import { DAY_WEATHER_ICONS, NIGHT_WEATHER_ICONS } from "./icons.ts";
 import type { Astronomy, WttrReport } from "./types.ts";
 
@@ -28,32 +28,32 @@ export const Weather = () => {
   // every minute, check if weather needs to be updated
   interval(60000, updateWeather);
 
-  return makeTile(
-    currentWeather((weather) => {
-      if (!weather) {
-        return {
-          icon: "",
-          primary: "Unknown weather",
-          secondary: "",
-          visible: false,
-        };
-      }
-
-      const icon = getIcon(
-        weather.current_condition[0].weatherCode,
-        weather.weather[0].astronomy[0],
-      );
-      const primary = `${weather.current_condition[0].temp_F}°`;
-      const secondary = weather.current_condition[0].weatherDesc[0].value;
-
+  const dataBinding = currentWeather((weather) => {
+    if (!weather) {
       return {
-        icon,
-        primary,
-        secondary,
-        visible: true,
+        icon: "",
+        primary: "Unknown weather",
+        secondary: "",
+        visible: false,
       };
-    }),
-  );
+    }
+
+    const icon = getIcon(
+      weather.current_condition[0].weatherCode,
+      weather.weather[0].astronomy[0],
+    );
+    const primary = `${weather.current_condition[0].temp_F}°`;
+    const secondary = weather.current_condition[0].weatherDesc[0].value;
+
+    return {
+      icon,
+      primary,
+      secondary,
+      visible: true,
+    };
+  });
+
+  return <Tile data={dataBinding} />;
 };
 
 const UNKNOWN_ICON = "\u{F1BF9}";

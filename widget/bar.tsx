@@ -7,7 +7,7 @@ import { Bluetooth } from "./bluetooth.tsx";
 import { Volume } from "./volume.tsx";
 import { Brightness } from "./brightness.tsx";
 import { Media } from "./mpris.tsx";
-import { Weather } from "./weather/index.ts";
+import { Weather } from "./weather/index.tsx";
 import { FocusedClient, Workspaces } from "./hyprland.tsx";
 
 export const Bar = (gdkmonitor: Gdk.Monitor) => {

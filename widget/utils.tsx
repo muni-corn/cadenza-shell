@@ -18,7 +18,7 @@ export interface Tile {
   attention?: Attention;
 }
 
-export const makeTile = (data: Binding<Tile>) => {
+export const Tile = ({ data }: { data: Binding<Tile> }) => {
   const className = (otherClasses: string[] = []) =>
     data.as((d) =>
       d.attention ? otherClasses.concat([d.attention]) : otherClasses,
@@ -57,7 +57,7 @@ export interface ProgressTile {
   visible?: boolean;
 }
 
-export const makeProgressTile = (data: Binding<ProgressTile>) => {
+export const ProgressTile = ({ data }: { data: Binding<ProgressTile> }) => {
   const icon = data.as((d) => trunc(d.icon));
   const progress = data.as((d) => d.progress);
   const visible = data.as((d) => d.visible ?? true);

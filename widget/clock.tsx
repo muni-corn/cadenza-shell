@@ -1,5 +1,5 @@
 import { GLib, Variable } from "astal";
-import { makeTile } from "./utils.tsx";
+import { Tile } from "./utils.tsx";
 
 const TIME_FORMAT = "%-I:%M %P";
 const DATE_FORMAT = "%a, %b %-d";
@@ -36,7 +36,7 @@ export const Clock = () => {
     };
   });
 
-  return makeTile(date());
+  return <Tile data={date()} />;
 };
 
 export function getGreeting(): string {

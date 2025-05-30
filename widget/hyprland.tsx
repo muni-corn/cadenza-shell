@@ -34,7 +34,7 @@ export const Workspaces = ({ gdkmonitor }: SingleMonitorProps) => {
 export const FocusedClient = ({ gdkmonitor }: SingleMonitorProps) => {
   const hypr = Hyprland.get_default();
   if (!hypr) {
-    return;
+    return null;
   }
 
   const focused = bind(hypr, "focusedClient");
