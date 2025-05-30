@@ -3,32 +3,39 @@ import { bind } from "astal";
 
 import { type SingleMonitorProps, trunc } from "./utils.tsx";
 
-export function Workspaces({ gdkmonitor }: SingleMonitorProps) {
+export const Workspaces = ({ gdkmonitor }: SingleMonitorProps) => {
   const hypr = Hyprland.get_default();
 
   return (
-    <box cssClasses={["workspaces"]}>
-      {bind(hypr, "workspaces").as((wss) =>
-        wss
-          .filter((ws) => ws.id > 0 && ws.monitor.name === gdkmonitor.connector)
-          .sort((a, b) => a.id - b.id)
-          .map((ws) => (
-            <button
-              cssClasses={bind(hypr, "focusedWorkspace").as((fw) => [
-                ws === fw ? "bright" : "dim",
-              ])}
-              onClicked={() => ws.focus()}
-            >
-              {ws.id}
-            </button>
-          )),
-      )}
-    </box>
+    hypr && (
+      <box cssClasses={["workspaces"]}>
+        {bind(hypr, "workspaces").as((wss) =>
+          wss
+            .filter(
+              (ws) => ws.id > 0 && ws.monitor.name === gdkmonitor.connector,
+            )
+            .sort((a, b) => a.id - b.id)
+            .map((ws) => (
+              <button
+                cssClasses={bind(hypr, "focusedWorkspace").as((fw) => [
+                  ws === fw ? "bright" : "dim",
+                ])}
+                onClicked={() => ws.focus()}
+              >
+                {ws.id}
+              </button>
+            )),
+        )}
+      </box>
+    )
   );
-}
+};
 
-export function FocusedClient({ gdkmonitor }: SingleMonitorProps) {
+export const FocusedClient = ({ gdkmonitor }: SingleMonitorProps) => {
   const hypr = Hyprland.get_default();
+  if (!hypr) {
+    return;
+  }
 
   const focused = bind(hypr, "focusedClient");
 
@@ -45,4 +52,4 @@ export function FocusedClient({ gdkmonitor }: SingleMonitorProps) {
       )}
     </box>
   );
-}
+};
