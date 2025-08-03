@@ -1,6 +1,6 @@
 import AstalBattery from "gi://AstalBattery";
-import { Variable, bind } from "astal";
-import { Attention, Tile, percentageToIconFromList } from "./utils.tsx";
+import { createBinding, createComputed } from "ags";
+import { Attention, percentageToIconFromList, Tile } from "./utils";
 
 const battery = AstalBattery.get_default();
 
@@ -73,13 +73,13 @@ export const Battery = () => {
     return "";
   }
 
-  const tile = Variable.derive(
+  const tile = createComputed(
     [
-      bind(battery, "is_present"),
-      bind(battery, "state"),
-      bind(battery, "percentage"),
-      bind(battery, "time_to_empty"),
-      bind(battery, "time_to_full"),
+      createBinding(battery, "is_present"),
+      createBinding(battery, "state"),
+      createBinding(battery, "percentage"),
+      createBinding(battery, "time_to_empty"),
+      createBinding(battery, "time_to_full"),
     ],
     (isPresent, state, percentage, timeToEmpty, timeToFull) => {
       const timeLeft =
@@ -110,5 +110,5 @@ export const Battery = () => {
     },
   );
 
-  return <Tile data={tile()} />;
+  return <Tile data={tile} />;
 };

@@ -1,5 +1,6 @@
-import { GLib, Variable } from "astal";
-import { Tile } from "./utils.tsx";
+import GLib from "gi://GLib?version=2.0";
+import { createPoll } from "ags/time";
+import { Tile } from "./utils";
 
 const TIME_FORMAT = "%-I:%M %P";
 const DATE_FORMAT = "%a, %b %-d";
@@ -19,24 +20,28 @@ const CLOCK_ICONS = [
 ];
 
 export const Clock = () => {
-  const date = Variable({
-    icon: "",
-    primary: "",
-    secondary: getGreeting(),
-  }).poll(1000, () => {
-    const now = GLib.DateTime.new_now_local();
-    const icon = CLOCK_ICONS[new Date().getHours() % 12];
-    const time = now.format(TIME_FORMAT) || "invalid time format";
-    const date = now.format(DATE_FORMAT) || "invalid date format";
+  const date = createPoll(
+    {
+      icon: "",
+      primary: "",
+      secondary: getGreeting(),
+    },
+    1000,
+    () => {
+      const now = GLib.DateTime.new_now_local();
+      const icon = CLOCK_ICONS[new Date().getHours() % 12];
+      const time = now.format(TIME_FORMAT) || "invalid time format";
+      const date = now.format(DATE_FORMAT) || "invalid date format";
 
-    return {
-      icon,
-      primary: time,
-      secondary: date,
-    };
-  });
+      return {
+        icon,
+        primary: time,
+        secondary: date,
+      };
+    },
+  );
 
-  return <Tile data={date()} />;
+  return <Tile data={date} />;
 };
 
 export function getGreeting(): string {

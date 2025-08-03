@@ -1,7 +1,6 @@
-import { Variable, bind } from "astal";
-import { percentageToIconFromList, unreachable } from "./utils.tsx";
-
 import AstalNetwork from "gi://AstalNetwork";
+import { createBinding, createComputed } from "ags";
+import { percentageToIconFromList, unreachable } from "./utils";
 
 const WIRED_ICONS = {
   connected: "\u{F059F}",
@@ -124,11 +123,11 @@ function getStatusText({
 export const Network = () => {
   const network = AstalNetwork.get_default();
 
-  const tile = Variable.derive(
+  const tile = createComputed(
     [
-      bind(network, "primary"),
-      bind(network, "state"),
-      bind(network, "connectivity"),
+      createBinding(network, "primary"),
+      createBinding(network, "state"),
+      createBinding(network, "connectivity"),
     ],
     (primary, state) => {
       const icon = getIcon(network);

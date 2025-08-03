@@ -1,6 +1,5 @@
-import type { Binding } from "astal";
-import { type Gdk, Gtk } from "astal/gtk4";
-import { ProgressBar } from "./progress.tsx";
+import type { Accessor } from "ags";
+import { type Gdk, Gtk } from "ags/gtk4";
 
 export type SingleMonitorProps = { gdkmonitor: Gdk.Monitor };
 
@@ -18,7 +17,7 @@ export interface Tile {
   attention?: Attention;
 }
 
-export const Tile = ({ data }: { data: Binding<Tile> }) => {
+export const Tile = ({ data }: { data: Accessor<Tile> }) => {
   const className = (otherClasses: string[] = []) =>
     data.as((d) =>
       d.attention ? otherClasses.concat([d.attention]) : otherClasses,
@@ -57,7 +56,7 @@ export interface ProgressTile {
   visible?: boolean;
 }
 
-export const ProgressTile = ({ data }: { data: Binding<ProgressTile> }) => {
+export const ProgressTile = ({ data }: { data: Accessor<ProgressTile> }) => {
   const icon = data.as((d) => trunc(d.icon));
   const progress = data.as((d) => d.progress);
   const visible = data.as((d) => d.visible ?? true);
@@ -70,7 +69,7 @@ export const ProgressTile = ({ data }: { data: Binding<ProgressTile> }) => {
         cssClasses={["icon", "dim"]}
         widthRequest={16}
       />
-      <ProgressBar fraction={progress} valign={Gtk.Align.CENTER} />
+      <Gtk.ProgressBar fraction={progress} valign={Gtk.Align.CENTER} />
     </box>
   );
 };

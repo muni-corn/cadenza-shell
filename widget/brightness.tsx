@@ -1,8 +1,10 @@
 import Gtk from "gi://Gtk";
-import { Variable, bind, exec, execAsync, monitorFile, timeout } from "astal";
-import GObject, { register, property } from "astal/gobject";
-import { ProgressBar } from "./progress.tsx";
-import { percentageToIconFromList } from "./utils.tsx";
+import { createBinding, createState } from "ags";
+import { monitorFile } from "ags/file";
+import GObject, { getter, property, register, setter } from "ags/gobject";
+import { exec, execAsync } from "ags/process";
+import { timeout } from "ags/time";
+import { percentageToIconFromList } from "./utils";
 
 @register({ GTypeName: "BrilloObj" })
 export class BrilloObj extends GObject.Object {
@@ -22,13 +24,14 @@ export class BrilloObj extends GObject.Object {
   #max = 0;
 
   @property(Boolean)
-  declare available: boolean;
+  available: boolean = false;
 
-  @property(Number)
+  @getter(Number)
   get screenValue() {
     return (this.#rawScreenValue - this.#min) / (this.#max - this.#min);
   }
 
+  @setter(Number)
   set screenValue(percent) {
     let rawValue = this.#min + (this.#max - this.#min) * percent;
     if (rawValue < this.#min) {
@@ -84,19 +87,20 @@ export const Brightness = () => {
 
   // for fade effects
   let lastChangeTime = 0;
-  const extraClasses: Variable<"dim" | "bright"> = Variable("dim");
-  bind(brightness, "screenValue").subscribe(() => {
-    extraClasses.set("bright");
+  const [extraClasses, setExtraClasses] = createState<"dim" | "bright">("dim");
+
+  createBinding(brightness, "screenValue").subscribe(() => {
+    setExtraClasses("bright");
     lastChangeTime = Date.now();
 
     timeout(3000, () => {
       if (Date.now() - lastChangeTime >= 3000) {
-        extraClasses.set("dim");
+        setExtraClasses("dim");
       }
     });
   });
 
-  const screenValue = bind(brightness, "screenValue");
+  const screenValue = createBinding(brightness, "screenValue");
 
   return (
     <box spacing={8} visible={brightness.available}>
@@ -107,7 +111,7 @@ export const Brightness = () => {
         cssClasses={extraClasses((c) => ["icon", c])}
         widthRequest={16}
       />
-      <ProgressBar
+      <Gtk.ProgressBar
         cssClasses={extraClasses((c) => [c])}
         fraction={screenValue}
         valign={Gtk.Align.CENTER}

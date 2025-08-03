@@ -1,28 +1,24 @@
-import { App } from "astal/gtk4";
+import app from "ags/gtk4/app";
 import style from "./style.scss";
-import { Bar } from "./widget/bar.tsx";
-import {
-  NotificationMap,
-  NotificationPopups,
-} from "./widget/notifications/notifications.tsx";
+import { Bar } from "./widget/bar";
+import { NotificationPopups } from "./widget/notifications/notifications";
 
-App.start({
+app.start({
   css: style,
   instanceName: "muse-shell",
   main() {
-    const monitors = App.get_monitors();
+    const monitors = app.get_monitors();
 
     // show bar on all monitors
     monitors.map(Bar);
 
-    // show notifications on last monitor
-    NotificationPopups(monitors[monitors.length - 1]);
+    NotificationPopups();
   },
 
   // this runs in the main instance
   requestHandler(request: string, res: (response: unknown) => void) {
     if (request === "noti-act") {
-      NotificationMap.get_default().activateTopNotification();
+      // TODO NotificationMap.get_default().activateTopNotification();
       res("done");
     }
   },

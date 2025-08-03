@@ -1,9 +1,12 @@
 import Notifd from "gi://AstalNotifd";
-import { GLib } from "astal";
-import { Gtk } from "astal/gtk4";
+import GLib from "gi://GLib?version=2.0";
+import { Gdk, Gtk } from "ags/gtk4";
 
-// TODO
-// const isIcon = (icon: string) => !!Astal3.Icon.lookup_icon(icon);
+const isIcon = (icon: string) => {
+  const iconTheme = Gtk.IconTheme.get_for_display(Gdk.Display.get_default()!);
+  return icon && iconTheme.has_icon(icon);
+};
+
 const fileExists = (path: string) => GLib.file_test(path, GLib.FileTest.EXISTS);
 
 const time = (time: number, format = "%-I:%M %P") =>
@@ -23,8 +26,8 @@ const urgency = (n: Notifd.Notification) => {
 };
 
 type Props = {
-  setup(self: Gtk.Widget): void;
-  onActionExecution(): void;
+  setup?: (self: Gtk.Widget) => void;
+  onActionExecution?: () => void;
   notification: Notifd.Notification;
 };
 
@@ -33,11 +36,11 @@ export const NotificationCard = (props: Props) => {
   const { START, CENTER, END } = Gtk.Align;
 
   const content = (
-    <box cssClasses={["content"]}>
+    <box class="content">
       {n.image && fileExists(n.image) ? (
-        <image valign={START} cssClasses={["image"]} file={n.image} />
+        <image valign={START} class="image" file={n.image} />
       ) : n.image ? (
-        <box hexpand={false} valign={START} cssClasses={["icon-image"]}>
+        <box hexpand={false} valign={START} class="icon-image">
           <image
             iconName={n.image}
             hexpand={true}
@@ -47,9 +50,9 @@ export const NotificationCard = (props: Props) => {
           />
         </box>
       ) : undefined}
-      <box vertical={true}>
+      <box orientation={Gtk.Orientation.VERTICAL}>
         <label
-          cssClasses={["summary"]}
+          class="summary"
           wrap={true}
           halign={START}
           xalign={0}
@@ -58,7 +61,7 @@ export const NotificationCard = (props: Props) => {
         />
         {n.body && (
           <label
-            cssClasses={["body"]}
+            class="body"
             wrap={true}
             useMarkup={true}
             halign={START}
@@ -78,7 +81,7 @@ export const NotificationCard = (props: Props) => {
         onClicked={() => {
           if (n.get_actions()[0]) {
             n.invoke(n.get_actions()[0].id);
-            onActionExecution();
+            onActionExecution?.();
           }
         }}
       >
@@ -89,36 +92,30 @@ export const NotificationCard = (props: Props) => {
     );
 
   return (
-    <box cssClasses={["notification-card", urgency(n)]} setup={setup}>
-      <box vertical={true}>
-        <box cssClasses={["header"]}>
-          {n.appIcon || n.desktopEntry ? (
+    <box cssClasses={["notification-card", urgency(n)]} $={setup}>
+      <box orientation={Gtk.Orientation.VERTICAL}>
+        <box class="header">
+          {n.appIcon || isIcon(n.desktopEntry) ? (
             <image
-              cssClasses={["app-icon"]}
+              class="app-icon"
               visible={Boolean(n.appIcon || n.desktopEntry)}
               iconName={n.appIcon || n.desktopEntry}
             />
-          ) : (
-            <></>
-          )}
+          ) : null}
+          <label class="app-name" halign={START} label={n.appName || ""} />
           <label
-            cssClasses={["app-name"]}
-            halign={START}
-            label={n.appName || ""}
-          />
-          <label
-            cssClasses={["time"]}
+            class="time"
             hexpand={true}
             halign={END}
             label={time(n.time)}
           />
-          <button cssClasses={["closeButton"]} onClicked={() => n.dismiss()}>
+          <button class="closeButton" onClicked={() => n.dismiss()}>
             <image iconName="window-close-symbolic" />
           </button>
         </box>
         {cardBody}
         {n.get_actions().length > 1 && (
-          <box cssClasses={["actions"]}>
+          <box class="actions">
             {n.get_actions().map(({ label, id }) => (
               <button hexpand={true} onClicked={() => n.invoke(id)}>
                 <label label={label} halign={CENTER} hexpand={true} />

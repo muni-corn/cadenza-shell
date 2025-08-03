@@ -1,5 +1,5 @@
 import AstalBluetooth from "gi://AstalBluetooth";
-import { Variable, bind } from "astal";
+import { createBinding, createComputed } from "ags";
 
 const _BLUETOOTH_BATTERY_ICONS = [
   "\u{F093E}",
@@ -19,9 +19,9 @@ export const Bluetooth = () => {
   const bluetooth = AstalBluetooth.Bluetooth.get_default();
 
   if (bluetooth?.adapter) {
-    const powered = bind(bluetooth, "is_powered");
-    const icon = Variable.derive(
-      [powered, bind(bluetooth, "is_connected")],
+    const powered = createBinding(bluetooth, "is_powered");
+    const icon = createComputed(
+      [powered, createBinding(bluetooth, "is_connected")],
       (powered, connected) => {
         if (!powered) {
           return "\u{F00B2}";
@@ -35,7 +35,7 @@ export const Bluetooth = () => {
 
     return (
       <label
-        label={icon()}
+        label={icon}
         cssClasses={powered.as((p) => [p ? "icon" : "icon dim"])}
         widthRequest={16}
       />

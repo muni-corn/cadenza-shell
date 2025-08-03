@@ -1,31 +1,32 @@
 import Hyprland from "gi://AstalHyprland";
-import { bind } from "astal";
+import { createBinding, For, With } from "ags";
 
-import { type SingleMonitorProps, trunc } from "./utils.tsx";
+import { type SingleMonitorProps, trunc } from "./utils";
 
 export const Workspaces = ({ gdkmonitor }: SingleMonitorProps) => {
   const hypr = Hyprland.get_default();
+  const workspaces = createBinding(hypr, "workspaces").as((wss) =>
+    wss
+      .filter((ws) => ws.id > 0 && ws.monitor.name === gdkmonitor.connector)
+      .sort((a, b) => a.id - b.id),
+  );
 
   return (
     hypr && (
-      <box cssClasses={["workspaces"]}>
-        {bind(hypr, "workspaces").as((wss) =>
-          wss
-            .filter(
-              (ws) => ws.id > 0 && ws.monitor.name === gdkmonitor.connector,
-            )
-            .sort((a, b) => a.id - b.id)
-            .map((ws) => (
-              <button
-                cssClasses={bind(hypr, "focusedWorkspace").as((fw) => [
-                  ws === fw ? "bright" : "dim",
-                ])}
-                onClicked={() => ws.focus()}
-              >
+      <box class="workspaces">
+        <For each={workspaces}>
+          {(ws) => {
+            const activeClass = createBinding(hypr, "focusedWorkspace").as(
+              (fw) => (ws === fw ? "bright" : "dim"),
+            );
+
+            return (
+              <button class={activeClass} onClicked={() => ws.focus()}>
                 {ws.id}
               </button>
-            )),
-        )}
+            );
+          }}
+        </For>
       </box>
     )
   );
@@ -34,22 +35,23 @@ export const Workspaces = ({ gdkmonitor }: SingleMonitorProps) => {
 export const FocusedClient = ({ gdkmonitor }: SingleMonitorProps) => {
   const hypr = Hyprland.get_default();
   if (!hypr) {
-    return null;
+    return <></>;
   }
 
-  const focused = bind(hypr, "focusedClient");
+  const focused = createBinding(hypr, "focusedClient");
 
   return (
     <box visible={focused.as((f) => f?.monitor?.name === gdkmonitor.connector)}>
-      {focused.as(
-        (client) =>
+      <With value={focused}>
+        {(client) =>
           client && (
             <label
-              cssClasses={["dim"]}
-              label={bind(client, "title").as((s) => trunc(s || ""))}
+              class="dim"
+              label={createBinding(client, "title").as((s) => trunc(s || ""))}
             />
-          ),
-      )}
+          )
+        }
+      </With>
     </box>
   );
 };

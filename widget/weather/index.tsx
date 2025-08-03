@@ -1,10 +1,14 @@
-import { Variable, execAsync, interval } from "astal";
-import { Tile } from "../utils.tsx";
-import { DAY_WEATHER_ICONS, NIGHT_WEATHER_ICONS } from "./icons.ts";
-import type { Astronomy, WttrReport } from "./types.ts";
+import { createState } from "ags";
+import { execAsync } from "ags/process";
+import { interval } from "ags/time";
+import { Tile } from "../utils";
+import { DAY_WEATHER_ICONS, NIGHT_WEATHER_ICONS } from "./icons";
+import type { Astronomy, WttrReport } from "./types";
 
 export const Weather = () => {
-  const currentWeather = Variable(null as WttrReport | null);
+  const [currentWeather, setCurrentWeather] = createState(
+    null as WttrReport | null,
+  );
   let lastUpdate: number | null = null;
 
   function updateWeather() {
@@ -16,12 +20,12 @@ export const Weather = () => {
     execAsync(["curl", "https://v2.wttr.in/?format=j1"])
       .then((rawResponse) => {
         const data: WttrReport = JSON.parse(rawResponse);
-        currentWeather.set(data);
+        setCurrentWeather(data);
         lastUpdate = Date.now();
       })
       .catch((e) => {
         printerr("error fetching weather: ", e);
-        currentWeather.set(null);
+        setCurrentWeather(null);
       });
   }
 

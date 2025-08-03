@@ -1,19 +1,19 @@
-import { App, Astal, type Gdk, Gtk } from "astal/gtk4";
-import { Clock } from "./clock.tsx";
-import { SysTray } from "./tray.tsx";
-import { Battery } from "./battery.tsx";
-import { Network } from "./network.tsx";
-import { Bluetooth } from "./bluetooth.tsx";
-import { Volume } from "./volume.tsx";
-import { Brightness } from "./brightness.tsx";
-import { Media } from "./mpris.tsx";
-import { Weather } from "./weather/index.tsx";
-import { FocusedClient, Workspaces } from "./hyprland.tsx";
+import { Astal, type Gdk, Gtk } from "ags/gtk4";
+import { Battery } from "./battery";
+import { Bluetooth } from "./bluetooth";
+import { Brightness } from "./brightness";
+import { Clock } from "./clock";
+import { FocusedClient, Workspaces } from "./hyprland";
+import { Media } from "./mpris";
+import { Network } from "./network";
+import { SysTray } from "./tray";
+import { Volume } from "./volume";
+import { Weather } from "./weather/index";
 
 export const Bar = (gdkmonitor: Gdk.Monitor) => {
   return (
     <window
-      visible={true}
+      visible
       cssClasses={["bar"]}
       namespace="bar"
       gdkmonitor={gdkmonitor}
@@ -24,7 +24,6 @@ export const Bar = (gdkmonitor: Gdk.Monitor) => {
         Astal.WindowAnchor.RIGHT
       }
       heightRequest={32}
-      application={App}
     >
       <centerbox>
         <Left gdkmonitor={gdkmonitor} />
