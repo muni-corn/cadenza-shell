@@ -56,6 +56,7 @@
         buildInputs = [
           ags.packages.${system}.agsFull
           pkgs.typescript
+          pkgs.biome
         ];
       };
     };
