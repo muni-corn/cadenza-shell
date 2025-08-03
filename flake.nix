@@ -19,10 +19,22 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
       pname = "muse-shell";
-      entry = "app.ts";
+      entry = "src/app.ts";
 
-      extraPackages = [
-        ags.packages.${system}.agsFull
+      astalPackages = with ags.packages.${system}; [
+        astal4
+        battery
+        bluetooth
+        hyprland
+        io
+        mpris
+        network
+        notifd
+        tray
+        wireplumber
+      ];
+
+      extraPackages = astalPackages ++ [
         pkgs.libadwaita
         pkgs.libsoup_3
       ];
@@ -54,7 +66,9 @@
 
       devShells.${system}.default = pkgs.mkShell {
         buildInputs = [
-          ags.packages.${system}.agsFull
+          (ags.packages.${system}.default.override {
+            inherit extraPackages;
+          })
           pkgs.typescript
           pkgs.biome
         ];
