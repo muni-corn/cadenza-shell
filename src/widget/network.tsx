@@ -1,5 +1,5 @@
 import AstalNetwork from "gi://AstalNetwork";
-import { createBinding, createComputed } from "ags";
+import { createBinding, createComputed, With } from "ags";
 import { percentageToIconFromList, unreachable } from "./utils";
 
 const WIRED_ICONS = {
@@ -148,13 +148,13 @@ export const Network = () => {
   );
 
   return (
-    <>
-      {tile(({ isOff, icon, ssid, status }) => (
+    <With value={tile}>
+      {({ isOff, icon, ssid, status }) => (
         <box spacing={12}>
           <label
             label={icon}
             visible={icon.length > 0}
-            cssClasses={[isOff ? "icon dim" : "icon"]}
+            cssClasses={isOff ? ["icon", "dim"] : ["icon"]}
             widthRequest={16}
           />
           <label
@@ -168,7 +168,7 @@ export const Network = () => {
             cssClasses={["secondary"]}
           />
         </box>
-      ))}
-    </>
+      )}
+    </With>
   );
 };
