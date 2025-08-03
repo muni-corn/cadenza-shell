@@ -3,10 +3,6 @@
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
-    astal = {
-      url = "github:Aylur/astal";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     ags = {
       url = "github:aylur/ags";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -22,34 +18,42 @@
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
+      pname = "muse-shell";
+      entry = "app.ts";
 
-      extraAstalPackages = with ags.packages.${system}; [
-        battery
-        bluetooth
-        hyprland
-        mpris
-        network
-        notifd
-        tray
-        wireplumber
+      extraPackages = [
+        ags.packages.${system}.agsFull
+        pkgs.libadwaita
+        pkgs.libsoup_3
       ];
     in
     {
-      packages.${system}.default = ags.lib.bundle {
-        inherit pkgs;
+      packages.${system}.default = pkgs.stdenv.mkDerivation {
+        name = pname;
         src = ./.;
-        name = "muse-shell";
-        entry = "app.ts";
-        gtk4 = true;
 
-        # additional libraries and executables to add to gjs' runtime
-        extraPackages = extraAstalPackages;
+        nativeBuildInputs = with pkgs; [
+          wrapGAppsHook
+          gobject-introspection
+          ags.packages.${system}.default
+        ];
+
+        buildInputs = extraPackages ++ [ pkgs.gjs ];
+
+        installPhase = ''
+          runHook preInstall
+
+          mkdir -p $out/bin
+          mkdir -p $out/share
+          cp -r * $out/share
+          ags bundle ${entry} $out/bin/${pname} -d "SRC='$out/share'"
+
+          runHook postInstall
+        '';
       };
 
       devShells.${system}.default = pkgs.mkShell {
-        buildInputs = [
-          (ags.packages.${system}.agsFull)
-        ];
+        buildInputs = [ ags.packages.${system}.agsFull ];
       };
     };
 }
