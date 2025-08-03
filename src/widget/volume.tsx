@@ -45,7 +45,7 @@ export const Volume = () => {
         />
         <Gtk.ProgressBar
           cssClasses={extraClasses((c) => [c])}
-          fraction={volume}
+          fraction={volume.as((v) => Math.max(0, Math.min(1, v || 0)))}
           valign={Gtk.Align.CENTER}
           widthRequest={16}
         />
