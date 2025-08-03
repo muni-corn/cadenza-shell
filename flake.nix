@@ -53,7 +53,10 @@
       };
 
       devShells.${system}.default = pkgs.mkShell {
-        buildInputs = [ ags.packages.${system}.agsFull ];
+        buildInputs = [
+          ags.packages.${system}.agsFull
+          pkgs.typescript
+        ];
       };
     };
 }
