@@ -4,10 +4,11 @@
 
 - **Build**: `nix build` (builds the shell using flake.nix)
 - **Dev shell**: `nix develop` (enters development environment with AGS)
-- **Run**: `ags run app.ts` (runs the shell directly)
-- **Lint**: `npx @biomejs/biome check .` (lints with Biome)
-- **Format**: `npx @biomejs/biome format --write .` (formats code)
+- **Lint**: `biome check .` (lints with Biome)
+- **Format**: `biome format --write .` (formats code)
 - **Type check**: `tsc` (TypeScript type checking)
+- DO NOT use `ags run` to test the shell. This command blocks indefinitely and
+  is unsuitable for agentic coding.
 
 ## Code Style & Conventions
 
@@ -30,4 +31,5 @@
 
 ## Development Tips
 
-- Use the context7 MCP server to look up documentation for any library.
+- Use the context7 MCP server to look up documentation for astal, ags v3, and
+  gnim.
