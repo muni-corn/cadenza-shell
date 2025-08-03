@@ -25,10 +25,10 @@ export const Bar = (gdkmonitor: Gdk.Monitor) => {
       }
       heightRequest={32}
     >
-      <centerbox>
-        <Left gdkmonitor={gdkmonitor} />
-        <Center />
-        <Right />
+      <centerbox orientation={Gtk.Orientation.HORIZONTAL} shrink_center_last>
+        <Left gdkmonitor={gdkmonitor} $type="start" />
+        <Center $type="center" />
+        <Right $type="end" />
       </centerbox>
     </window>
   );
