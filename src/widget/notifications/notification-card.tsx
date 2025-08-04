@@ -37,19 +37,20 @@ export const NotificationCard = (props: Props) => {
 
   const content = (
     <box class="content">
-      {n.image && fileExists(n.image) ? (
-        <image valign={START} class="image" file={n.image} />
-      ) : n.image ? (
-        <box hexpand={false} valign={START} class="icon-image">
-          <image
-            iconName={n.image}
-            hexpand={true}
-            vexpand={true}
-            halign={CENTER}
-            valign={CENTER}
-          />
-        </box>
-      ) : undefined}
+      {n.image &&
+        (fileExists(n.image) ? (
+          <image valign={START} class="image" file={n.image} />
+        ) : (
+          <box hexpand={false} valign={START} class="icon-image">
+            <image
+              iconName={n.image}
+              hexpand={true}
+              vexpand={true}
+              halign={CENTER}
+              valign={CENTER}
+            />
+          </box>
+        ))}
       <box orientation={Gtk.Orientation.VERTICAL}>
         <label
           class="summary"
@@ -96,13 +97,11 @@ export const NotificationCard = (props: Props) => {
       <box orientation={Gtk.Orientation.VERTICAL}>
         <box class="header">
           {n.appIcon || isIcon(n.desktopEntry) ? (
-            <image
-              class="app-icon"
-              visible={Boolean(n.appIcon || n.desktopEntry)}
-              iconName={n.appIcon || n.desktopEntry}
-            />
+            <image class="app-icon" iconName={n.appIcon || n.desktopEntry} />
           ) : null}
-          <label class="app-name" halign={START} label={n.appName || ""} />
+          {n.appName && (
+            <label class="app-name" halign={START} label={n.appName} />
+          )}
           <label
             class="time"
             hexpand={true}
