@@ -1,11 +1,11 @@
 import AstalNotifd from "gi://AstalNotifd";
-import { createBinding, createState, For, onCleanup } from "ags";
-import { Astal, Gdk, Gtk } from "ags/gtk4";
+import { createState, For, onCleanup } from "ags";
+import { Astal, Gtk } from "ags/gtk4";
 import app from "ags/gtk4/app";
 import { NotificationCard } from "./notification-card";
 
 export function NotificationPopups() {
-  const monitors = createBinding(app, "monitors");
+  const monitor = app.monitors[0];
 
   const notifd = AstalNotifd.get_default();
 
@@ -36,26 +36,20 @@ export function NotificationPopups() {
   });
 
   return (
-    <For each={monitors} cleanup={(win) => (win as Gtk.Window).destroy()}>
-      {(monitor) => (
-        <window
-          visible={notifications((ns) => ns.length > 0)}
-          class="notifications"
-          namespace="notifications"
-          gdkmonitor={monitor}
-          exclusivity={Astal.Exclusivity.EXCLUSIVE}
-          anchor={Astal.WindowAnchor.TOP | Astal.WindowAnchor.RIGHT}
-          widthRequest={432}
-        >
-          <box orientation={Gtk.Orientation.VERTICAL}>
-            <For each={notifications}>
-              {(notification) => (
-                <NotificationCard notification={notification} />
-              )}
-            </For>
-          </box>
-        </window>
-      )}
-    </For>
+    <window
+      visible={notifications((ns) => ns.length > 0)}
+      class="notifications"
+      namespace="notifications"
+      gdkmonitor={monitor}
+      exclusivity={Astal.Exclusivity.EXCLUSIVE}
+      anchor={Astal.WindowAnchor.TOP | Astal.WindowAnchor.RIGHT}
+      widthRequest={432}
+    >
+      <box orientation={Gtk.Orientation.VERTICAL}>
+        <For each={notifications}>
+          {(notification) => <NotificationCard notification={notification} />}
+        </For>
+      </box>
+    </window>
   );
 }
