@@ -9,6 +9,8 @@
 - **Type check**: `tsc` (TypeScript type checking)
 - DO NOT use `ags run` to test the shell. This command blocks indefinitely and
   is unsuitable for agentic coding.
+- **IMPORTANT**: New files must be added to git index (`git add`) before `nix build`
+  will pick them up, as Nix only includes tracked files in the build.
 
 ## Code Style & Conventions
 
