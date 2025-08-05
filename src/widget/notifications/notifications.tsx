@@ -1,12 +1,10 @@
 import AstalNotifd from "gi://AstalNotifd";
 import { createState, For, onCleanup } from "ags";
 import { Astal, Gtk } from "ags/gtk4";
-import app from "ags/gtk4/app";
+import type { SingleMonitorProps } from "../utils";
 import { NotificationCard } from "./notification-card";
 
-export function NotificationPopups() {
-  const monitor = app.monitors[0];
-
+export function Notifications({ gdkmonitor }: SingleMonitorProps) {
   const notifd = AstalNotifd.get_default();
 
   const [notifications, setNotifications] = createState<
@@ -40,7 +38,7 @@ export function NotificationPopups() {
       visible={notifications((ns) => ns.length > 0)}
       class="notifications"
       namespace="notifications"
-      gdkmonitor={monitor}
+      gdkmonitor={gdkmonitor}
       exclusivity={Astal.Exclusivity.EXCLUSIVE}
       anchor={Astal.WindowAnchor.TOP | Astal.WindowAnchor.RIGHT}
       widthRequest={432}

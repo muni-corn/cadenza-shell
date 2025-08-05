@@ -1,7 +1,7 @@
 import app from "ags/gtk4/app";
 import style from "./style.scss";
 import { Bar } from "./widget/bar";
-import { NotificationPopups } from "./widget/notifications/notifications";
+import { Notifications } from "./widget/notifications/notifications";
 
 app.start({
   css: style,
@@ -12,7 +12,7 @@ app.start({
     // show bar on all monitors
     monitors.map(Bar);
 
-    NotificationPopups();
+    Notifications({ gdkmonitor: monitors[0] });
   },
 
   // this runs in the main instance
