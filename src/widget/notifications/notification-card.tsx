@@ -59,6 +59,8 @@ export const NotificationCard = (props: Props) => {
           xalign={0}
           label={n.summary}
           lines={2}
+          ellipsize={3}
+          maxWidthChars={1}
         />
         {n.body && (
           <label
@@ -68,7 +70,9 @@ export const NotificationCard = (props: Props) => {
             halign={START}
             xalign={0}
             label={n.body}
-            lines={6}
+            lines={4}
+            ellipsize={3}
+            maxWidthChars={1}
           />
         )}
       </box>
