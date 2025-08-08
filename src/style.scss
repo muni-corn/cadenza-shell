@@ -49,6 +49,7 @@ progressbar {
   }
 
   &.dim {
+
     progress,
     trough {
       transition:
@@ -102,6 +103,7 @@ progressbar {
   from {
     color: rgba(255, 0, 0, 1);
   }
+
   to {
     color: rgba(255, 0, 0, 0.5);
   }
@@ -129,17 +131,18 @@ box.notification-card {
     box-shadow: none;
   }
 
-  &:first-child > box {
+  &:first-child>box {
     margin-top: 16px;
   }
 
-  &:last-child > box {
+  &:last-child>box {
     margin-bottom: 16px;
   }
 
   // eventboxes can not take margins so we style its inner box instead
-  > box {
+  >box {
     min-width: 400px;
+    max-width: 400px;
     border-radius: 12px;
     background-color: rgba(0, 0, 0, 0.5);
     margin: 8px 16px;
@@ -147,7 +150,7 @@ box.notification-card {
     border: 2px solid gtkalpha(white, 0.25);
   }
 
-  &.critical > box {
+  &.critical>box {
     border: 2px solid $error;
 
     .header {
@@ -241,8 +244,10 @@ box.notification-card {
   }
 }
 
-popover.menu  {
-  contents, arrow {
+popover.menu {
+
+  contents,
+  arrow {
     background-color: rgba(0, 0, 0, 0.5);
   }
 }

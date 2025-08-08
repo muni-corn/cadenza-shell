@@ -8,20 +8,10 @@
     "moduleResolution": "Bundler",
     "noEmit": true,
     "skipLibCheck": true,
-    "lib": [
-      "ESNext"
-    ],
+    "lib": ["ESNext"],
     "strict": true,
     "target": "esnext"
   },
-  "exclude": [
-    "**/nix/store/**/*",
-    "node_modules/**/*"
-  ],
-  "include": [
-    "src/**/*.ts",
-    "src/**/*.tsx",
-    "env.d.ts",
-    "@girs/"
-  ]
+  "exclude": ["**/nix/store/**/*", "node_modules/**/*"],
+  "include": ["src/**/*.ts", "src/**/*.tsx", "env.d.ts", "@girs/"]
 }
