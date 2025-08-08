@@ -36,7 +36,7 @@ export const NotificationCard = (props: Props) => {
   const { START, CENTER, END } = Gtk.Align;
 
   const content = (
-    <box class="content">
+    <box class="content" hexpand>
       {n.image &&
         (fileExists(n.image) ? (
           <image valign={START} class="image" file={n.image} />
@@ -61,6 +61,7 @@ export const NotificationCard = (props: Props) => {
           lines={2}
           ellipsize={3}
           maxWidthChars={1}
+          hexpand
         />
         {n.body && (
           <label
@@ -73,6 +74,7 @@ export const NotificationCard = (props: Props) => {
             lines={4}
             ellipsize={3}
             maxWidthChars={1}
+            hexpand
           />
         )}
       </box>
