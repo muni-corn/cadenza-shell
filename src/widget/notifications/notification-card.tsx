@@ -27,12 +27,12 @@ const urgency = (n: Notifd.Notification) => {
 
 type Props = {
   setup?: (self: Gtk.Widget) => void;
-  onActionExecution?: () => void;
+  afterActionExecution?: () => void;
   notification: Notifd.Notification;
 };
 
 export const NotificationCard = (props: Props) => {
-  const { notification: n, setup, onActionExecution } = props;
+  const { notification: n, setup, afterActionExecution } = props;
   const { START, CENTER, END } = Gtk.Align;
 
   const content = (
@@ -88,7 +88,7 @@ export const NotificationCard = (props: Props) => {
         onClicked={() => {
           if (n.get_actions()[0]) {
             n.invoke(n.get_actions()[0].id);
-            onActionExecution?.();
+            afterActionExecution?.();
           }
         }}
       >
