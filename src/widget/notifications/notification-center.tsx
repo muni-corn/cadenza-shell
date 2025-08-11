@@ -46,7 +46,8 @@ export function NotificationCenter() {
         resolvedAt: Date.now() / 1000,
       };
 
-      setPastNotifications((ns) => [resolvedNotification, ...ns.slice(0, 49)]);
+      if (!notification.transient)
+        setPastNotifications((ns) => [resolvedNotification, ...ns]);
       setNewNotifications((ns) => ns.filter((n) => n.id !== id));
     }
   });
