@@ -6,9 +6,11 @@ import { Clock } from "./clock";
 import { FocusedClient, Workspaces } from "./hyprland";
 import { Media } from "./mpris";
 import { Network } from "./network";
+import { NotificationTile } from "./notifications/notification-tile";
 import { SysTray } from "./tray";
 import { Volume } from "./volume";
 import { Weather } from "./weather/index";
+import type { SingleMonitorProps } from "./utils";
 
 export const Bar = (gdkmonitor: Gdk.Monitor) => {
   return (
@@ -32,7 +34,7 @@ export const Bar = (gdkmonitor: Gdk.Monitor) => {
       >
         <Left gdkmonitor={gdkmonitor} $type="start" />
         <Center $type="center" />
-        <Right $type="end" />
+        <Right gdkmonitor={gdkmonitor} $type="end" />
       </centerbox>
     </window>
   );
@@ -58,7 +60,7 @@ function Center() {
   );
 }
 
-function Right() {
+function Right({ gdkmonitor }: SingleMonitorProps) {
   return (
     <box spacing={20} halign={Gtk.Align.END}>
       <Brightness />
@@ -66,6 +68,7 @@ function Right() {
       <Bluetooth />
       <Network />
       <Battery />
+      <NotificationTile gdkmonitor={gdkmonitor} />
       <SysTray />
     </box>
   );
