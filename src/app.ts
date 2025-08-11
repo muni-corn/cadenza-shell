@@ -1,6 +1,7 @@
 import app from "ags/gtk4/app";
 import style from "./style.scss";
 import { Bar } from "./widget/bar";
+import { NotificationCenter } from "./widget/notifications/notification-center";
 import { Notifications } from "./widget/notifications/notifications";
 
 app.start({
@@ -13,6 +14,7 @@ app.start({
     monitors.map(Bar);
 
     Notifications({ gdkmonitor: monitors[0] });
+    NotificationCenter();
   },
 
   // this runs in the main instance
