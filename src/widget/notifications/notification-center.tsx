@@ -71,10 +71,9 @@ export function NotificationCenter() {
       namespace="notification-center"
       gdkmonitor={notificationCenterMonitor}
       exclusivity={Astal.Exclusivity.NORMAL}
-      anchor={Astal.WindowAnchor.TOP | Astal.WindowAnchor.RIGHT}
+      anchor={Astal.WindowAnchor.TOP | Astal.WindowAnchor.RIGHT | Astal.WindowAnchor.BOTTOM}
       margin={8}
       widthRequest={432}
-      heightRequest={600}
       keymode={Astal.Keymode.ON_DEMAND}
     >
       <box orientation={Gtk.Orientation.VERTICAL}>
