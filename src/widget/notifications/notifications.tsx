@@ -1,8 +1,9 @@
 import AstalNotifd from "gi://AstalNotifd";
-import { createState, For, onCleanup } from "ags";
+import { createComputed, createState, For, onCleanup } from "ags";
 import { Astal, Gtk } from "ags/gtk4";
 import type { SingleMonitorProps } from "../utils";
 import { NotificationCard } from "./notification-card";
+import { notificationCenterVisible } from "./notification-center";
 
 export function Notifications({ gdkmonitor }: SingleMonitorProps) {
   const notifd = AstalNotifd.get_default();
@@ -33,9 +34,15 @@ export function Notifications({ gdkmonitor }: SingleMonitorProps) {
     notifd.disconnect(resolvedHandler);
   });
 
+  const freshNotificationsVisible = createComputed(
+    [notifications, notificationCenterVisible],
+    (notifications, notificationCenterVisible) =>
+      notifications.length > 0 && !notificationCenterVisible,
+  );
+
   return (
     <window
-      visible={notifications((ns) => ns.length > 0)}
+      visible={freshNotificationsVisible}
       class="notifications"
       namespace="notifications"
       gdkmonitor={gdkmonitor}
