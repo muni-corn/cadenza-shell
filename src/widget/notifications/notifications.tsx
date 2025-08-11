@@ -20,6 +20,10 @@ export function Notifications({ gdkmonitor }: SingleMonitorProps) {
     } else {
       setNotifications((ns) => [notification, ...ns]);
     }
+
+    setTimeout(() => {
+      setNotifications((ns) => ns.filter((n) => n.id !== id));
+    }, 10000);
   });
 
   const resolvedHandler = notifd.connect("resolved", (_, id) => {
