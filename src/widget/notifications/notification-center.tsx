@@ -72,7 +72,11 @@ export function NotificationCenter() {
       namespace="notification-center"
       gdkmonitor={notificationCenterMonitor}
       exclusivity={Astal.Exclusivity.NORMAL}
-      anchor={Astal.WindowAnchor.TOP | Astal.WindowAnchor.RIGHT | Astal.WindowAnchor.BOTTOM}
+      anchor={
+        Astal.WindowAnchor.TOP |
+        Astal.WindowAnchor.RIGHT |
+        Astal.WindowAnchor.BOTTOM
+      }
       margin={8}
       widthRequest={432}
       keymode={Astal.Keymode.ON_DEMAND}
