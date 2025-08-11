@@ -67,7 +67,6 @@ export const NotificationCard = (props: Props) => {
           <label
             class="body"
             wrap={true}
-            useMarkup={true}
             halign={START}
             xalign={0}
             label={n.body}
