@@ -24,7 +24,7 @@ export function NotificationCenter() {
       setNewNotifications((ns) =>
         ns.map((n) => (n.id === id ? notification : n)),
       );
-    } else {
+    } else if (!notification.transient) {
       setNewNotifications((ns) => [notification, ...ns]);
     }
   });
