@@ -1,6 +1,6 @@
 import GLib from "gi://GLib?version=2.0";
-import { createPoll } from "ags/time";
 import { Gtk } from "ags/gtk4";
+import { createPoll } from "ags/time";
 
 export function AnalogClock() {
   const time = createPoll(
@@ -48,54 +48,22 @@ export function AnalogClock() {
             cr.setSourceRGBA(0, 0, 0, 0);
             cr.paint();
 
-            // Draw clock face background
-            cr.setSourceRGBA(1, 1, 1, 0.1);
-            cr.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-            cr.fill();
-
-            // Draw clock face border
-            cr.setSourceRGBA(1, 1, 1, 0.3);
-            cr.setLineWidth(2);
-            cr.arc(centerX, centerY, radius, 0, 2 * Math.PI);
-            cr.stroke();
-
             // Draw hour markers
-            cr.setSourceRGBA(1, 1, 1, 0.8);
-            cr.setLineWidth(3);
+            cr.setSourceRGBA(1, 1, 1, 0.5);
             for (let i = 0; i < 12; i++) {
               const angle = (i * Math.PI) / 6 - Math.PI / 2;
-              const x1 = centerX + Math.cos(angle) * (radius - 15);
-              const y1 = centerY + Math.sin(angle) * (radius - 15);
-              const x2 = centerX + Math.cos(angle) * (radius - 5);
-              const y2 = centerY + Math.sin(angle) * (radius - 5);
+              const x = centerX + Math.cos(angle) * (radius - 5);
+              const y = centerY + Math.sin(angle) * (radius - 5);
 
-              cr.moveTo(x1, y1);
-              cr.lineTo(x2, y2);
-              cr.stroke();
-            }
-
-            // Draw minute markers
-            cr.setSourceRGBA(1, 1, 1, 0.4);
-            cr.setLineWidth(1);
-            for (let i = 0; i < 60; i++) {
-              if (i % 5 !== 0) {
-                const angle = (i * Math.PI) / 30 - Math.PI / 2;
-                const x1 = centerX + Math.cos(angle) * (radius - 8);
-                const y1 = centerY + Math.sin(angle) * (radius - 8);
-                const x2 = centerX + Math.cos(angle) * (radius - 5);
-                const y2 = centerY + Math.sin(angle) * (radius - 5);
-
-                cr.moveTo(x1, y1);
-                cr.lineTo(x2, y2);
-                cr.stroke();
-              }
+              cr.arc(x, y, 2, 0, 2 * Math.PI);
+              cr.fill();
             }
 
             // Draw hour hand
             const hourAngle =
               ((currentTime.hours + currentTime.minutes / 60) * Math.PI) / 6 -
               Math.PI / 2;
-            cr.setSourceRGBA(1, 1, 1, 0.9);
+            cr.setSourceRGB(1, 1, 1);
             cr.setLineWidth(4);
             cr.setLineCap(1); // Round cap
             cr.moveTo(centerX, centerY);
@@ -108,7 +76,7 @@ export function AnalogClock() {
             // Draw minute hand
             const minuteAngle =
               (currentTime.minutes * Math.PI) / 30 - Math.PI / 2;
-            cr.setSourceRGBA(1, 1, 1, 0.9);
+            cr.setSourceRGBA(1, 1, 1, 0.75);
             cr.setLineWidth(3);
             cr.setLineCap(1); // Round cap
             cr.moveTo(centerX, centerY);
@@ -121,7 +89,7 @@ export function AnalogClock() {
             // Draw second hand
             const secondAngle =
               (currentTime.seconds * Math.PI) / 30 - Math.PI / 2;
-            cr.setSourceRGBA(1, 0.3, 0.3, 0.9);
+            cr.setSourceRGBA(1, 1, 1, 0.5);
             cr.setLineWidth(1);
             cr.setLineCap(1); // Round cap
             cr.moveTo(centerX, centerY);
@@ -130,11 +98,6 @@ export function AnalogClock() {
               centerY + Math.sin(secondAngle) * (radius * 0.85),
             );
             cr.stroke();
-
-            // Draw center dot
-            cr.setSourceRGBA(1, 1, 1, 0.9);
-            cr.arc(centerX, centerY, 4, 0, 2 * Math.PI);
-            cr.fill();
 
             return false;
           });
