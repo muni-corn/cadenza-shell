@@ -7,10 +7,11 @@
 - **Lint**: `biome check .` (lints with Biome)
 - **Format**: `biome format --write .` (formats code)
 - **Type check**: `tsc` (TypeScript type checking)
-- DO NOT use `ags run` to test the shell. This command blocks indefinitely and
-  is unsuitable for agentic coding.
-- **IMPORTANT**: New files must be added to git index (`git add`) before `nix build`
-  will pick them up, as Nix only includes tracked files in the build.
+- Use `timeout` with `ags run src/app.ts` to test the shell. `ags run` blocks
+  indefinitely, so be sure to use `timeout` appropriately.
+- **IMPORTANT**: New files must be added to git index (`git add`) before
+  `nix build` will pick them up, as Nix only includes tracked files in the
+  build.
 
 ## Code Style & Conventions
 
@@ -33,5 +34,5 @@
 
 ## Development Tips
 
-- Use the context7 MCP server to look up documentation for astal, ags v3, and
-  gnim.
+- Use the context7 MCP server to look up documentation for astal, ags v3, gnim,
+  GTK4, and any other libraries you need to understand.
