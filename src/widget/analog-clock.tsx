@@ -14,7 +14,7 @@ export function AnalogClock() {
       const now = GLib.DateTime.new_now_local();
       return {
         hours: now.get_hour() % 12,
-        minutes: now.get_minute(),
+        minutes: now.get_minute() + now.get_second() / 60,
         seconds: now.get_second(),
       };
     },
