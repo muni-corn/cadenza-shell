@@ -5,11 +5,6 @@ import app from "ags/gtk4/app";
 import { AnalogClock } from "../analog-clock";
 import { NotificationCard } from "./notification-card";
 
-type NotificationWithTimestamp = {
-  notification: AstalNotifd.Notification;
-  resolvedAt?: number;
-};
-
 export const [notificationCenterMonitor, setNotificationCenterMonitor] =
   createState(app.get_monitors()[0]);
 export const [notificationCenterVisible, setNotificationCenterVisible] =
@@ -21,10 +16,6 @@ export function NotificationCenter() {
   const [newNotifications, setNewNotifications] = createState<
     AstalNotifd.Notification[]
   >(notifd.get_notifications());
-
-  const [pastNotifications, setPastNotifications] = createState<
-    NotificationWithTimestamp[]
-  >([]);
 
   const notifiedHandler = notifd.connect("notified", (_, id, replaced) => {
     const notification = notifd.get_notification(id);
@@ -39,28 +30,13 @@ export function NotificationCenter() {
   });
 
   const resolvedHandler = notifd.connect("resolved", (_, id) => {
-    const notification = newNotifications.get().find((n) => n.id === id);
-
-    if (notification) {
-      const resolvedNotification: NotificationWithTimestamp = {
-        notification,
-        resolvedAt: Date.now() / 1000,
-      };
-
-      if (!notification.transient)
-        setPastNotifications((ns) => [resolvedNotification, ...ns]);
-      setNewNotifications((ns) => ns.filter((n) => n.id !== id));
-    }
+    setNewNotifications((ns) => ns.filter((n) => n.id !== id));
   });
 
   onCleanup(() => {
     notifd.disconnect(notifiedHandler);
     notifd.disconnect(resolvedHandler);
   });
-
-  const clearHistory = () => {
-    setPastNotifications([]);
-  };
 
   const dismissAll = () => {
     newNotifications.get().forEach((n) => n.dismiss());
@@ -129,36 +105,6 @@ export function NotificationCenter() {
                 <image iconName="notification-symbolic" class="empty-icon" />
                 <label class="empty-text" label="No new notifications" />
               </box>
-            </box>
-
-            <box orientation={Gtk.Orientation.VERTICAL} spacing={4}>
-              <box spacing={8}>
-                <label
-                  class="section-title"
-                  label="Notification history"
-                  halign={Gtk.Align.START}
-                  hexpand={true}
-                  visible={pastNotifications((ns) => ns.length > 0)}
-                />
-                <button
-                  class="clear-history"
-                  onClicked={clearHistory}
-                  visible={pastNotifications((ns) => ns.length > 0)}
-                >
-                  <label label="Clear" />
-                </button>
-              </box>
-              <For each={pastNotifications}>
-                {(item) => (
-                  <NotificationCard
-                    notification={item.notification}
-                    setup={(self) => {
-                      self.add_css_class("resolved");
-                    }}
-                    afterActionExecution={() => {}}
-                  />
-                )}
-              </For>
             </box>
           </box>
         </scrolledwindow>
