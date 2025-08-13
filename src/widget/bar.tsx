@@ -62,14 +62,18 @@ function Center() {
 
 function Right({ gdkmonitor }: SingleMonitorProps) {
   return (
-    <box spacing={20} halign={Gtk.Align.END}>
-      <Brightness />
-      <Volume />
-      <Bluetooth />
-      <Network />
-      <Battery />
-      <NotificationTile gdkmonitor={gdkmonitor} />
-      <SysTray />
+    <box spacing={20}>
+      <box spacing={20} halign={Gtk.Align.END}>
+        <Brightness />
+        <Volume />
+        <Bluetooth />
+        <Network />
+        <Battery />
+      </box>
+      <box>
+        <SysTray />
+        <NotificationTile gdkmonitor={gdkmonitor} />
+      </box>
     </box>
   );
 }
