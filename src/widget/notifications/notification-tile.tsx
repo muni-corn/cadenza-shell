@@ -10,6 +10,7 @@ import {
 
 const NOTIFICATIONS_NONE = "\udb80\udc9c";
 const NOTIFICATIONS_NEW = "\udb84\udd6b";
+const NOTIFICATIONS_SILENCED = "\udb82\ude91";
 
 export function NotificationTile({ gdkmonitor }: SingleMonitorProps) {
   const notifd = AstalNotifd.get_default();
@@ -40,15 +41,25 @@ export function NotificationTile({ gdkmonitor }: SingleMonitorProps) {
     setNotificationCenterMonitor(gdkmonitor);
   };
 
+  const dnd = notifd.dont_disturb;
+
   return (
     <button class="notification-tile" onClicked={toggleNotificationCenter}>
       <Tile
-        icon={unreadCount.as((count) =>
-          count ? NOTIFICATIONS_NEW : NOTIFICATIONS_NONE,
-        )}
-        primary={unreadCount.as((count) => (count > 0 ? count.toString() : ""))}
+        icon={
+          dnd
+            ? NOTIFICATIONS_SILENCED
+            : unreadCount.as((count) =>
+                count ? NOTIFICATIONS_NEW : NOTIFICATIONS_NONE,
+              )
+        }
+        primary={
+          dnd
+            ? undefined
+            : unreadCount.as((count) => (count > 0 ? count.toString() : ""))
+        }
         attention={unreadCount.as((count) =>
-          count ? Attention.Normal : Attention.Dim,
+          count && !dnd ? Attention.Normal : Attention.Dim,
         )}
       />
     </button>
