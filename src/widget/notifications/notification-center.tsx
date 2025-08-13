@@ -1,5 +1,7 @@
 import AstalNotifd from "gi://AstalNotifd";
+import GLib from "gi://GLib?version=2.0";
 import { createState, For, onCleanup } from "ags";
+import { createPoll } from "ags/time";
 import { Astal, Gtk } from "ags/gtk4";
 import app from "ags/gtk4/app";
 import { AnalogClock } from "../analog-clock";
@@ -16,6 +18,24 @@ export function NotificationCenter() {
   const [newNotifications, setNewNotifications] = createState<
     AstalNotifd.Notification[]
   >(notifd.get_notifications());
+
+  const digitalTime = createPoll(
+    {
+      time: "",
+      date: "",
+    },
+    1000,
+    () => {
+      const now = GLib.DateTime.new_now_local();
+      const time = now.format("%-I:%M %P") || "invalid time format";
+      const date = now.format("%A, %B %-d, %Y") || "invalid date format";
+
+      return {
+        time,
+        date,
+      };
+    },
+  );
 
   const notifiedHandler = notifd.connect("notified", (_, id, replaced) => {
     const notification = notifd.get_notification(id);
@@ -58,15 +78,35 @@ export function NotificationCenter() {
       widthRequest={432}
       keymode={Astal.Keymode.ON_DEMAND}
     >
-      <box orientation={Gtk.Orientation.VERTICAL}>
+      <box orientation={Gtk.Orientation.VERTICAL} spacing={32}>
         <box
           class="notification-center-header"
           orientation={Gtk.Orientation.HORIZONTAL}
-          spacing={16}
+          hexpand
         >
-          <AnalogClock />
-          <Gtk.Calendar />
+          <box
+            orientation={Gtk.Orientation.VERTICAL}
+            spacing={8}
+            halign={Gtk.Align.START}
+            valign={Gtk.Align.END}
+            hexpand
+          >
+            <label
+              class="big-clock"
+              label={digitalTime((t) => t.time)}
+              halign={Gtk.Align.START}
+            />
+            <label
+              label={digitalTime((t) => t.date)}
+              halign={Gtk.Align.START}
+            />
+          </box>
+          <box halign={Gtk.Align.END}>
+            <AnalogClock radius={60} />
+          </box>
         </box>
+
+        <Gtk.Calendar hexpand />
 
         <scrolledwindow vexpand={true} hscrollbarPolicy={Gtk.PolicyType.NEVER}>
           <box orientation={Gtk.Orientation.VERTICAL} spacing={8}>
