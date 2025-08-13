@@ -110,5 +110,13 @@ export const Battery = () => {
     },
   );
 
-  return <Tile data={tile} />;
+  return (
+    <Tile
+      icon={tile.as((t) => t.icon)}
+      primary={tile.as((t) => t.primary)}
+      secondary={tile.as((t) => t.secondary)}
+      visible={tile.as((t) => t.visible)}
+      attention={tile.as((t) => t.attention)}
+    />
+  );
 };

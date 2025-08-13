@@ -32,7 +32,7 @@ export const Weather = () => {
   // every minute, check if weather needs to be updated
   interval(60000, updateWeather);
 
-  const dataBinding = currentWeather((weather) => {
+  const data = currentWeather((weather) => {
     if (!weather) {
       return {
         icon: "",
@@ -57,7 +57,14 @@ export const Weather = () => {
     };
   });
 
-  return <Tile data={dataBinding} />;
+  return (
+    <Tile
+      icon={data.as((d) => d.icon)}
+      primary={data.as((d) => d.primary)}
+      secondary={data.as((d) => d.secondary)}
+      visible={data.as((d) => d.visible)}
+    />
+  );
 };
 
 const UNKNOWN_ICON = "\u{F1BF9}";

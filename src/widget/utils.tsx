@@ -7,43 +7,82 @@ export enum Attention {
   Alarm = "alarm",
   Warning = "warning",
   Normal = "",
+  Dim = "dim",
 }
 
-export interface Tile {
-  icon: string;
-  primary: string;
-  secondary: string;
-  visible?: boolean;
-  attention?: Attention;
+export interface TileProps {
+  icon?: string | Accessor<string>;
+  primary?: string | Accessor<string>;
+  secondary?: string | Accessor<string>;
+  visible?: boolean | Accessor<boolean>;
+  attention?: Attention | Accessor<Attention>;
 }
 
-export const Tile = ({ data }: { data: Accessor<Tile> }) => {
-  const className = (otherClasses: string[] = []) =>
-    data.as((d) =>
-      d.attention ? otherClasses.concat([d.attention]) : otherClasses,
-    );
+export const Tile = ({
+  icon,
+  primary,
+  secondary,
+  visible,
+  attention,
+}: TileProps) => {
+  const className = (otherClasses: string[] = []) => {
+    if (!attention) return otherClasses;
+    if (typeof attention === "string") {
+      return attention ? otherClasses.concat([attention]) : otherClasses;
+    }
+    return attention.as((a) => (a ? otherClasses.concat([a]) : otherClasses));
+  };
 
-  const icon = data.as((d) => trunc(d.icon));
-  const primary = data.as((d) => trunc(d.primary));
-  const secondary = data.as((d) => trunc(d.secondary));
-  const visible = data.as((d) => d.visible ?? true);
+  const iconLabel = icon
+    ? typeof icon === "string"
+      ? trunc(icon)
+      : icon.as((i) => trunc(i || ""))
+    : "";
+  const primaryLabel = primary
+    ? typeof primary === "string"
+      ? trunc(primary)
+      : primary.as((p) => trunc(p || ""))
+    : "";
+  const secondaryLabel = secondary
+    ? typeof secondary === "string"
+      ? trunc(secondary)
+      : secondary.as((s) => trunc(s || ""))
+    : "";
+  const isVisible =
+    visible !== undefined
+      ? typeof visible === "boolean"
+        ? visible
+        : visible.as((v) => v ?? true)
+      : true;
 
   return (
-    <box spacing={12} visible={visible}>
+    <box spacing={12} visible={isVisible}>
       <label
-        label={icon}
-        visible={icon.as((p) => p.length > 0)}
+        label={iconLabel}
+        visible={
+          typeof iconLabel === "string"
+            ? iconLabel.length > 0
+            : iconLabel.as((p) => p.length > 0)
+        }
         cssClasses={className(["icon"])}
         widthRequest={16}
       />
       <label
-        label={primary}
-        visible={primary.as((p) => p.length > 0)}
+        label={primaryLabel}
+        visible={
+          typeof primaryLabel === "string"
+            ? primaryLabel.length > 0
+            : primaryLabel.as((p) => p.length > 0)
+        }
         cssClasses={className(["primary"])}
       />
       <label
-        label={secondary}
-        visible={secondary.as((s) => s?.length > 0)}
+        label={secondaryLabel}
+        visible={
+          typeof secondaryLabel === "string"
+            ? secondaryLabel.length > 0
+            : secondaryLabel.as((s) => s?.length > 0)
+        }
         cssClasses={className(["secondary"])}
       />
     </box>

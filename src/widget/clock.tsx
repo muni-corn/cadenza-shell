@@ -20,7 +20,7 @@ const CLOCK_ICONS = [
 ];
 
 export const Clock = () => {
-  const date = createPoll(
+  const datePoll = createPoll(
     {
       icon: "",
       primary: "",
@@ -41,7 +41,13 @@ export const Clock = () => {
     },
   );
 
-  return <Tile data={date} />;
+  return (
+    <Tile
+      icon={datePoll.as((d) => d.icon)}
+      primary={datePoll.as((d) => d.primary)}
+      secondary={datePoll.as((d) => d.secondary)}
+    />
+  );
 };
 
 export function getGreeting(): string {
