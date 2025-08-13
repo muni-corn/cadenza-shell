@@ -2,6 +2,7 @@ import AstalNotifd from "gi://AstalNotifd";
 import { createState, For, onCleanup } from "ags";
 import { Astal, Gtk } from "ags/gtk4";
 import app from "ags/gtk4/app";
+import { AnalogClock } from "../analog-clock";
 import { NotificationCard } from "./notification-card";
 
 type NotificationWithTimestamp = {
@@ -82,6 +83,15 @@ export function NotificationCenter() {
       keymode={Astal.Keymode.ON_DEMAND}
     >
       <box orientation={Gtk.Orientation.VERTICAL}>
+        <box
+          class="notification-center-header"
+          orientation={Gtk.Orientation.HORIZONTAL}
+          spacing={16}
+        >
+          <AnalogClock />
+          <Gtk.Calendar />
+        </box>
+
         <scrolledwindow vexpand={true} hscrollbarPolicy={Gtk.PolicyType.NEVER}>
           <box orientation={Gtk.Orientation.VERTICAL} spacing={8}>
             <label
