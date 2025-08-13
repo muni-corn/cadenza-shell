@@ -1,12 +1,15 @@
 import AstalNotifd from "gi://AstalNotifd";
 import { createState, onCleanup } from "ags";
-import type { SingleMonitorProps } from "../utils";
+import { Attention, type SingleMonitorProps, Tile } from "../utils";
 import {
   notificationCenterMonitor,
   notificationCenterVisible,
   setNotificationCenterMonitor,
   setNotificationCenterVisible,
 } from "./notification-center";
+
+const NOTIFICATIONS_NONE = "\udb80\udc9c";
+const NOTIFICATIONS_NEW = "\udb84\udd6b";
 
 export function NotificationTile({ gdkmonitor }: SingleMonitorProps) {
   const notifd = AstalNotifd.get_default();
@@ -37,14 +40,15 @@ export function NotificationTile({ gdkmonitor }: SingleMonitorProps) {
 
   return (
     <button class="notification-tile" onClicked={toggleNotificationCenter}>
-      <box spacing={4}>
-        <image iconName="notification-symbolic" />
-        <label
-          label={unreadCount((count) => (count > 0 ? count.toString() : ""))}
-          visible={unreadCount((count) => count > 0)}
-          class="notification-count"
-        />
-      </box>
+      <Tile
+        icon={unreadCount.as((count) =>
+          count ? NOTIFICATIONS_NEW : NOTIFICATIONS_NONE,
+        )}
+        primary={unreadCount.as((count) => (count > 0 ? count.toString() : ""))}
+        attention={unreadCount.as((count) =>
+          count ? Attention.Normal : Attention.Dim,
+        )}
+      />
     </button>
   );
 }

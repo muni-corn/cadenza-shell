@@ -1,9 +1,9 @@
 import AstalNotifd from "gi://AstalNotifd";
 import GLib from "gi://GLib?version=2.0";
 import { createState, For, onCleanup } from "ags";
-import { createPoll } from "ags/time";
 import { Astal, Gtk } from "ags/gtk4";
 import app from "ags/gtk4/app";
+import { createPoll } from "ags/time";
 import { AnalogClock } from "../analog-clock";
 import { NotificationCard } from "./notification-card";
 
