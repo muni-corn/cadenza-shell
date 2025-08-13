@@ -16,8 +16,10 @@ export function NotificationTile({ gdkmonitor }: SingleMonitorProps) {
   const [unreadCount, setUnreadCount] = createState(0);
 
   const updateCount = () => {
-    const notifications = notifd.get_notifications();
-    setUnreadCount(notifications.length);
+    const persistedNotifications = notifd
+      .get_notifications()
+      .filter((n) => !n.transient);
+    setUnreadCount(persistedNotifications.length);
   };
 
   const notifiedHandler = notifd.connect("notified", updateCount);
