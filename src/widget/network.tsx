@@ -1,6 +1,11 @@
 import AstalNetwork from "gi://AstalNetwork";
-import { createBinding, createComputed, With } from "ags";
-import { percentageToIconFromList, unreachable } from "./utils";
+import { createBinding, createComputed } from "ags";
+import {
+  Attention,
+  percentageToIconFromList,
+  Tile,
+  unreachable,
+} from "./utils";
 
 const WIRED_ICONS = {
   connected: "\u{F059F}",
@@ -17,12 +22,12 @@ const WIFI_ICONS = {
   disabled: "\u{F092E}",
   unknown: "\u{F092B}",
 };
-function getIcon({
-  connectivity,
-  primary,
-  state,
-  wifi,
-}: AstalNetwork.Network): string {
+function getIcon(
+  connectivity: AstalNetwork.Connectivity,
+  primary: AstalNetwork.Primary,
+  state: AstalNetwork.State,
+  wifi: AstalNetwork.Wifi,
+): string {
   if (primary === AstalNetwork.Primary.UNKNOWN) {
     return WIRED_ICONS.disabled;
   }
@@ -75,11 +80,11 @@ function getIcon({
   }
 }
 
-function getStatusText({
-  connectivity,
-  primary,
-  state,
-}: AstalNetwork.Network): string {
+function getStatusText(
+  primary: AstalNetwork.Primary,
+  state: AstalNetwork.State,
+  connectivity: AstalNetwork.Connectivity,
+): string {
   if (
     state === AstalNetwork.State.ASLEEP ||
     primary === AstalNetwork.Primary.UNKNOWN
@@ -123,52 +128,42 @@ function getStatusText({
 export const Network = () => {
   const network = AstalNetwork.get_default();
 
-  const tile = createComputed(
-    [
-      createBinding(network, "primary"),
-      createBinding(network, "state"),
-      createBinding(network, "connectivity"),
-    ],
-    (primary, state) => {
-      const icon = getIcon(network);
-      const ssid =
-        (network.primary === AstalNetwork.Primary.WIFI &&
-          network.get_wifi()?.get_ssid()) ||
-        "";
-      const status = getStatusText(network);
-      return {
-        isOff:
-          state === AstalNetwork.State.ASLEEP ||
-          primary === AstalNetwork.Primary.UNKNOWN,
-        icon,
-        ssid,
-        status,
-      };
-    },
+  const connectivityBinding = createBinding(network, "connectivity");
+  const primaryBinding = createBinding(network, "primary");
+  const stateBinding = createBinding(network, "state");
+  const wifiBinding = createBinding(network, "wifi");
+
+  const icon = createComputed(
+    [connectivityBinding, primaryBinding, stateBinding, wifiBinding],
+    getIcon,
+  );
+
+  const primary = createComputed(
+    [primaryBinding, wifiBinding],
+    (primary, wifi) =>
+      primary === AstalNetwork.Primary.WIFI ? wifi?.get_ssid() : "",
+  );
+
+  const secondary = createComputed(
+    [primaryBinding, stateBinding, connectivityBinding],
+    getStatusText,
+  );
+
+  const attention = createComputed(
+    [primaryBinding, stateBinding],
+    (primary, state) =>
+      state === AstalNetwork.State.ASLEEP ||
+      primary === AstalNetwork.Primary.UNKNOWN
+        ? Attention.Dim
+        : Attention.Normal,
   );
 
   return (
-    <With value={tile}>
-      {({ isOff, icon, ssid, status }) => (
-        <box spacing={12}>
-          <label
-            label={icon}
-            visible={icon.length > 0}
-            cssClasses={isOff ? ["icon", "dim"] : ["icon"]}
-            widthRequest={16}
-          />
-          <label
-            label={ssid}
-            visible={ssid.length > 0}
-            cssClasses={["primary"]}
-          />
-          <label
-            label={status}
-            visible={status.length > 0}
-            cssClasses={["secondary"]}
-          />
-        </box>
-      )}
-    </With>
+    <Tile
+      icon={icon}
+      primary={primary}
+      secondary={secondary}
+      attention={attention}
+    />
   );
 };
