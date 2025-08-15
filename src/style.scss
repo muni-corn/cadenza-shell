@@ -3,7 +3,8 @@
 window.bar {
   background-color: rgba(0, 0, 0, 0.5);
 
-  button {
+  .bar-button,
+  menubutton.bar-button>button {
     min-width: 0;
     padding-top: 0;
     padding-bottom: 0;

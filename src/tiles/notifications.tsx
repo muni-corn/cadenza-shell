@@ -44,7 +44,7 @@ export function NotificationTile({ gdkmonitor }: SingleMonitorProps) {
   const dnd = notifd.dont_disturb;
 
   return (
-    <button class="notification-tile" onClicked={toggleNotificationCenter}>
+    <button class="bar-button" onClicked={toggleNotificationCenter}>
       <Tile
         icon={
           dnd

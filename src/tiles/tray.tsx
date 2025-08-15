@@ -25,6 +25,7 @@ export const SysTray = () => {
                   tooltip-text={createBinding(item, "tooltipMarkup")}
                   popover={popover}
                   halign={Gtk.Align.END}
+                  class="bar-button"
                 >
                   <image gicon={createBinding(item, "gicon")} />
                 </menubutton>
@@ -36,6 +37,7 @@ export const SysTray = () => {
       <button
         onClicked={() => setExpanded(!expanded.get())}
         iconName={expanded((e) => (e ? "arrow-right" : "arrow-left"))}
+        class="bar-button"
       />
     </box>
   );
