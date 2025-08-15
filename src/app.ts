@@ -1,8 +1,8 @@
 import app from "ags/gtk4/app";
 import style from "./style.scss";
-import { Bar } from "./widgets/bar";
-import { NotificationCenter } from "./widgets/notifications/notification-center";
-import { Notifications } from "./widgets/notifications/notifications";
+import { Bar } from "./bar";
+import { NotificationCenter } from "./notifications/notification-center";
+import { Notifications } from "./notifications/notifications";
 
 app.start({
   css: style,
