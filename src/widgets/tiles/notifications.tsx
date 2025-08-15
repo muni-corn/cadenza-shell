@@ -6,7 +6,7 @@ import {
   notificationCenterVisible,
   setNotificationCenterMonitor,
   setNotificationCenterVisible,
-} from "./notification-center";
+} from "../notifications/notification-center";
 
 const NOTIFICATIONS_NONE = "\udb80\udc9c";
 const NOTIFICATIONS_NEW = "\udb84\udd6b";

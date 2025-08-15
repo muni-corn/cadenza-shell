@@ -1,7 +1,7 @@
 import Mpris from "gi://AstalMpris";
 import AstalMpris from "gi://AstalMpris?version=0.1";
 import { createBinding, With } from "ags";
-import { trunc } from "./utils";
+import { trunc } from "../utils";
 
 const mpris = Mpris.get_default();
 

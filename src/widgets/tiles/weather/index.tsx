@@ -1,7 +1,7 @@
 import { createState } from "ags";
 import { execAsync } from "ags/process";
 import { interval } from "ags/time";
-import { Tile } from "../utils";
+import { Tile } from "../../utils";
 import { DAY_WEATHER_ICONS, NIGHT_WEATHER_ICONS } from "./icons";
 import type { Astronomy, WttrReport } from "./types";
 

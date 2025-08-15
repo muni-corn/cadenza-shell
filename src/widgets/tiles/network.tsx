@@ -5,7 +5,7 @@ import {
   percentageToIconFromList,
   Tile,
   unreachable,
-} from "./utils";
+} from "../utils";
 
 const WIRED_ICONS = {
   connected: "\u{F059F}",

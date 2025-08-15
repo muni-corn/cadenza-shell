@@ -1,6 +1,6 @@
 import AstalBattery from "gi://AstalBattery";
 import { createBinding, createComputed } from "ags";
-import { Attention, percentageToIconFromList, Tile } from "./utils";
+import { Attention, percentageToIconFromList, Tile } from "../utils";
 
 const battery = AstalBattery.get_default();
 

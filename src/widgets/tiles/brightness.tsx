@@ -4,7 +4,7 @@ import { monitorFile } from "ags/file";
 import GObject, { getter, property, register, setter } from "ags/gobject";
 import { exec, execAsync } from "ags/process";
 import { timeout } from "ags/time";
-import { percentageToIconFromList } from "./utils";
+import { percentageToIconFromList } from "../utils";
 
 @register({ GTypeName: "BrilloObj" })
 export class BrilloObj extends GObject.Object {

@@ -1,15 +1,15 @@
 import { Astal, type Gdk, Gtk } from "ags/gtk4";
-import { Battery } from "./battery";
-import { Bluetooth } from "./bluetooth";
-import { Brightness } from "./brightness";
-import { Clock } from "./clock";
-import { FocusedClient, Workspaces } from "./hyprland";
-import { Media } from "./mpris";
-import { Network } from "./network";
-import { NotificationTile } from "./notifications/notification-tile";
-import { SysTray } from "./tray";
-import { Volume } from "./volume";
-import { Weather } from "./weather/index";
+import { Battery } from "./tiles/battery";
+import { Bluetooth } from "./tiles/bluetooth";
+import { Brightness } from "./tiles/brightness";
+import { Clock } from "./tiles/clock";
+import { FocusedClient, Workspaces } from "./tiles/hyprland";
+import { Media } from "./tiles/mpris";
+import { Network } from "./tiles/network";
+import { NotificationTile } from "./tiles/notifications";
+import { SysTray } from "./tiles/tray";
+import { Volume } from "./tiles/volume";
+import { Weather } from "./tiles/weather/index";
 import type { SingleMonitorProps } from "./utils";
 
 export const Bar = (gdkmonitor: Gdk.Monitor) => {

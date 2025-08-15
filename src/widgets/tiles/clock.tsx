@@ -1,6 +1,6 @@
 import GLib from "gi://GLib?version=2.0";
 import { createPoll } from "ags/time";
-import { Tile } from "./utils";
+import { Tile } from "../utils";
 
 const TIME_FORMAT = "%-I:%M %P";
 const DATE_FORMAT = "%a, %b %-d";
