@@ -84,6 +84,7 @@ export function NotificationCenter() {
           orientation={Gtk.Orientation.HORIZONTAL}
           hexpand
         >
+          {/* digital clock and date */}
           <box
             orientation={Gtk.Orientation.VERTICAL}
             spacing={8}
@@ -101,6 +102,8 @@ export function NotificationCenter() {
               halign={Gtk.Align.START}
             />
           </box>
+
+          {/* analog clock on right */}
           <box halign={Gtk.Align.END}>
             <AnalogClock radius={60} />
           </box>
