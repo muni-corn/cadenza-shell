@@ -16,17 +16,6 @@ export const Network = () => {
     getNetworkIcon,
   );
 
-  const primary = createComputed(
-    [primaryBinding, wifiBinding],
-    (primary, wifi) =>
-      primary === AstalNetwork.Primary.WIFI ? wifi?.get_ssid() : "",
-  );
-
-  const secondary = createComputed(
-    [primaryBinding, stateBinding, connectivityBinding],
-    getStatusText,
-  );
-
   const attention = createComputed(
     [primaryBinding, stateBinding],
     (primary, state) =>
@@ -39,8 +28,6 @@ export const Network = () => {
   return (
     <Tile
       icon={icon}
-      primary={primary}
-      secondary={secondary}
       attention={attention}
     />
   );
