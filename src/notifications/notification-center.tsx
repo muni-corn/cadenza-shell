@@ -117,14 +117,12 @@ export function NotificationCenter() {
               halign={Gtk.Align.START}
             />
             <button
-              class="clear-all"
               onClicked={dismissAll}
               halign={Gtk.Align.END}
               visible={newNotifications((ns) => ns.length > 0)}
               vexpand={false}
-            >
-              <label label="Clear all" />
-            </button>
+              label="Clear all"
+            />
 
             <box orientation={Gtk.Orientation.VERTICAL} spacing={4}>
               <For each={newNotifications}>
@@ -142,8 +140,8 @@ export function NotificationCenter() {
                 spacing={8}
                 valign={Gtk.Align.CENTER}
               >
-                <image iconName="notification-symbolic" class="empty-icon" />
-                <label class="empty-text" label="No new notifications" />
+                <image iconName="notification-symbolic" />
+                <label label="No new notifications" />
               </box>
             </box>
           </box>
