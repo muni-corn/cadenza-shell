@@ -4,6 +4,7 @@ import { type Gdk, Gtk } from "ags/gtk4";
 import { NETWORK_WIFI_ICONS, NETWORK_WIRED_ICONS } from "./constants";
 
 export type SingleMonitorProps = { gdkmonitor: Gdk.Monitor };
+export type ReactiveProp<T> = T | Accessor<T>;
 
 export enum Attention {
   Alarm = "alarm",
@@ -13,11 +14,11 @@ export enum Attention {
 }
 
 export interface TileProps {
-  icon?: string | Accessor<string>;
-  primary?: string | Accessor<string>;
-  secondary?: string | Accessor<string>;
-  visible?: boolean | Accessor<boolean>;
-  attention?: Attention | Accessor<Attention>;
+  icon?: ReactiveProp<string>;
+  primary?: ReactiveProp<string>;
+  secondary?: ReactiveProp<string>;
+  visible?: ReactiveProp<boolean>;
+  attention?: ReactiveProp<Attention>;
 }
 
 export const Tile = ({
