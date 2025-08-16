@@ -109,10 +109,10 @@ export function NotificationCenter() {
           </box>
         </box>
 
-        <Gtk.Calendar hexpand />
-
         <scrolledwindow vexpand={true} hscrollbarPolicy={Gtk.PolicyType.NEVER}>
           <box orientation={Gtk.Orientation.VERTICAL} spacing={8}>
+            <Gtk.Calendar hexpand />
+
             <box>
               <label
                 class="content-title"
