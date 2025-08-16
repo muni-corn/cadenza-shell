@@ -28,12 +28,12 @@ export const Tile = ({
   visible,
   attention,
 }: TileProps) => {
-  const className = (otherClasses: string[] = []) => {
+  const className = (otherClasses = "") => {
     if (!attention) return otherClasses;
     if (typeof attention === "string") {
-      return attention ? otherClasses.concat([attention]) : otherClasses;
+      return attention ? `${attention} ${otherClasses}` : otherClasses;
     }
-    return attention.as((a) => (a ? otherClasses.concat([a]) : otherClasses));
+    return attention.as((a) => (a ? `${a} ${otherClasses}` : otherClasses));
   };
 
   const iconLabel = icon
@@ -67,7 +67,7 @@ export const Tile = ({
             ? iconLabel.length > 0
             : iconLabel.as((p) => p.length > 0)
         }
-        cssClasses={className(["icon"])}
+        class={className("icon")}
         widthRequest={16}
       />
       <label
@@ -77,7 +77,7 @@ export const Tile = ({
             ? primaryLabel.length > 0
             : primaryLabel.as((p) => p.length > 0)
         }
-        cssClasses={className(["primary"])}
+        class={className("primary")}
       />
       <label
         label={secondaryLabel}
@@ -86,7 +86,7 @@ export const Tile = ({
             ? secondaryLabel.length > 0
             : secondaryLabel.as((s) => s?.length > 0)
         }
-        cssClasses={className(["secondary"])}
+        class={className("secondary")}
       />
     </box>
   );
