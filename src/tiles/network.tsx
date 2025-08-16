@@ -1,7 +1,8 @@
 import AstalNetwork from "gi://AstalNetwork";
 import { createBinding, createComputed } from "ags";
-import type { Gtk } from "ags/gtk4";
+import { Gtk } from "ags/gtk4";
 import { Attention, getNetworkIcon, Tile } from "../utils";
+import { WiFiMenu } from "../wifi-menu";
 
 export const Network = () => {
   const network = AstalNetwork.get_default();
@@ -26,9 +27,11 @@ export const Network = () => {
   );
 
   return (
-    <Tile
-      icon={icon}
-      attention={attention}
-    />
+    <menubutton class="bar-button">
+      <Tile icon={icon} attention={attention}  />
+      <popover widthRequest={400} heightRequest={400}>
+        <WiFiMenu network={network} />
+      </popover>
+    </menubutton>
   );
 };
