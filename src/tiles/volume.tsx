@@ -37,7 +37,7 @@ export const Volume = () => {
     });
 
     return (
-      <box spacing={8}>
+      <box spacing={8} class="tile">
         <label
           label={state.as(getIcon)}
           cssClasses={extraClasses((c) => ["icon", c])}

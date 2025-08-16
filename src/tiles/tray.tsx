@@ -41,7 +41,7 @@ export const SysTray = () => {
       <button
         onClicked={() => setExpanded(!expanded.get())}
         iconName={expanded((e) => (e ? "arrow-right" : "arrow-left"))}
-        class="bar-button"
+        class="tile"
       />
     </box>
   );

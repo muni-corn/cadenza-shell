@@ -103,7 +103,7 @@ export const Brightness = () => {
   const screenValue = createBinding(brightness, "screenValue");
 
   return (
-    <box spacing={8} visible={brightness.available}>
+    <box spacing={8} visible={brightness.available} class="tile">
       <label
         label={screenValue.as(
           (v) => percentageToIconFromList(v, BRIGHTNESS_ICONS) || "",

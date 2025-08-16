@@ -1,5 +1,18 @@
 @use "sass:string";
 
+.tile {
+  background-color: transparent;
+  padding-left: 10px;
+  padding-right: 10px;
+  border-radius: 0;
+  box-shadow: none;
+  min-width: 0;
+}
+
+button.tile:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
 window.bar {
   background-color: rgba(0, 0, 0, 0.5);
 
@@ -11,6 +24,10 @@ window.bar {
     border-radius: 0;
     box-shadow: none;
     font-weight: unset;
+
+    &:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
   }
 }
 

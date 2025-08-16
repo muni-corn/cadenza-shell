@@ -59,7 +59,7 @@ export const Tile = ({
       : true;
 
   return (
-    <box spacing={12} visible={isVisible}>
+    <box spacing={12} visible={isVisible} class="tile">
       <label
         label={iconLabel}
         visible={

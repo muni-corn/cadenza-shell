@@ -52,7 +52,7 @@ function Left({ gdkmonitor }: { gdkmonitor: Gdk.Monitor }) {
 
 function Center() {
   return (
-    <box spacing={20} halign={Gtk.Align.START}>
+    <box halign={Gtk.Align.START}>
       <Clock />
       <Weather />
       <Media />
@@ -62,8 +62,8 @@ function Center() {
 
 function Right({ gdkmonitor }: SingleMonitorProps) {
   return (
-    <box spacing={20}>
-      <box spacing={20} halign={Gtk.Align.END}>
+    <box>
+      <box halign={Gtk.Align.END}>
         <Brightness />
         <Volume />
         <Bluetooth />
