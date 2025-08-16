@@ -36,11 +36,11 @@ export const Bluetooth = () => {
     return (
       <label
         label={icon}
-        cssClasses={powered.as((p) => [p ? "icon" : "icon dim"])}
+        class={powered.as((p) => (p ? "icon tile" : "icon dim tile"))}
         widthRequest={16}
       />
     );
   }
 
-  return <label visible={false} />;
+  return null;
 };
