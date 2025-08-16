@@ -113,19 +113,21 @@ export function NotificationCenter() {
 
         <scrolledwindow vexpand={true} hscrollbarPolicy={Gtk.PolicyType.NEVER}>
           <box orientation={Gtk.Orientation.VERTICAL} spacing={8}>
-            <label
-              class="content-title"
-              label="Notifications"
-              hexpand={true}
-              halign={Gtk.Align.START}
-            />
-            <button
-              onClicked={dismissAll}
-              halign={Gtk.Align.END}
-              visible={newNotifications((ns) => ns.length > 0)}
-              vexpand={false}
-              label="Clear all"
-            />
+            <box>
+              <label
+                class="content-title"
+                label="Notifications"
+                hexpand={true}
+                halign={Gtk.Align.START}
+              />
+              <button
+                onClicked={dismissAll}
+                halign={Gtk.Align.END}
+                visible={newNotifications((ns) => ns.length > 0)}
+                valign={Gtk.Align.END}
+                label="Clear all"
+              />
+            </box>
 
             <box orientation={Gtk.Orientation.VERTICAL} spacing={4}>
               <For each={newNotifications}>
