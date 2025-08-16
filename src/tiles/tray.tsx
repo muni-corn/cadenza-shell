@@ -26,8 +26,12 @@ export const SysTray = () => {
                   popover={popover}
                   halign={Gtk.Align.END}
                   class="bar-button"
+                  widthRequest={32}
                 >
-                  <image gicon={createBinding(item, "gicon")} />
+                  <image
+                    gicon={createBinding(item, "gicon")}
+                    halign={Gtk.Align.CENTER}
+                  />
                 </menubutton>
               );
             }}

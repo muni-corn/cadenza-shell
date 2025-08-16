@@ -7,6 +7,7 @@ import {
   setNotificationCenterMonitor,
   setNotificationCenterVisible,
 } from "../notifications/notification-center";
+import { Gtk } from "ags/gtk4";
 
 const NOTIFICATIONS_NONE = "\udb80\udc9c";
 const NOTIFICATIONS_NEW = "\udb84\udd6b";
