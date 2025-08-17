@@ -228,7 +228,7 @@ impl MediaWidget {
                     if name.starts_with("org.mpris.MediaPlayer2.") {
                         if new_owner
                             .as_ref()
-                            .map_or(true, |owner| owner.as_str().is_empty())
+                            .is_none_or(|owner| owner.as_str().is_empty())
                         {
                             // Player removed
                             Self::remove_player(name, &container, &current_player, &players);
@@ -360,10 +360,7 @@ impl MediaWidget {
         metadata: &HashMap<String, zbus::zvariant::OwnedValue>,
         key: &str,
     ) -> Option<String> {
-        metadata.get(key).and_then(|_value| {
-            // For now, return a placeholder - proper zbus variant handling is complex
-            Some("Unknown".to_string())
-        })
+        metadata.get(key).map(|_value| "Unknown".to_string())
     }
 
     fn truncate_text(text: &str, max_chars: usize) -> String {

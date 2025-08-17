@@ -248,7 +248,7 @@ impl WeatherWidget {
 
     async fn get_weather_data() -> Result<WttrReport> {
         let output = tokio::process::Command::new("curl")
-            .args(&["-s", "https://v2.wttr.in/?format=j1"])
+            .args(["-s", "https://v2.wttr.in/?format=j1"])
             .output()
             .await?;
 

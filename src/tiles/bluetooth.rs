@@ -84,7 +84,7 @@ impl BluetoothWidget {
 
     fn check_bluetooth_status() -> bool {
         // Try to check if Bluetooth is powered on using bluetoothctl
-        if let Ok(output) = Command::new("bluetoothctl").args(&["show"]).output() {
+        if let Ok(output) = Command::new("bluetoothctl").args(["show"]).output() {
             if output.status.success() {
                 let output_str = String::from_utf8_lossy(&output.stdout);
                 return output_str.contains("Powered: yes");
@@ -93,7 +93,7 @@ impl BluetoothWidget {
 
         // Fallback: check if bluetooth service is running
         if let Ok(output) = Command::new("systemctl")
-            .args(&["is-active", "bluetooth"])
+            .args(["is-active", "bluetooth"])
             .output()
         {
             if output.status.success() {

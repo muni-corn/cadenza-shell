@@ -295,6 +295,12 @@ glib::wrapper! {
     pub struct HyprlandService(ObjectSubclass<imp::HyprlandService>);
 }
 
+impl Default for HyprlandService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HyprlandService {
     pub fn new() -> Self {
         glib::Object::builder().build()

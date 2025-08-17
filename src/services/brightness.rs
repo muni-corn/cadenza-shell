@@ -81,8 +81,8 @@ mod imp {
 
         fn read_brightness_range(&self) -> Result<(u32, u32)> {
             // Read min/max brightness using brillo or direct sysfs access
-            let min_result = std::process::Command::new("brillo").args(&["-rc"]).output();
-            let max_result = std::process::Command::new("brillo").args(&["-rm"]).output();
+            let min_result = std::process::Command::new("brillo").args(["-rc"]).output();
+            let max_result = std::process::Command::new("brillo").args(["-rm"]).output();
 
             match (min_result, max_result) {
                 (Ok(min), Ok(max)) => {
@@ -114,7 +114,7 @@ mod imp {
 
         fn read_current_brightness(&self) -> Result<f64> {
             // Try brillo first
-            if let Ok(output) = std::process::Command::new("brillo").args(&["-rG"]).output() {
+            if let Ok(output) = std::process::Command::new("brillo").args(["-rG"]).output() {
                 if let Ok(raw_str) = String::from_utf8(output.stdout) {
                     if let Ok(raw) = raw_str.trim().parse::<u32>() {
                         let min = self.min.get();
@@ -141,6 +141,12 @@ glib::wrapper! {
     pub struct BrightnessService(ObjectSubclass<imp::BrightnessService>);
 }
 
+impl Default for BrightnessService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl BrightnessService {
     pub fn new() -> Self {
         glib::Object::builder().build()
@@ -155,7 +161,7 @@ impl BrightnessService {
 
         // Use brillo for privileged write
         let result = std::process::Command::new("brillo")
-            .args(&["-Sr", &clamped.to_string()])
+            .args(["-Sr", &clamped.to_string()])
             .output();
 
         match result {
