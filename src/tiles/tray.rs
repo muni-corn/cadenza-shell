@@ -209,19 +209,20 @@ impl SysTray {
         items: &RefCell<HashMap<String, TrayItem>>,
         service_name: &str,
     ) {
+        let service_name = service_name.to_string();
         // Parse service name to get bus name and object path
         let (bus_name, object_path) = if service_name.contains('/') {
             let parts: Vec<&str> = service_name.splitn(2, '/').collect();
-            (parts[0], format!("/{}", parts[1]))
+            (parts[0].to_string(), format!("/{}", parts[1]))
         } else {
-            (service_name, "/StatusNotifierItem".to_string())
+            (service_name.clone(), "/StatusNotifierItem".to_string())
         };
 
         // Create proxy for the status notifier item
         let item_proxy = match StatusNotifierItemProxy::builder(connection)
-            .destination(bus_name)
+            .destination(bus_name.clone())
             .unwrap()
-            .path(object_path)
+            .path(object_path.clone())
             .unwrap()
             .build()
             .await
@@ -285,14 +286,14 @@ impl SysTray {
 
             let proxy = item_proxy_clone.clone();
             glib::spawn_future_local(async move {
-                if let Err(e) = proxy.activate(x, y).await {
-                    log::warn!("Failed to activate tray item: {}", e);
+                if let Err(_e) = proxy.activate(x, y).await {
+                    log::warn!("Failed to activate tray item");
                 }
             });
         });
 
         items_container.append(&button);
-        items.borrow_mut().insert(service_name.to_string(), tray_item);
+        items.borrow_mut().insert(service_name.clone(), tray_item);
     }
 
     fn remove_tray_item(
