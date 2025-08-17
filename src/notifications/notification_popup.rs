@@ -1,18 +1,18 @@
-
 use super::notification_card::NotificationCard;
 use crate::services::notifications::NotificationService;
 use gdk4::Monitor;
 use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4::{ApplicationWindow, Box, Orientation};
-use gtk4_layer_shell::{LayerShell, Layer, Edge};
+use gtk4::{ApplicationWindow, Orientation};
+use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 pub struct NotificationPopup {
     window: ApplicationWindow,
-    container: Box,
-    cards: RefCell<HashMap<u32, NotificationCard>>,
+    container: gtk4::Box,
+    cards: Rc<RefCell<HashMap<u32, NotificationCard>>>,
     service: NotificationService,
 }
 
@@ -33,7 +33,7 @@ impl NotificationPopup {
         window.set_margin(Edge::Top, 8);
         window.set_margin(Edge::Right, 8);
 
-        let container = Box::builder()
+        let container = gtk4::Box::builder()
             .orientation(Orientation::Vertical)
             .spacing(8)
             .width_request(400)
@@ -44,7 +44,7 @@ impl NotificationPopup {
         let popup = Self {
             window,
             container,
-            cards: RefCell::new(HashMap::new()),
+            cards: Rc::new(RefCell::new(HashMap::new())),
             service,
         };
 
@@ -79,8 +79,8 @@ impl NotificationPopup {
     }
 
     fn update_notifications(
-        container: &Box,
-        cards: &RefCell<HashMap<u32, NotificationCard>>,
+        container: &gtk4::Box,
+        cards: &Rc<RefCell<HashMap<u32, NotificationCard>>>,
         service: &NotificationService,
     ) {
         let current_notifications = service.get_notifications();

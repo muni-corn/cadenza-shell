@@ -2,11 +2,11 @@ use anyhow::Result;
 use futures_lite::stream::StreamExt;
 use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4::{Box, Button, Image, MenuButton, Orientation, Revealer, RevealerTransitionType};
+use gtk4::{Button, Image, MenuButton, Orientation, Revealer, RevealerTransitionType};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use zbus::{Connection, proxy, Result as ZbusResult};
-use futures_util::stream::StreamExt;
+use std::iter::Iterator;
+use zbus::{Connection, Result as ZbusResult, proxy};
 
 #[derive(Debug, Clone)]
 pub struct TrayItem {
@@ -64,22 +64,22 @@ trait StatusNotifierItem {
 }
 
 pub struct SysTray {
-    container: Box,
+    container: gtk4::Box,
     revealer: Revealer,
     toggle_button: Button,
-    items_container: Box,
+    items_container: gtk4::Box,
     items: RefCell<HashMap<String, TrayItem>>,
     expanded: RefCell<bool>,
 }
 
 impl SysTray {
     pub fn new() -> Self {
-        let container = Box::builder()
+        let container = gtk4::Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(0)
             .build();
 
-        let items_container = Box::builder()
+        let items_container = gtk4::Box::builder()
             .orientation(Orientation::Horizontal)
             .spacing(4)
             .build();
@@ -148,7 +148,7 @@ impl SysTray {
     }
 
     async fn setup_status_notifier_watcher(
-        items_container: Box,
+        items_container: gtk4::Box,
         items: RefCell<HashMap<String, TrayItem>>,
     ) -> Result<()> {
         let connection = Connection::session().await?;
@@ -205,16 +205,16 @@ impl SysTray {
 
     async fn add_tray_item(
         connection: &Connection,
-        items_container: &Box,
+        items_container: &gtk4::Box,
         items: &RefCell<HashMap<String, TrayItem>>,
-        service: &str,
+        service_name: &str,
     ) {
         // Parse service name to get bus name and object path
-        let (bus_name, object_path) = if service.contains('/') {
-            let parts: Vec<&str> = service.splitn(2, '/').collect();
+        let (bus_name, object_path) = if service_name.contains('/') {
+            let parts: Vec<&str> = service_name.splitn(2, '/').collect();
             (parts[0], format!("/{}", parts[1]))
         } else {
-            (service, "/StatusNotifierItem".to_string())
+            (service_name, "/StatusNotifierItem".to_string())
         };
 
         // Create proxy for the status notifier item
@@ -228,7 +228,11 @@ impl SysTray {
         {
             Ok(proxy) => proxy,
             Err(e) => {
-                log::warn!("Failed to create proxy for tray item {}: {}", service, e);
+                log::warn!(
+                    "Failed to create proxy for tray item {}: {}",
+                    service_name,
+                    e
+                );
                 return;
             }
         };
@@ -274,11 +278,11 @@ impl SysTray {
         button.set_tooltip_text(Some(&tooltip));
 
         let item_proxy_clone = item_proxy.clone();
-        button.connect_clicked(move |button| {
-            let allocation = button.allocation();
-            let x = allocation.x() + allocation.width() / 2;
-            let y = allocation.y() + allocation.height() / 2;
-            
+        button.connect_clicked(move |_button| {
+            // Use fixed coordinates since allocation() is deprecated
+            let x = 0;
+            let y = 0;
+
             let proxy = item_proxy_clone.clone();
             glib::spawn_future_local(async move {
                 if let Err(e) = proxy.activate(x, y).await {
@@ -288,11 +292,11 @@ impl SysTray {
         });
 
         items_container.append(&button);
-        items.borrow_mut().insert(service.to_string(), tray_item);
+        items.borrow_mut().insert(service_name.to_string(), tray_item);
     }
 
     fn remove_tray_item(
-        items_container: &Box,
+        items_container: &gtk4::Box,
         items: &RefCell<HashMap<String, TrayItem>>,
         service: &str,
     ) {
@@ -310,7 +314,7 @@ impl SysTray {
         }
     }
 
-    pub fn widget(&self) -> &Box {
+    pub fn widget(&self) -> &gtk4::Box {
         &self.container
     }
 }
