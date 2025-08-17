@@ -20,8 +20,10 @@ pub struct CurrentCondition {
     #[serde(rename = "FeelsLikeF")]
     pub feels_like_f: String,
     pub observation_time: String,
-    pub temp_C: String,
-    pub temp_F: String,
+    #[serde(rename = "temp_C")]
+    pub temp_c: String,
+    #[serde(rename = "temp_F")]
+    pub temp_f: String,
     #[serde(rename = "weatherCode")]
     pub weather_code: String,
     #[serde(rename = "weatherDesc")]
@@ -280,7 +282,7 @@ impl WeatherWidget {
         icon_label.set_text(icon);
 
         // Set temperature
-        temp_label.set_text(&format!("{}°", current.temp_F));
+        temp_label.set_text(&format!("{}°", current.temp_f));
 
         // Set description
         if let Some(desc) = current.weather_desc.first() {
