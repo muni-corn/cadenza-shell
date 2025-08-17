@@ -34,10 +34,10 @@ pub struct Client {
     pub pinned: bool,
     pub fullscreen: bool,
     pub fullscreenmode: i32,
-    pub fakeFullscreen: bool,
+    pub fake_fullscreen: bool,
     pub grouped: Vec<String>,
     pub swallowing: String,
-    pub focusHistoryID: i32,
+    pub focus_history_id: i32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,11 +147,9 @@ mod imp {
             }
 
             // Get active window
-            if let Ok(active_window) = self.get_active_window().await {
-                if let Some(client) = active_window {
-                    self.focused_window_title.replace(client.title);
-                    self.focused_window_class.replace(client.class);
-                }
+            if let Ok(Some(client)) = self.get_active_window().await {
+                self.focused_window_title.replace(client.title);
+                self.focused_window_class.replace(client.class);
             }
 
             Ok(())
