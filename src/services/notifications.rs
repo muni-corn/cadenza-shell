@@ -1,11 +1,17 @@
-
 use anyhow::Result;
 use gtk4::glib;
 use gtk4::subclass::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use zbus::{Connection, proxy, Result as ZbusResult};
-use futures_util::stream::StreamExt;
+use tokio::sync::RwLock;
+use zbus::{
+    Connection, interface,
+    object_server::SignalEmitter,
+    zvariant::{
+        OwnedValue, Type,
+        as_value::{self, optional},
+    },
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Notification {

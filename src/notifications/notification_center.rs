@@ -3,19 +3,17 @@
 use gdk4::Monitor;
 use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4::{ApplicationWindow, Box, Button, Calendar, Image, Label, Orientation, ScrolledWindow};
-use gtk4_layer_shell::{LayerShell, Layer, Edge};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use super::notification_card::NotificationCard;
-use crate::analog_clock::AnalogClock;
-use crate::services::notifications::NotificationService;
+use gtk4::{ApplicationWindow, Button, Calendar, Image, Label, Orientation, ScrolledWindow};
+use gtk4_layer_shell::{Edge, Layer, LayerShell};
+use std::rc::Rc;
 
 pub struct NotificationCenter {
     window: ApplicationWindow,
-    container: Box,
-    notifications_container: Box,
-    cards: RefCell<HashMap<u32, NotificationCard>>,
+    container: gtk4::Box,
+    notifications_container: gtk4::Box,
+    cards: Rc<RefCell<HashMap<u32, NotificationCard>>>,
     service: NotificationService,
     visible: RefCell<bool>,
 }
@@ -40,7 +38,7 @@ impl NotificationCenter {
         window.set_margin(Edge::Right, 8);
         window.set_margin(Edge::Bottom, 8);
 
-        let main_container = Box::builder()
+        let main_container = gtk4::Box::builder()
             .orientation(Orientation::Vertical)
             .spacing(32)
             .width_request(400)
@@ -55,8 +53,8 @@ impl NotificationCenter {
         let center = Self {
             window,
             container: main_container.clone(),
-            notifications_container: Box::new(Orientation::Vertical, 8),
-            cards: RefCell::new(HashMap::new()),
+            notifications_container: gtk4::Box::new(Orientation::Vertical, 8),
+            cards: Rc::new(RefCell::new(HashMap::new())),
             service,
             visible: RefCell::new(false),
         };
@@ -69,14 +67,14 @@ impl NotificationCenter {
     }
 
     fn build_header(&self) {
-        let header = Box::builder()
+        let header = gtk4::Box::builder()
             .orientation(Orientation::Horizontal)
             .css_classes(vec!["notification-center-header"])
             .hexpand(true)
             .build();
 
         // Digital clock and date section
-        let clock_section = Box::builder()
+        let clock_section = gtk4::Box::builder()
             .orientation(Orientation::Vertical)
             .spacing(8)
             .halign(gtk4::Align::Start)
@@ -110,9 +108,7 @@ impl NotificationCenter {
         clock_section.append(&date_label);
 
         // Analog clock on the right
-        let analog_clock_container = Box::builder()
-            .halign(gtk4::Align::End)
-            .build();
+        let analog_clock_container = gtk4::Box::builder().halign(gtk4::Align::End).build();
 
         let analog_clock = AnalogClock::new(60);
         analog_clock_container.append(analog_clock.widget());
@@ -129,7 +125,7 @@ impl NotificationCenter {
             .hscrollbar_policy(gtk4::PolicyType::Never)
             .build();
 
-        let content = Box::builder()
+        let content = gtk4::Box::builder()
             .orientation(Orientation::Vertical)
             .spacing(8)
             .build();
@@ -139,7 +135,7 @@ impl NotificationCenter {
         content.append(&calendar);
 
         // Notifications header
-        let notifications_header = Box::builder()
+        let notifications_header = gtk4::Box::builder()
             .orientation(Orientation::Horizontal)
             .build();
 
@@ -175,7 +171,7 @@ impl NotificationCenter {
         content.append(&self.notifications_container);
 
         // Empty state
-        let empty_state = Box::builder()
+        let empty_state = gtk4::Box::builder()
             .orientation(Orientation::Vertical)
             .spacing(8)
             .valign(gtk4::Align::Center)
@@ -215,8 +211,8 @@ impl NotificationCenter {
     }
 
     fn update_notifications(
-        container: &Box,
-        cards: &RefCell<HashMap<u32, NotificationCard>>,
+        container: &gtk4::Box,
+        cards: &Rc<RefCell<HashMap<u32, NotificationCard>>>,
         service: &NotificationService,
     ) {
         let current_notifications = service.get_notifications();
