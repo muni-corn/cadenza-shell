@@ -4,6 +4,8 @@ use gdk4::Monitor;
 use crate::tiles::brightness::BrightnessWidget;
 use crate::tiles::volume::VolumeWidget;
 use crate::tiles::battery::BatteryWidget;
+use crate::tiles::clock::ClockWidget;
+use crate::tiles::bluetooth::BluetoothWidget;
 
 pub struct Bar {
     container: Box,
@@ -28,6 +30,16 @@ impl Bar {
         label.add_css_class("bar-label");
         left_section.append(&label);
 
+        // Center section - clock
+        let center_section = Box::builder()
+            .orientation(Orientation::Horizontal)
+            .halign(gtk4::Align::Center)
+            .hexpand(true)
+            .build();
+
+        let clock = ClockWidget::new();
+        center_section.append(clock.widget());
+
         // Right section - system tiles
         let right_section = Box::builder()
             .orientation(Orientation::Horizontal)
@@ -45,6 +57,7 @@ impl Bar {
         right_section.append(battery.widget());
 
         container.append(&left_section);
+        container.append(&center_section);
         container.append(&right_section);
 
         Self {
