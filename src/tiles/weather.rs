@@ -4,6 +4,7 @@ use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{Box, Label, Orientation};
 use serde::{Deserialize, Serialize};
+use std::cell::RefCell;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WttrReport {
