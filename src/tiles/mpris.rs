@@ -1,12 +1,14 @@
+
 use anyhow::Result;
 use futures_lite::StreamExt;
 use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4::{Box, Button, Label, Orientation};
 use gtk4::{Label, Orientation};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use zbus::{Connection, proxy, Result as ZbusResult};
+use gtk4::{Box, Label, Orientation};
+use futures_util::stream::StreamExt;
 
 const MPRIS_PLAYING_ICON: &str = "󰐊";
 const MPRIS_PAUSED_ICON: &str = "󰏤";
@@ -43,30 +45,30 @@ pub struct MediaMetadata {
     default_path = "/org/mpris/MediaPlayer2"
 )]
 trait MediaPlayer2Player {
-    async fn play(&self) -> ZbusResult<()>;
-    async fn pause(&self) -> ZbusResult<()>;
-    async fn play_pause(&self) -> ZbusResult<()>;
-    async fn stop(&self) -> ZbusResult<()>;
-    async fn next(&self) -> ZbusResult<()>;
-    async fn previous(&self) -> ZbusResult<()>;
+    fn play(&self) -> ZbusResult<()>;
+    fn pause(&self) -> ZbusResult<()>;
+    fn play_pause(&self) -> ZbusResult<()>;
+    fn stop(&self) -> ZbusResult<()>;
+    fn next(&self) -> ZbusResult<()>;
+    fn previous(&self) -> ZbusResult<()>;
 
     #[zbus(property)]
-    async fn playback_status(&self) -> ZbusResult<String>;
+    fn playback_status(&self) -> ZbusResult<String>;
 
     #[zbus(property)]
-    async fn metadata(&self) -> ZbusResult<HashMap<String, zbus::zvariant::OwnedValue>>;
+    fn metadata(&self) -> ZbusResult<HashMap<String, zbus::zvariant::OwnedValue>>;
 
     #[zbus(property)]
-    async fn can_play(&self) -> ZbusResult<bool>;
+    fn can_play(&self) -> ZbusResult<bool>;
 
     #[zbus(property)]
-    async fn can_pause(&self) -> ZbusResult<bool>;
+    fn can_pause(&self) -> ZbusResult<bool>;
 
     #[zbus(property)]
-    async fn can_go_next(&self) -> ZbusResult<bool>;
+    fn can_go_next(&self) -> ZbusResult<bool>;
 
     #[zbus(property)]
-    async fn can_go_previous(&self) -> ZbusResult<bool>;
+    fn can_go_previous(&self) -> ZbusResult<bool>;
 }
 
 pub struct MediaWidget {
@@ -89,7 +91,7 @@ impl MediaWidget {
 
         let icon_label = Label::builder()
             .css_classes(vec!["icon"])
-            .text(MPRIS_STOPPED_ICON)
+            .label(MPRIS_STOPPED_ICON)
             .width_request(16)
             .build();
 
@@ -281,24 +283,31 @@ impl MediaWidget {
         let artist_label_clone = artist_label.clone();
         let current_player_clone = current_player.clone();
 
-        let mut properties_changed_stream = player_proxy.receive_properties_changed().await.unwrap();
-        glib::spawn_future_local(async move {
-            while let Some(_signal) = properties_changed_stream.next().await {
-                // Only update if this is the current active player
-                if let Some(active_player) = current_player_clone.borrow().as_ref() {
-                    if *active_player == player_name_clone {
-                        if let Some(player) = players.borrow().get(&player_name_clone) {
+        // Use a simple timer to poll for changes instead of property signals for now
+        glib::timeout_add_local(std::time::Duration::from_secs(2), move || {
+            // Only update if this is the current active player
+            if let Some(active_player) = current_player_clone.borrow().as_ref() {
+                if *active_player == player_name_clone {
+                    if let Some(player) = players.borrow().get(&player_name_clone) {
+                        let player = player.clone();
+                        let container = container_clone.clone();
+                        let icon_label = icon_label_clone.clone();
+                        let title_label = title_label_clone.clone();
+                        let artist_label = artist_label_clone.clone();
+                        
+                        glib::spawn_future_local(async move {
                             Self::update_display(
-                                player,
-                                &container_clone,
-                                &icon_label_clone,
-                                &title_label_clone,
-                                &artist_label_clone,
+                                &player,
+                                &container,
+                                &icon_label,
+                                &title_label,
+                                &artist_label,
                             ).await;
-                        }
+                        });
                     }
                 }
             }
+            glib::ControlFlow::Continue
         });
     }
 
@@ -366,9 +375,9 @@ impl MediaWidget {
     ) -> Option<String> {
         metadata.get(key).and_then(|value| {
             // Handle both string and array of strings
-            if let Ok(s) = value.try_to::<String>() {
+            if let Ok(s) = <&zbus::zvariant::OwnedValue as TryInto<String>>::try_into(value) {
                 Some(s)
-            } else if let Ok(arr) = value.try_to::<Vec<String>>() {
+            } else if let Ok(arr) = <&zbus::zvariant::OwnedValue as TryInto<Vec<String>>>::try_into(value) {
                 arr.first().cloned()
             } else {
                 None

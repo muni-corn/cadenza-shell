@@ -32,7 +32,7 @@ impl NotificationTile {
 
         let icon_label = Label::builder()
             .css_classes(vec!["icon"])
-            .text(NOTIFICATION_ICON)
+            .label(NOTIFICATION_ICON)
             .width_request(16)
             .build();
 

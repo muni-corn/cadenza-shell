@@ -2,10 +2,11 @@ use anyhow::Result;
 use futures_lite::stream::StreamExt;
 use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4::{Box, Button, Image, MenuButton, Orientation, PopoverMenu, Revealer, RevealerTransitionType};
+use gtk4::{Box, Button, Image, MenuButton, Orientation, Revealer, RevealerTransitionType};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use zbus::{Connection, proxy, Result as ZbusResult};
+use futures_util::stream::StreamExt;
 
 #[derive(Debug, Clone)]
 pub struct TrayItem {
@@ -23,43 +24,43 @@ pub struct TrayItem {
     default_path = "/StatusNotifierWatcher"
 )]
 trait StatusNotifierWatcher {
-    async fn register_status_notifier_item(&self, service: &str) -> ZbusResult<()>;
-    
+    fn register_status_notifier_item(&self, service: &str) -> ZbusResult<()>;
+
     #[zbus(property)]
-    async fn registered_status_notifier_items(&self) -> ZbusResult<Vec<String>>;
-    
+    fn registered_status_notifier_items(&self) -> ZbusResult<Vec<String>>;
+
     #[zbus(signal)]
-    async fn status_notifier_item_registered(&self, service: String) -> ZbusResult<()>;
-    
+    fn status_notifier_item_registered(&self, service: String) -> ZbusResult<()>;
+
     #[zbus(signal)]
-    async fn status_notifier_item_unregistered(&self, service: String) -> ZbusResult<()>;
+    fn status_notifier_item_unregistered(&self, service: String) -> ZbusResult<()>;
 }
 
 #[proxy(interface = "org.kde.StatusNotifierItem")]
 trait StatusNotifierItem {
     #[zbus(property)]
-    async fn id(&self) -> ZbusResult<String>;
-    
+    fn id(&self) -> ZbusResult<String>;
+
     #[zbus(property)]
-    async fn title(&self) -> ZbusResult<String>;
-    
+    fn title(&self) -> ZbusResult<String>;
+
     #[zbus(property)]
-    async fn tooltip_title(&self) -> ZbusResult<String>;
-    
+    fn tooltip_title(&self) -> ZbusResult<String>;
+
     #[zbus(property)]
-    async fn icon_name(&self) -> ZbusResult<String>;
-    
+    fn icon_name(&self) -> ZbusResult<String>;
+
     #[zbus(property)]
-    async fn icon_pixmap(&self) -> ZbusResult<Vec<(i32, i32, Vec<u8>)>>;
-    
+    fn icon_pixmap(&self) -> ZbusResult<Vec<(i32, i32, Vec<u8>)>>;
+
     #[zbus(property)]
-    async fn menu(&self) -> ZbusResult<zbus::zvariant::OwnedObjectPath>;
-    
-    async fn activate(&self, x: i32, y: i32) -> ZbusResult<()>;
-    
-    async fn secondary_activate(&self, x: i32, y: i32) -> ZbusResult<()>;
-    
-    async fn context_menu(&self, x: i32, y: i32) -> ZbusResult<()>;
+    fn menu(&self) -> ZbusResult<zbus::zvariant::OwnedObjectPath>;
+
+    fn activate(&self, x: i32, y: i32) -> ZbusResult<()>;
+
+    fn secondary_activate(&self, x: i32, y: i32) -> ZbusResult<()>;
+
+    fn context_menu(&self, x: i32, y: i32) -> ZbusResult<()>;
 }
 
 pub struct SysTray {
@@ -264,9 +265,16 @@ impl SysTray {
         image.set_pixel_size(16);
         menu_button.set_child(Some(&image));
 
-        // Handle clicks
+        // Handle clicks - use button instead of menu_button since MenuButton doesn't have connect_clicked
+        let button = Button::new();
+        button.set_child(Some(&image));
+        button.set_css_classes(&["bar-button"]);
+        button.set_width_request(32);
+        button.set_height_request(32);
+        button.set_tooltip_text(Some(&tooltip));
+
         let item_proxy_clone = item_proxy.clone();
-        menu_button.connect_clicked(move |button| {
+        button.connect_clicked(move |button| {
             let allocation = button.allocation();
             let x = allocation.x() + allocation.width() / 2;
             let y = allocation.y() + allocation.height() / 2;
@@ -279,7 +287,7 @@ impl SysTray {
             });
         });
 
-        items_container.append(&menu_button);
+        items_container.append(&button);
         items.borrow_mut().insert(service.to_string(), tray_item);
     }
 

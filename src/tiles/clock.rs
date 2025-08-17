@@ -1,7 +1,6 @@
 use crate::services::clock::ClockService;
 use gtk4::prelude::*;
 use gtk4::{Box, Label, Orientation};
-use gtk4::glib;
 
 pub struct ClockWidget {
     container: Box,

@@ -1,4 +1,5 @@
 
+
 use gdk4::Monitor;
 use gtk4::glib;
 use gtk4::prelude::*;
@@ -6,7 +7,6 @@ use gtk4::{ApplicationWindow, Box, Button, Calendar, Image, Label, Orientation, 
 use gtk4_layer_shell::{LayerShell, Layer, Edge};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use crate::services::notifications::{Notification, NotificationService};
 use super::notification_card::NotificationCard;
 use crate::analog_clock::AnalogClock;
 use crate::services::notifications::NotificationService;
@@ -204,12 +204,12 @@ impl NotificationCenter {
 
     fn setup_service_connections(&self) {
         let notifications_container = self.notifications_container.clone();
-        let cards = self.cards.clone();
+        let cards_ref = self.cards.clone();
         let service = self.service.clone();
 
         // Monitor for notification changes
         glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
-            Self::update_notifications(&notifications_container, &cards, &service);
+            Self::update_notifications(&notifications_container, &cards_ref, &service);
             glib::ControlFlow::Continue
         });
     }

@@ -1,3 +1,4 @@
+
 use super::notification_card::NotificationCard;
 use crate::services::notifications::NotificationService;
 use gdk4::Monitor;
@@ -7,7 +8,6 @@ use gtk4::{ApplicationWindow, Box, Orientation};
 use gtk4_layer_shell::{LayerShell, Layer, Edge};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use crate::services::notifications::{Notification, NotificationService};
 
 pub struct NotificationPopup {
     window: ApplicationWindow,
@@ -71,8 +71,9 @@ impl NotificationPopup {
         // Note: In a real implementation, we'd need to connect to the actual notification signals
         // For now, we'll poll periodically to check for new notifications
         let service = self.service.clone();
+        let cards_ref = self.cards.clone();
         glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
-            Self::update_notifications(&container, &cards, &service);
+            Self::update_notifications(&container, &cards_ref, &service);
             glib::ControlFlow::Continue
         });
     }
@@ -112,13 +113,11 @@ impl NotificationPopup {
                 if notification.urgency < 2 {
                     let service_clone = service.clone();
                     let notification_id = notification.id;
-                    glib::timeout_add_local_once(
-                        std::time::Duration::from_secs(10),
-                        move || {
-                            // Remove from service (this will trigger the update loop to remove the card)
-                            service_clone.imp().remove_notification(notification_id);
-                        }
-                    );
+                    glib::timeout_add_local_once(std::time::Duration::from_secs(10), move || {
+                        // Remove from service (this will trigger the update loop to remove the card)
+                        use gtk4::subclass::prelude::ObjectSubclassIsExt;
+                        service_clone.imp().remove_notification(notification_id);
+                    });
                 }
             }
         }
