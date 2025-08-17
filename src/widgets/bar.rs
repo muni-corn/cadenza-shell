@@ -1,4 +1,5 @@
 
+
 use gtk4::prelude::*;
 use gtk4::{Box, Orientation, Label};
 use gdk4::Monitor;
@@ -8,6 +9,7 @@ use crate::tiles::battery::BatteryWidget;
 use crate::tiles::clock::ClockWidget;
 use crate::tiles::network::NetworkWidget;
 use crate::tiles::hyprland::{FocusedClientWidget, WorkspacesWidget};
+use crate::tiles::bluetooth::BluetoothWidget;
 
 pub struct Bar {
     container: Box,
