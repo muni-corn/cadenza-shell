@@ -1,1 +1,2 @@
-pub mod brightness;
+pub mod audio;
+pub mod battery;

@@ -2,6 +2,7 @@ use gtk4::prelude::*;
 use gtk4::{Box, Orientation, Label};
 use gdk4::Monitor;
 use crate::tiles::brightness::BrightnessWidget;
+use crate::tiles::volume::VolumeWidget;
 
 pub struct Bar {
     container: Box,
@@ -35,7 +36,10 @@ impl Bar {
             .build();
 
         let brightness = BrightnessWidget::new();
+        let volume = VolumeWidget::new();
+        
         right_section.append(brightness.widget());
+        right_section.append(volume.widget());
 
         container.append(&left_section);
         container.append(&right_section);
