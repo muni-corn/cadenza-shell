@@ -1,3 +1,4 @@
+
 use gtk4::prelude::*;
 use gtk4::{Box, Orientation, Label};
 use gdk4::Monitor;
@@ -5,7 +6,6 @@ use crate::tiles::brightness::BrightnessWidget;
 use crate::tiles::volume::VolumeWidget;
 use crate::tiles::battery::BatteryWidget;
 use crate::tiles::clock::ClockWidget;
-use crate::tiles::bluetooth::BluetoothWidget;
 use crate::tiles::network::NetworkWidget;
 use crate::tiles::hyprland::{FocusedClientWidget, WorkspacesWidget};
 
@@ -52,11 +52,13 @@ impl Bar {
 
         let brightness = BrightnessWidget::new();
         let volume = VolumeWidget::new();
+        let bluetooth = BluetoothWidget::new();
         let network = NetworkWidget::new();
         let battery = BatteryWidget::new();
 
         right_section.append(brightness.widget());
         right_section.append(volume.widget());
+        right_section.append(bluetooth.widget());
         right_section.append(network.widget());
         right_section.append(battery.widget());
 

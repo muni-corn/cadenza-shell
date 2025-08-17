@@ -35,7 +35,9 @@ impl MuseShell {
 
     fn setup_ui(app: &Application, bars: &Rc<RefCell<Vec<ApplicationWindow>>>) {
         // Load CSS styles
-        load_css();
+        if let Err(e) = load_css() {
+            log::warn!("failed to load css: {}", e);
+        }
 
         let display = Display::default().expect("Could not get default display");
         let monitors = display.monitors();
