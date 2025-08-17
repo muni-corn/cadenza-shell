@@ -3,6 +3,7 @@ use gtk4::prelude::*;
 use gtk4::{Box, Button, Image, Label, Orientation};
 use std::path::Path;
 
+#[derive(Clone)]
 pub struct NotificationCard {
     container: Box,
     notification: Notification,
