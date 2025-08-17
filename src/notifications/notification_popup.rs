@@ -104,10 +104,10 @@ impl NotificationPopup {
 
         // Add new notifications
         for notification in current_notifications {
-            if !cards_map.contains_key(&notification.id) {
+            if let std::collections::hash_map::Entry::Vacant(e) = cards_map.entry(notification.id) {
                 let card = NotificationCard::new(notification.clone());
                 container.prepend(card.widget()); // Add to top
-                cards_map.insert(notification.id, card);
+                e.insert(card);
 
                 // Auto-dismiss after 10 seconds for non-critical notifications
                 if notification.urgency < 2 {

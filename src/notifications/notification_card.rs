@@ -75,7 +75,7 @@ impl NotificationCard {
 
         // Time
         let time_label = Label::builder()
-            .label(&Self::format_time(self.notification.timestamp))
+            .label(Self::format_time(self.notification.timestamp))
             .css_classes(vec!["time"])
             .halign(gtk4::Align::End)
             .hexpand(true)
@@ -207,7 +207,7 @@ impl NotificationCard {
 
     fn format_time(timestamp: i64) -> String {
         let datetime =
-            chrono::DateTime::from_timestamp(timestamp, 0).unwrap_or_else(|| chrono::Utc::now());
+            chrono::DateTime::from_timestamp(timestamp, 0).unwrap_or_else(chrono::Utc::now);
         let local_time = datetime.with_timezone(&chrono::Local);
         local_time.format("%-I:%M %P").to_string()
     }

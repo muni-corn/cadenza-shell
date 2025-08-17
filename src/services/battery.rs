@@ -120,7 +120,7 @@ mod imp {
             };
 
             // Try to calculate time remaining
-            let time_remaining = self.calculate_time_remaining(&base_path, &status, percentage)?;
+            let time_remaining = self.calculate_time_remaining(base_path, &status, percentage)?;
 
             Ok((percentage, status, time_remaining))
         }
@@ -205,6 +205,12 @@ mod imp {
 
 glib::wrapper! {
     pub struct BatteryService(ObjectSubclass<imp::BatteryService>);
+}
+
+impl Default for BatteryService {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl BatteryService {

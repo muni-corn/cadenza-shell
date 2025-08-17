@@ -60,7 +60,7 @@ mod imp {
     impl AudioService {
         fn detect_default_sink(&self) -> Result<String> {
             // Try to get default sink using pactl
-            let output = Command::new("pactl").args(&["get-default-sink"]).output()?;
+            let output = Command::new("pactl").args(["get-default-sink"]).output()?;
 
             if output.status.success() {
                 let sink = String::from_utf8_lossy(&output.stdout).trim().to_string();
@@ -71,7 +71,7 @@ mod imp {
 
             // Fallback: try to find any available sink
             let output = Command::new("pactl")
-                .args(&["list", "short", "sinks"])
+                .args(["list", "short", "sinks"])
                 .output()?;
 
             if output.status.success() {
@@ -89,7 +89,7 @@ mod imp {
         fn read_current_state(&self) -> Result<(f64, bool)> {
             // Get sink info using pactl
             let output = Command::new("pactl")
-                .args(&["get-sink-volume", "@DEFAULT_SINK@"])
+                .args(["get-sink-volume", "@DEFAULT_SINK@"])
                 .output()?;
 
             let volume = if output.status.success() {
@@ -112,7 +112,7 @@ mod imp {
 
             // Get mute status
             let mute_output = Command::new("pactl")
-                .args(&["get-sink-mute", "@DEFAULT_SINK@"])
+                .args(["get-sink-mute", "@DEFAULT_SINK@"])
                 .output()?;
 
             let muted = if mute_output.status.success() {
@@ -149,6 +149,12 @@ glib::wrapper! {
     pub struct AudioService(ObjectSubclass<imp::AudioService>);
 }
 
+impl Default for AudioService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl AudioService {
     pub fn new() -> Self {
         glib::Object::builder().build()
@@ -160,7 +166,7 @@ impl AudioService {
 
         // Set volume using pactl
         let output = Command::new("pactl")
-            .args(&[
+            .args([
                 "set-sink-volume",
                 "@DEFAULT_SINK@",
                 &format!("{}%", percentage),
@@ -181,7 +187,7 @@ impl AudioService {
     pub fn toggle_mute(&self) -> Result<()> {
         // Toggle mute using pactl
         let output = Command::new("pactl")
-            .args(&["set-sink-mute", "@DEFAULT_SINK@", "toggle"])
+            .args(["set-sink-mute", "@DEFAULT_SINK@", "toggle"])
             .output()?;
 
         if !output.status.success() {
@@ -200,7 +206,7 @@ impl AudioService {
 
         // Set mute state using pactl
         let output = Command::new("pactl")
-            .args(&["set-sink-mute", "@DEFAULT_SINK@", mute_arg])
+            .args(["set-sink-mute", "@DEFAULT_SINK@", mute_arg])
             .output()?;
 
         if !output.status.success() {

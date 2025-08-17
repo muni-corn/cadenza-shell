@@ -81,6 +81,12 @@ glib::wrapper! {
     pub struct ClockService(ObjectSubclass<imp::ClockService>);
 }
 
+impl Default for ClockService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClockService {
     pub fn new() -> Self {
         glib::Object::builder().build()

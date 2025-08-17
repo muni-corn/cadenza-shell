@@ -335,6 +335,12 @@ glib::wrapper! {
     pub struct NetworkService(ObjectSubclass<imp::NetworkService>);
 }
 
+impl Default for NetworkService {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NetworkService {
     pub fn new() -> Self {
         glib::Object::builder().build()

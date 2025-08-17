@@ -1,17 +1,34 @@
 
 
-use gdk4::Monitor;
-use gtk4::glib;
 use gtk4::prelude::*;
+use gtk4::{ApplicationWindow, Button, Calendar, Image, Label, Orientation, ScrolledWindow};
 use std::cell::RefCell;
 use std::collections::HashMap;
-use gtk4::{ApplicationWindow, Button, Calendar, Image, Label, Orientation, ScrolledWindow};
-use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use std::rc::Rc;
-
-use crate::analog_clock::AnalogClock;
-use crate::notifications::notification_card::NotificationCard;
+<<<<<<< HEAD
 use crate::services::notifications::NotificationService;
+||||||| parent of 6379831 (fixup! fix: resolve remaining clippy errors and compilation issues)
+=======
+use crate::services::notifications::NotificationService;
+use crate::services::notifications::NotificationService;
+>>>>>>> 6379831 (fixup! fix: resolve remaining clippy errors and compilation issues)
+<<<<<<< HEAD
+use super::notification_card::NotificationCard;
+||||||| parent of 6379831 (fixup! fix: resolve remaining clippy errors and compilation issues)
+=======
+use super::notification_card::NotificationCard;
+use super::notification_card::NotificationCard;
+>>>>>>> 6379831 (fixup! fix: resolve remaining clippy errors and compilation issues)
+<<<<<<< HEAD
+use crate::analog_clock::AnalogClock;
+||||||| parent of 6379831 (fixup! fix: resolve remaining clippy errors and compilation issues)
+=======
+use crate::analog_clock::AnalogClock;
+use crate::analog_clock::AnalogClock;
+>>>>>>> 6379831 (fixup! fix: resolve remaining clippy errors and compilation issues)
+use gdk4::Monitor;
+use gtk4::glib;
+use gtk4_layer_shell::{Edge, Layer, LayerShell};
 
 pub struct NotificationCenter {
     window: ApplicationWindow,
@@ -37,7 +54,7 @@ impl NotificationCenter {
         window.set_anchor(Edge::Top, true);
         window.set_anchor(Edge::Right, true);
         window.set_anchor(Edge::Bottom, true);
-        window.set_monitor(Some(monitor));
+        window.set_monitor(monitor);
         window.set_margin(Edge::Top, 8);
         window.set_margin(Edge::Right, 8);
         window.set_margin(Edge::Bottom, 8);
@@ -112,7 +129,9 @@ impl NotificationCenter {
         clock_section.append(&date_label);
 
         // Analog clock on the right
-        let analog_clock_container = gtk4::Box::builder().halign(gtk4::Align::End).build();
+        let analog_clock_container = gtk4::Box::builder()
+            .halign(gtk4::Align::End)
+            .build();
 
         let analog_clock = AnalogClock::new(60);
         analog_clock_container.append(analog_clock.widget());
@@ -240,11 +259,11 @@ impl NotificationCenter {
 
         // Add new notifications (sorted by timestamp, newest first)
         for notification in current_notifications {
-            cards_map.entry(notification.id).or_insert_with(|| {
+            if !cards_map.contains_key(&notification.id) {
                 let card = NotificationCard::new(notification.clone());
                 container.prepend(card.widget()); // Add to top
-                card
-            });
+                cards_map.insert(notification.id, card);
+            }
         }
     }
 
