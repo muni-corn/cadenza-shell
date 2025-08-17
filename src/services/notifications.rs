@@ -279,49 +279,11 @@ impl Worker for NotificationService {
     type Input = NotificationServiceMsg;
     type Output = NotificationWorkerOutput;
 
-    pub async fn send_notification(
-        &self,
-        app_name: &str,
-        summary: &str,
-        body: &str,
-        icon: &str,
-        timeout: i32,
-    ) -> Result<u32> {
-        let proxy = self.imp().proxy.borrow();
-        if let Some(proxy) = proxy.as_ref() {
-            let hints = HashMap::new();
-            let id = proxy
-                .notify(app_name, 0, icon, summary, body, vec![], hints, timeout)
-                .await?;
+    fn init(_init: Self::Init, sender: ComponentSender<Self>) -> Self {
+        let sender_clone = sender.clone();
 
-            // Add to our local notification list
-            let notification = Notification {
-                id,
-                app_name: app_name.to_string(),
-                app_icon: icon.to_string(),
-                summary: summary.to_string(),
-                body: body.to_string(),
-                urgency: 1, // Normal
-                timeout,
-                timestamp: chrono::Utc::now().timestamp(),
-                actions: vec![],
-            };
-
-            self.imp().add_notification(notification);
-            Ok(id)
-        } else {
-            anyhow::bail!("Notification service not initialized")
-        }
-    }
-
-    pub async fn close_notification(&self, id: u32) -> Result<()> {
-        let proxy = self.imp().proxy.borrow();
-        if let Some(proxy) = proxy.as_ref() {
-            proxy.close_notification(id).await?;
-            self.imp().remove_notification(id);
-        }
-        Ok(())
-    }
+        let connection = Arc::new(RwLock::new(None));
+        let connection_clone = Arc::clone(&connection);
 
         relm4::spawn(async move {
             match initialize_notifications_daemon(sender_clone.clone()).await {
@@ -344,12 +306,27 @@ impl Worker for NotificationService {
         }
     }
 
-    pub async fn get_server_info(&self) -> Result<(String, String, String, String)> {
-        let proxy = self.imp().proxy.borrow();
-        if let Some(proxy) = proxy.as_ref() {
-            Ok(proxy.get_server_information().await?)
-        } else {
-            anyhow::bail!("Notification service not initialized")
+    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
+        match message {
+            NotificationServiceMsg::GetNotifications => {
+                sender
+                    .output(NotificationWorkerOutput::Notifications(
+                        self.notifications.clone(),
+                    ))
+                    .unwrap_or_else(|_| log::error!("failed to send output"));
+            }
+            NotificationServiceMsg::ClearAll => {
+                self.notifications.clear();
+                sender
+                    .output(NotificationWorkerOutput::AllCleared)
+                    .unwrap_or_else(|_| log::error!("failed to send output"));
+            }
+            NotificationServiceMsg::CloseNotification(id) => {
+                self.notifications.remove(&id);
+            }
+            NotificationServiceMsg::StoreNotification(notification) => {
+                self.notifications.insert(notification.id, notification);
+            }
         }
     }
 }
