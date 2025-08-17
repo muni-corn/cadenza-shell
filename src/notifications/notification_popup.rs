@@ -56,7 +56,7 @@ impl NotificationPopup {
 
     fn setup_service_connections(&self) {
         let container = self.container.clone();
-        let cards = self.cards.clone();
+        let _cards = self.cards.clone();
         let window = self.window.clone();
 
         // Connect to notification count changes to update visibility
