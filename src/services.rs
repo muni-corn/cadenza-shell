@@ -1,1 +1,1 @@
-// Service modules will be added here as we implement them
+pub mod brightness;

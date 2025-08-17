@@ -1,6 +1,7 @@
 use gtk4::prelude::*;
 use gtk4::{Box, Orientation, Label};
 use gdk4::Monitor;
+use crate::tiles::brightness::BrightnessWidget;
 
 pub struct Bar {
     container: Box,
@@ -15,10 +16,29 @@ impl Bar {
             .height_request(32)
             .build();
 
-        // For now, just add a simple label
+        // Left section - placeholder
+        let left_section = Box::builder()
+            .orientation(Orientation::Horizontal)
+            .spacing(20)
+            .build();
+        
         let label = Label::new(Some("Muse Shell"));
         label.add_css_class("bar-label");
-        container.append(&label);
+        left_section.append(&label);
+
+        // Right section - system tiles
+        let right_section = Box::builder()
+            .orientation(Orientation::Horizontal)
+            .spacing(8)
+            .halign(gtk4::Align::End)
+            .hexpand(true)
+            .build();
+
+        let brightness = BrightnessWidget::new();
+        right_section.append(brightness.widget());
+
+        container.append(&left_section);
+        container.append(&right_section);
 
         Self {
             container,
