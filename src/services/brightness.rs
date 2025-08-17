@@ -69,7 +69,7 @@ mod imp {
 
         fn detect_interface(&self) -> Result<String> {
             let backlight_path = Path::new("/sys/class/backlight");
-            let entries = fs::read_dir(backlight_path)?;
+            let mut entries = fs::read_dir(backlight_path)?;
 
             if let Some(entry) = entries.next() {
                 let entry = entry?;

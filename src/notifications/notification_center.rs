@@ -9,6 +9,10 @@ use gtk4::{ApplicationWindow, Button, Calendar, Image, Label, Orientation, Scrol
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use std::rc::Rc;
 
+use crate::analog_clock::AnalogClock;
+use crate::notifications::notification_card::NotificationCard;
+use crate::services::notifications::NotificationService;
+
 pub struct NotificationCenter {
     window: ApplicationWindow,
     container: gtk4::Box,
