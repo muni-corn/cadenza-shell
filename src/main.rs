@@ -5,6 +5,8 @@ mod services;
 mod settings;
 mod style;
 mod tiles;
+mod utils;
+mod widgets;
 
 use app::MuseShell;
 
