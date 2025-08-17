@@ -2,6 +2,7 @@
 name = "muse-shell"
 version = "0.1.0"
 edition = "2021"
+description = "muni's desktop shell - A modern desktop shell built with Rust and GTK4"
 
 [dependencies]
 # GTK and UI
