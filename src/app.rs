@@ -1,12 +1,14 @@
 use gdk4::Display;
-use glib::clone;
+use gtk4::{Application, ApplicationWindow, prelude::*};
+use gtk4_layer_shell::{Edge, Layer, LayerShell};
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use crate::style::load_css;
 use crate::widgets::bar::Bar;
 
 pub struct MuseShell {
     app: Application,
-    bars: Vec<ApplicationWindow>,
 }
 
 impl MuseShell {
@@ -15,21 +17,23 @@ impl MuseShell {
             .application_id("com.muse.shell")
             .build();
 
-        Self {
-            app,
-            bars: Vec::new(),
-        }
+        Self { app }
     }
 
-    pub fn run(mut self) -> glib::ExitCode {
-        self.app.connect_activate(clone!(@strong self as this => move |app| {
-            this.setup_ui(app);
-        }));
+    pub fn run(self) -> gtk4::glib::ExitCode {
+        let bars = Rc::new(RefCell::new(Vec::<ApplicationWindow>::new()));
+
+        self.app.connect_activate({
+            let bars = bars.clone();
+            move |app| {
+                Self::setup_ui(app, &bars);
+            }
+        });
 
         self.app.run()
     }
 
-    fn setup_ui(&mut self, app: &Application) {
+    fn setup_ui(app: &Application, bars: &Rc<RefCell<Vec<ApplicationWindow>>>) {
         // Load CSS styles
         load_css();
 
@@ -38,11 +42,15 @@ impl MuseShell {
 
         for monitor in monitors.iter::<gdk4::Monitor>() {
             let monitor = monitor.unwrap();
-            self.create_bar(app, &monitor);
+            Self::create_bar(app, &monitor, bars);
         }
     }
 
-    fn create_bar(&mut self, app: &Application, monitor: &gdk4::Monitor) {
+    fn create_bar(
+        app: &Application,
+        monitor: &gdk4::Monitor,
+        bars: &Rc<RefCell<Vec<ApplicationWindow>>>,
+    ) {
         let window = ApplicationWindow::builder()
             .application(app)
             .title("Muse Shell Bar")
@@ -59,9 +67,9 @@ impl MuseShell {
 
         // Create bar content
         let bar = Bar::new(monitor);
-        window.set_child(Some(&bar.widget()));
+        window.set_child(Some(bar.widget()));
 
         window.present();
-        self.bars.push(window);
+        bars.borrow_mut().push(window);
     }
 }

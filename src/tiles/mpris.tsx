@@ -41,6 +41,40 @@ export const Media = () => {
     },
   );
 
+  const activePlayer =
+    players
+      .get()
+      .find((p) => p.playback_status === AstalMpris.PlaybackStatus.PLAYING) ||
+    players.get()[0];
+
+  const data = createComputed(
+    [
+      players,
+      createBinding(activePlayer, "playbackStatus"),
+      createBinding(activePlayer, "title"),
+      createBinding(activePlayer, "artist"),
+    ],
+    (players, playbackStatus, title, artist) => {
+      console.log("number of players:", players.length);
+      console.log("playback status:", playbackStatus);
+      console.log("title:", title);
+      console.log("artist:", artist);
+      return players.length > 0 && activePlayer
+        ? {
+            icon:
+              playbackStatus === AstalMpris.PlaybackStatus.PLAYING
+                ? MPRIS_PLAYING_ICON
+                : MPRIS_PAUSED_ICON,
+            title: trunc(title) || `Media is ${statusToString(playbackStatus)}`,
+            artist: trunc(artist) || "",
+            visible: playbackStatus !== AstalMpris.PlaybackStatus.STOPPED,
+          }
+        : {
+            visible: false,
+          };
+    },
+  );
+
   return (
     <With value={data}>
       {(data) => (

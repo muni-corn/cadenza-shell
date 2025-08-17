@@ -34,17 +34,17 @@ chrono = "0.4"
 sysinfo = "0.31"
 procfs = "0.16"
 
-# Network management
-nm-rs = { version = "0.1", optional = true }
+# Network management (placeholder - will implement later)
+# nm-rs = { version = "0.1", optional = true }
 
-# Audio
-pipewire = { version = "0.8", optional = true }
-wireplumber = { version = "0.2", optional = true }
+# Audio (placeholder - will implement later)  
+# pipewire = { version = "0.8", optional = true }
+# wireplumber = { version = "0.2", optional = true }
 
 [build-dependencies]
 glib-build-tools = "0.20"
 
 [features]
-default = ["networkmanager", "audio"]
-networkmanager = ["nm-rs"]
-audio = ["pipewire", "wireplumber"]
+default = []
+# networkmanager = ["nm-rs"]
+# audio = ["pipewire", "wireplumber"]
