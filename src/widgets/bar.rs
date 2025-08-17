@@ -6,6 +6,8 @@ use crate::tiles::volume::VolumeWidget;
 use crate::tiles::battery::BatteryWidget;
 use crate::tiles::clock::ClockWidget;
 use crate::tiles::bluetooth::BluetoothWidget;
+use crate::tiles::network::NetworkWidget;
+use crate::tiles::hyprland::{FocusedClientWidget, WorkspacesWidget};
 
 pub struct Bar {
     container: Box,
@@ -50,10 +52,12 @@ impl Bar {
 
         let brightness = BrightnessWidget::new();
         let volume = VolumeWidget::new();
+        let network = NetworkWidget::new();
         let battery = BatteryWidget::new();
 
         right_section.append(brightness.widget());
         right_section.append(volume.widget());
+        right_section.append(network.widget());
         right_section.append(battery.widget());
 
         container.append(&left_section);
