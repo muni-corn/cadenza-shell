@@ -3,10 +3,7 @@ use chrono::{DateTime, Timelike, Utc};
 use gtk4::glib;
 use gtk4::prelude::*;
 use gtk4::{Box, Label, Orientation};
-use std::cell::RefCell;
-use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use chrono::{DateTime, Utc};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct WttrReport {
@@ -130,7 +127,7 @@ impl WeatherWidget {
 
         let icon_label = Label::builder()
             .css_classes(vec!["icon"])
-            .text(UNKNOWN_ICON)
+            .label(UNKNOWN_ICON)
             .width_request(16)
             .build();
 
@@ -143,7 +140,7 @@ impl WeatherWidget {
         let temp_label = Label::builder()
             .css_classes(vec!["primary"])
             .halign(gtk4::Align::Start)
-            .text("--°")
+            .label("--°")
             .build();
 
         let desc_label = Label::builder()

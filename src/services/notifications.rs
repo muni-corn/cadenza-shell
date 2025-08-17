@@ -1,9 +1,11 @@
+
 use anyhow::Result;
 use gtk4::glib;
 use gtk4::subclass::prelude::*;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use zbus::{Connection, proxy, Result as ZbusResult};
+use futures_util::stream::StreamExt;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Notification {
@@ -20,36 +22,39 @@ pub struct Notification {
     pub actions: Vec<String>,
 }
 
-#[proxy(
-    interface = "org.freedesktop.Notifications",
-    default_service = "org.freedesktop.Notifications",
-    default_path = "/org/freedesktop/Notifications"
-)]
-trait NotificationsDaemon {
-    async fn notify(
-        &self,
-        app_name: &str,
-        replaces_id: u32,
-        app_icon: &str,
-        summary: &str,
-        body: &str,
-        actions: Vec<&str>,
-        hints: HashMap<&str, zbus::zvariant::Value<'_>>,
-        expire_timeout: i32,
-    ) -> ZbusResult<u32>;
-
-    async fn close_notification(&self, id: u32) -> ZbusResult<()>;
-
-    async fn get_capabilities(&self) -> ZbusResult<Vec<String>>;
-
-    async fn get_server_information(&self) -> ZbusResult<(String, String, String, String)>;
-
-    #[zbus(signal)]
-    async fn notification_closed(&self, id: u32, reason: u32) -> ZbusResult<()>;
-
-    #[zbus(signal)]
-    async fn action_invoked(&self, id: u32, action_key: String) -> ZbusResult<()>;
+#[derive(Debug, Clone)]
+pub enum NotificationServiceMsg {
+    GetNotifications,
+    ClearAll,
+    CloseNotification(u32),
+    StoreNotification(Notification),
 }
+
+#[derive(Debug, Clone)]
+pub enum NotificationWorkerOutput {
+    NotificationReceived(Notification),
+    NotificationClosed { id: u32, reason: u32 },
+    ActionInvoked { id: u32, action_key: String },
+    Notifications(HashMap<u32, Notification>),
+    AllCleared,
+    Error(String),
+}
+
+#[derive(Deserialize, Serialize, Type, Default)]
+#[zvariant(signature = "dict")]
+#[serde(default, rename_all = "kebab-case")]
+pub struct NotificationHints {
+    #[serde(with = "as_value")]
+    action_icons: bool,
+
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
+    category: Option<String>,
+
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
+    desktop_entry: Option<String>,
+
+    #[serde(with = "as_value")]
+    resident: bool,
 
 mod imp {
     use super::{Notification, NotificationsDaemonProxy};
@@ -70,10 +75,9 @@ mod imp {
     #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
     urgency: Option<NotificationUrgency>,
 
-        notifications: RefCell<Vec<Notification>>,
-        connection: RefCell<Option<Connection>>,
-        proxy: RefCell<Option<NotificationsDaemonProxy<'static>>>,
-    }
+    #[serde(flatten)]
+    others: HashMap<String, OwnedValue>,
+}
 
     #[glib::object_subclass]
     impl ObjectSubclass for NotificationService {

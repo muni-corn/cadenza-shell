@@ -44,35 +44,53 @@ impl BrightnessWidget {
                 .build();
 
             // Update icon based on brightness changes
-            service.connect_brightness_notify(glib::clone!(@weak icon_label => move |service| {
-                let brightness = service.brightness();
-                let icon = percentage_to_icon_from_list(brightness, BRIGHTNESS_ICONS);
-                icon_label.set_text(icon);
-                
-                // Trigger fade animation
-                icon_label.remove_css_class("dim");
-                icon_label.add_css_class("bright");
-                
-                glib::timeout_add_local_once(std::time::Duration::from_secs(3), 
-                    glib::clone!(@weak icon_label => move || {
-                        icon_label.remove_css_class("bright");
-                        icon_label.add_css_class("dim");
-                    })
-                );
-            }));
+            service.connect_brightness_notify(glib::clone!(
+                #[weak]
+                icon_label,
+                move |service| {
+                    let brightness = service.brightness();
+                    let icon = percentage_to_icon_from_list(brightness, BRIGHTNESS_ICONS);
+                    icon_label.set_text(icon);
+
+                    // Trigger fade animation
+                    icon_label.remove_css_class("dim");
+                    icon_label.add_css_class("bright");
+
+                    glib::timeout_add_local_once(
+                        std::time::Duration::from_secs(3),
+                        glib::clone!(
+                            #[weak]
+                            icon_label,
+                            move || {
+                                icon_label.remove_css_class("bright");
+                                icon_label.add_css_class("dim");
+                            }
+                        ),
+                    );
+                }
+            ));
 
             // Similar animation for progress bar
-            service.connect_brightness_notify(glib::clone!(@weak progress_bar => move |_| {
-                progress_bar.remove_css_class("dim");
-                progress_bar.add_css_class("bright");
-                
-                glib::timeout_add_local_once(std::time::Duration::from_secs(3),
-                    glib::clone!(@weak progress_bar => move || {
-                        progress_bar.remove_css_class("bright");
-                        progress_bar.add_css_class("dim");
-                    })
-                );
-            }));
+            service.connect_brightness_notify(glib::clone!(
+                #[weak]
+                progress_bar,
+                move |_| {
+                    progress_bar.remove_css_class("dim");
+                    progress_bar.add_css_class("bright");
+
+                    glib::timeout_add_local_once(
+                        std::time::Duration::from_secs(3),
+                        glib::clone!(
+                            #[weak]
+                            progress_bar,
+                            move || {
+                                progress_bar.remove_css_class("bright");
+                                progress_bar.add_css_class("dim");
+                            }
+                        ),
+                    );
+                }
+            ));
 
             container.append(&icon_label);
             container.append(&progress_bar);
