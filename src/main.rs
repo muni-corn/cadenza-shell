@@ -4,6 +4,7 @@ mod notifications;
 mod services;
 mod settings;
 mod style;
+mod tiles;
 
 use app::MuseShell;
 
