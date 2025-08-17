@@ -158,8 +158,8 @@ mod imp {
         }
 
         async fn send_command(&self, command: &str) -> Result<String> {
-            let socket_path = self.socket_path.borrow();
-            let mut stream = UnixStream::connect(&*socket_path).await?;
+            let socket_path = self.socket_path.borrow().clone();
+            let mut stream = UnixStream::connect(&socket_path).await?;
             stream.write_all(command.as_bytes()).await?;
 
             let mut response = String::new();

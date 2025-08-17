@@ -187,7 +187,7 @@ mod imp {
 
     impl NetworkService {
         async fn update_network_state(&self) -> Result<()> {
-            let conn = self.connection.borrow();
+            let conn = self.connection.borrow().clone();
             let conn = conn
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("No D-Bus connection"))?;
