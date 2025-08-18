@@ -11,7 +11,11 @@ mod utils;
 mod widgets;
 mod wifi_menu;
 
-use app::run;
+pub mod tests;
+
+use relm4::RelmApp;
+
+use crate::app::MuseShellModel;
 
 #[tokio::main]
 async fn main() -> glib::ExitCode {
