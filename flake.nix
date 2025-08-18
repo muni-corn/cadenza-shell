@@ -130,6 +130,7 @@
           devShells.default = pkgs.mkShell {
             # for some reason, using the dev shell directly doesn't work, but this does
             inputsFrom = [ self'.devShells.rust ];
+            packages = [ pkgs.cargo-outdated ];
           };
         };
     };
