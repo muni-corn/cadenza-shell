@@ -10,9 +10,8 @@ mod widgets;
 
 use app::MuseShell;
 
-fn main() -> glib::ExitCode {
+#[tokio::main]
+async fn main() -> glib::ExitCode {
     env_logger::init();
-
-    let app = MuseShell::new();
-    app.run()
+    MuseShell::new().run()
 }
