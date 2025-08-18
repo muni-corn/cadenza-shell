@@ -32,73 +32,98 @@ impl NetworkWidget {
                 .build();
 
             // Update icon and styling based on network state
-            let update_display = glib::clone!(@weak icon_label, @weak service => move || {
-                let is_connected = service.connected();
-                let device_type = service.primary_device_type();
+            let update_display = glib::clone!(
+                #[weak]
+                icon_label,
+                #[weak]
+                service,
+                move || {
+                    let is_connected = service.connected();
+                    let device_type = service.primary_device_type();
 
-                // Choose appropriate icon
-                let icon = if is_connected {
-                    match device_type {
-                        DeviceType::Wifi => {
-                            let strength = service.wifi_strength() as f64 / 100.0;
-                            percentage_to_icon_from_list(strength, NETWORK_WIFI_ICONS)
+                    // Choose appropriate icon
+                    let icon = if is_connected {
+                        match device_type {
+                            DeviceType::Wifi => {
+                                let strength = service.wifi_strength() as f64 / 100.0;
+                                percentage_to_icon_from_list(strength, NETWORK_WIFI_ICONS)
+                            }
+                            DeviceType::Ethernet => NETWORK_WIRED_ICONS[0],
+                            _ => NETWORK_WIFI_ICONS[0], // Default to lowest WiFi icon
                         }
-                        DeviceType::Ethernet => NETWORK_WIRED_ICONS[0],
-                        _ => NETWORK_WIFI_ICONS[0], // Default to lowest WiFi icon
+                    } else {
+                        NETWORK_WIFI_ICONS[0] // Disconnected icon
+                    };
+
+                    icon_label.set_text(icon);
+
+                    // Update CSS classes based on connection state
+                    icon_label.remove_css_class("network-connected");
+                    icon_label.remove_css_class("network-disconnected");
+                    icon_label.remove_css_class("network-wifi");
+                    icon_label.remove_css_class("network-ethernet");
+
+                    if is_connected {
+                        icon_label.add_css_class("network-connected");
+                        match device_type {
+                            DeviceType::Wifi => icon_label.add_css_class("network-wifi"),
+                            DeviceType::Ethernet => icon_label.add_css_class("network-ethernet"),
+                            _ => {}
+                        }
+                    } else {
+                        icon_label.add_css_class("network-disconnected");
                     }
-                } else {
-                    NETWORK_WIFI_ICONS[0] // Disconnected icon
-                };
 
-                icon_label.set_text(icon);
+                    // Trigger fade animation when state changes
+                    icon_label.remove_css_class("dim");
+                    icon_label.add_css_class("bright");
 
-                // Update CSS classes based on connection state
-                icon_label.remove_css_class("network-connected");
-                icon_label.remove_css_class("network-disconnected");
-                icon_label.remove_css_class("network-wifi");
-                icon_label.remove_css_class("network-ethernet");
-
-                if is_connected {
-                    icon_label.add_css_class("network-connected");
-                    match device_type {
-                        DeviceType::Wifi => icon_label.add_css_class("network-wifi"),
-                        DeviceType::Ethernet => icon_label.add_css_class("network-ethernet"),
-                        _ => {}
-                    }
-                } else {
-                    icon_label.add_css_class("network-disconnected");
+                    glib::timeout_add_local_once(
+                        std::time::Duration::from_secs(3),
+                        glib::clone!(
+                            #[weak]
+                            icon_label,
+                            move || {
+                                icon_label.remove_css_class("bright");
+                                icon_label.add_css_class("dim");
+                            }
+                        ),
+                    );
                 }
-
-                // Trigger fade animation when state changes
-                icon_label.remove_css_class("dim");
-                icon_label.add_css_class("bright");
-
-                glib::timeout_add_local_once(std::time::Duration::from_secs(3),
-                    glib::clone!(@weak icon_label => move || {
-                        icon_label.remove_css_class("bright");
-                        icon_label.add_css_class("dim");
-                    })
-                );
-            });
-
-            // Connect to property changes
-            service.connect_connected_notify(glib::clone!(@strong update_display => move |_| {
-                update_display();
-            }));
-
-            service.connect_wifi_enabled_notify(glib::clone!(@strong update_display => move |_| {
-                update_display();
-            }));
-
-            service.connect_ethernet_connected_notify(
-                glib::clone!(@strong update_display => move |_| {
-                    update_display();
-                }),
             );
 
-            service.connect_wifi_strength_notify(glib::clone!(@strong update_display => move |_| {
-                update_display();
-            }));
+            // Connect to property changes
+            service.connect_connected_notify(glib::clone!(
+                #[strong]
+                update_display,
+                move |_| {
+                    update_display();
+                }
+            ));
+
+            service.connect_wifi_enabled_notify(glib::clone!(
+                #[strong]
+                update_display,
+                move |_| {
+                    update_display();
+                }
+            ));
+
+            service.connect_ethernet_connected_notify(glib::clone!(
+                #[strong]
+                update_display,
+                move |_| {
+                    update_display();
+                }
+            ));
+
+            service.connect_wifi_strength_notify(glib::clone!(
+                #[strong]
+                update_display,
+                move |_| {
+                    update_display();
+                }
+            ));
 
             // Initial display update
             update_display();

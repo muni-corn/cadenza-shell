@@ -63,8 +63,11 @@ impl NotificationTile {
     fn setup_bindings(&self) {
         // Bind notification count to count label
         self.service.connect_notification_count_notify(glib::clone!(
-            @weak self.count_label as count_label,
-            @weak self.icon_label as icon_label => move |service| {
+            #[weak(rename_to = count_label)]
+            self.count_label,
+            #[weak(rename_to = icon_label)]
+            self.icon_label,
+            move |service| {
                 let count = service.notification_count();
 
                 if count > 0 {
