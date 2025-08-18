@@ -1,222 +1,315 @@
-use crate::services::notifications::Notification;
 use gtk4::prelude::*;
-use gtk4::{Box, Button, Image, Label, Orientation};
+use relm4::prelude::*;
 use std::path::Path;
 
-#[derive(Clone)]
+use crate::services::notifications::{Notification, NotificationUrgency};
+
+fn is_icon(icon: &str) -> bool {
+    if let Some(display) = gtk4::gdk::Display::default() {
+        let icon_theme = gtk4::IconTheme::for_display(&display);
+        !icon.is_empty() && icon_theme.has_icon(icon)
+    } else {
+        false
+    }
+}
+
+fn file_exists(path: &str) -> bool {
+    !path.is_empty() && Path::new(path).exists()
+}
+
+#[derive(Debug)]
 pub struct NotificationCard {
-    container: Box,
     notification: Notification,
 }
 
-impl NotificationCard {
-    pub fn new(notification: Notification) -> Self {
-        let container = Box::builder()
-            .orientation(Orientation::Vertical)
-            .css_classes(vec![
-                "notification-card",
-                &Self::urgency_class(&notification),
-            ])
-            .spacing(8)
-            .margin_top(8)
-            .margin_bottom(8)
-            .margin_start(12)
-            .margin_end(12)
-            .build();
+#[derive(Debug)]
+pub enum NotificationCardMsg {
+    Dismiss,
+    Action(String), // action_id
+}
 
-        let card = Self {
-            container,
-            notification: notification.clone(),
-        };
+#[derive(Debug)]
+pub enum NotificationCardOutput {
+    Dismiss(u32),        // notification_id
+    Action(u32, String), // notification_id, action_id
+}
 
-        card.build_header();
-        card.build_content();
-        card.build_actions();
+#[relm4::factory(pub)]
+impl FactoryComponent for NotificationCard {
+    type Init = NotificationData;
+    type Input = NotificationCardMsg;
+    type Output = NotificationCardOutput;
+    type CommandOutput = ();
+    type ParentWidget = gtk4::Box;
+
+    view! {
+        #[root]
+        card = gtk4::Box {
+            add_css_class: "notification-card",
+            add_css_class: self.get_urgency_class(),
+
+            gtk4::Box {
+                set_orientation: gtk4::Orientation::Vertical,
+
+                // Header with app info and close button
+                gtk4::Box {
+                    add_css_class: "header",
+
+                    // App icon (if available)
+                    gtk4::Image {
+                        #[watch]
+                        set_visible: self.has_app_icon(),
+                        #[watch]
+                        set_icon_name: self.get_app_icon_name().as_deref(),
+                        add_css_class: "app-icon",
+                    },
+
+                    // App name
+                    gtk4::Label {
+                        #[watch]
+                        set_text: &self.notification.app_name,
+                        add_css_class: "app-name",
+                        set_halign: gtk4::Align::Start,
+                        #[watch]
+                        set_visible: !self.notification.app_name.is_empty(),
+                    },
+
+                    // Time
+                    gtk4::Label {
+                        #[watch]
+                        set_text: &self.format_time(self.notification.timestamp),
+                        add_css_class: "time",
+                        set_hexpand: true,
+                        set_halign: gtk4::Align::End,
+                    },
+
+                    // Close button
+                    gtk4::Button {
+                        add_css_class: "closeButton",
+                        connect_clicked[sender] => move |_| {
+                            sender.input(NotificationCardMsg::Dismiss);
+                        },
+
+                        gtk4::Image {
+                            set_icon_name: Some("window-close-symbolic"),
+                        },
+                    },
+                },
+
+                // Content section
+                #[name = "content_container"]
+                gtk4::Box {
+                    add_css_class: "content",
+                    set_hexpand: true,
+
+                    // Notification image (if available)
+                    gtk4::Image {
+                        #[watch]
+                        set_visible: self.has_notification_image(),
+                        #[watch]
+                        set_from_file: if self.has_notification_image() && file_exists(&self.notification.image) {
+                            Some(&self.notification.image)
+                        } else {
+                            None
+                        },
+                        #[watch]
+                        set_icon_name: if self.has_notification_image() && !file_exists(&self.notification.image) {
+                            Some(&self.notification.image)
+                        } else {
+                            None
+                        },
+                        set_valign: gtk4::Align::Start,
+                        add_css_class: if file_exists(&self.notification.image) { "image" } else { "icon-image" },
+                    },
+
+                    // Text content
+                    gtk4::Box {
+                        set_orientation: gtk4::Orientation::Vertical,
+
+                        // Summary
+                        gtk4::Label {
+                            #[watch]
+                            set_text: &self.notification.summary,
+                            add_css_class: "summary",
+                            set_wrap: true,
+                            set_halign: gtk4::Align::Start,
+                            set_xalign: 0.0,
+                            set_lines: 2,
+                            set_ellipsize: gtk4::pango::EllipsizeMode::End,
+                            set_max_width_chars: 1,
+                            set_hexpand: true,
+                        },
+
+                        // Body (if present)
+                        gtk4::Label {
+                            #[watch]
+                            set_text: &self.notification.body,
+                            add_css_class: "body",
+                            set_wrap: true,
+                            set_halign: gtk4::Align::Start,
+                            set_xalign: 0.0,
+                            set_lines: 4,
+                            set_ellipsize: gtk4::pango::EllipsizeMode::End,
+                            set_max_width_chars: 1,
+                            set_hexpand: true,
+                            #[watch]
+                            set_visible: !self.notification.body.is_empty(),
+                        },
+                    },
+                },
+
+                // Actions section (if multiple actions)
+                #[name = "actions_box"]
+                gtk4::Box {
+                    add_css_class: "actions",
+                    #[watch]
+                    set_visible: self.notification.actions.len() > 1,
+                },
+            }
+        }
+    }
+
+    fn init_model(
+        notification: Self::Init,
+        _index: &DynamicIndex,
+        sender: FactorySender<Self>,
+    ) -> Self {
+        let card = Self { notification };
+
+        // If there's exactly one action, make the content clickable
+        if card.notification.actions.len() == 1 {
+            // We'll handle this in the post_init
+        }
 
         card
     }
 
-    fn urgency_class(notification: &Notification) -> String {
-        match notification.urgency {
-            0 => "low".to_string(),
-            2 => "critical".to_string(),
-            _ => "normal".to_string(),
-        }
-    }
+    fn init_widgets(
+        &mut self,
+        index: &DynamicIndex,
+        root: Self::Root,
+        returned_widget: &gtk4::Widget,
+        sender: FactorySender<Self>,
+    ) -> Self::Widgets {
+        let widgets = view_output!();
 
-    fn build_header(&self) {
-        let header = Box::builder()
-            .orientation(Orientation::Horizontal)
-            .css_classes(vec!["header"])
-            .spacing(8)
-            .build();
-
-        // App icon
-        if !self.notification.app_icon.is_empty() {
-            let app_icon = if Path::new(&self.notification.app_icon).exists() {
-                Image::from_file(&self.notification.app_icon)
-            } else {
-                Image::from_icon_name(&self.notification.app_icon)
-            };
-            app_icon.set_css_classes(&["app-icon"]);
-            app_icon.set_pixel_size(16);
-            header.append(&app_icon);
-        }
-
-        // App name
-        if !self.notification.app_name.is_empty() {
-            let app_name = Label::builder()
-                .label(&self.notification.app_name)
-                .css_classes(vec!["app-name"])
-                .halign(gtk4::Align::Start)
-                .build();
-            header.append(&app_name);
-        }
-
-        // Time
-        let time_label = Label::builder()
-            .label(Self::format_time(self.notification.timestamp))
-            .css_classes(vec!["time"])
-            .halign(gtk4::Align::End)
-            .hexpand(true)
-            .build();
-        header.append(&time_label);
-
-        // Close button
-        let close_button = Button::builder().css_classes(vec!["close-button"]).build();
-
-        let close_icon = Image::from_icon_name("window-close-symbolic");
-        close_icon.set_pixel_size(12);
-        close_button.set_child(Some(&close_icon));
-
-        let notification_id = self.notification.id;
-        close_button.connect_clicked(move |_| {
-            // TODO: Implement notification dismissal
-            log::info!("Dismissing notification {}", notification_id);
-        });
-
-        header.append(&close_button);
-        self.container.append(&header);
-    }
-
-    fn build_content(&self) {
-        let content = Box::builder()
-            .orientation(Orientation::Horizontal)
-            .css_classes(vec!["content"])
-            .spacing(12)
-            .build();
-
-        // Notification image (if any)
-        if !self.notification.app_icon.is_empty() && Path::new(&self.notification.app_icon).exists()
-        {
-            let image = Image::from_file(&self.notification.app_icon);
-            image.set_css_classes(&["image"]);
-            image.set_pixel_size(48);
-            image.set_valign(gtk4::Align::Start);
-            content.append(&image);
-        }
-
-        // Text content
-        let text_box = Box::builder()
-            .orientation(Orientation::Vertical)
-            .spacing(4)
-            .hexpand(true)
-            .build();
-
-        // Summary
-        let summary = Label::builder()
-            .label(&self.notification.summary)
-            .css_classes(vec!["summary"])
-            .halign(gtk4::Align::Start)
-            .xalign(0.0)
-            .wrap(true)
-            .lines(2)
-            .ellipsize(gtk4::pango::EllipsizeMode::End)
-            .max_width_chars(50)
-            .hexpand(true)
-            .build();
-        text_box.append(&summary);
-
-        // Body (if present)
-        if !self.notification.body.is_empty() {
-            let body = Label::builder()
-                .label(&self.notification.body)
-                .css_classes(vec!["body"])
-                .halign(gtk4::Align::Start)
-                .xalign(0.0)
-                .wrap(true)
-                .lines(4)
-                .ellipsize(gtk4::pango::EllipsizeMode::End)
-                .max_width_chars(50)
-                .hexpand(true)
-                .build();
-            text_box.append(&body);
-        }
-
-        content.append(&text_box);
-
-        // Wrap in button if actionable
-        if !self.notification.actions.is_empty() {
-            let action_button = Button::new();
-            action_button.set_child(Some(&content));
-
-            let notification_id = self.notification.id;
-            action_button.connect_clicked(move |_| {
-                // TODO: Implement action invocation
-                log::info!(
-                    "Invoking default action for notification {}",
-                    notification_id
-                );
-            });
-
-            self.container.append(&action_button);
-        } else {
-            self.container.append(&content);
-        }
-    }
-
-    fn build_actions(&self) {
-        if self.notification.actions.len() > 1 {
-            let actions_box = Box::builder()
-                .orientation(Orientation::Horizontal)
-                .css_classes(vec!["actions"])
-                .spacing(8)
-                .homogeneous(true)
+        // If exactly one action, wrap content in clickable button
+        if self.notification.actions.len() == 1 {
+            let action_id = self.notification.actions[0].clone();
+            let button = gtk4::Button::builder()
+                .child(&widgets.content_container)
                 .build();
 
-            for action in &self.notification.actions {
-                let action_button = Button::builder().label(action).hexpand(true).build();
+            button.connect_clicked(clone!(
+                #[strong]
+                sender,
+                #[strong]
+                action_id,
+                move |_| {
+                    sender.input(NotificationCardMsg::Action(action_id.clone()));
+                }
+            ));
 
-                let action_text = action.clone();
-                let notification_id = self.notification.id;
-                action_button.connect_clicked(move |_| {
-                    // TODO: Implement specific action invocation
-                    log::info!(
-                        "Invoking action '{}' for notification {}",
-                        action_text,
-                        notification_id
-                    );
-                });
-
-                actions_box.append(&action_button);
+            // Replace content_container with the button
+            if let Some(parent) = widgets.content_container.parent() {
+                let parent_box = parent.downcast::<gtk4::Box>().unwrap();
+                parent_box.remove(&widgets.content_container);
+                parent_box.append(&button);
             }
+        }
 
-            self.container.append(&actions_box);
+        // If multiple actions, create action buttons
+        if self.notification.actions.len() > 1 {
+            // Actions come in pairs: [action_id, label, action_id, label, ...]
+            for chunk in self.notification.actions.chunks(2) {
+                if chunk.len() == 2 {
+                    let action_id = chunk[0].clone();
+                    let label = chunk[1].clone();
+
+                    let action_button = gtk4::Button::builder().hexpand(true).build();
+
+                    let button_label = gtk4::Label::builder()
+                        .label(&label)
+                        .halign(gtk4::Align::Center)
+                        .hexpand(true)
+                        .build();
+
+                    action_button.set_child(Some(&button_label));
+
+                    action_button.connect_clicked(clone!(
+                        #[strong]
+                        sender,
+                        #[strong]
+                        action_id,
+                        move |_| {
+                            sender.input(NotificationCardMsg::Action(action_id.clone()));
+                        }
+                    ));
+
+                    widgets.actions_box.append(&action_button);
+                }
+            }
+        }
+
+        widgets
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
+        match msg {
+            NotificationCardMsg::Dismiss => {
+                let _ = sender.output(NotificationCardOutput::Dismiss(self.notification.id));
+            }
+            NotificationCardMsg::Action(action_id) => {
+                let _ = sender.output(NotificationCardOutput::Action(
+                    self.notification.id,
+                    action_id,
+                ));
+            }
+        }
+    }
+}
+
+impl NotificationCard {
+    fn get_urgency_class(&self) -> &'static str {
+        match self.notification.urgency {
+            NotificationUrgency::Low => "low",
+            NotificationUrgency::Normal => "normal",
+            NotificationUrgency::Critical => "critical",
         }
     }
 
-    fn format_time(timestamp: i64) -> String {
-        let datetime =
-            chrono::DateTime::from_timestamp(timestamp, 0).unwrap_or_else(chrono::Utc::now);
-        let local_time = datetime.with_timezone(&chrono::Local);
-        local_time.format("%-I:%M %P").to_string()
+    fn has_app_icon(&self) -> bool {
+        !self.notification.app_icon.is_empty() || is_icon(&self.notification.desktop_entry)
     }
 
-    pub fn widget(&self) -> &Box {
-        &self.container
+    fn get_app_icon_name(&self) -> Option<String> {
+        if !self.notification.app_icon.is_empty() {
+            Some(self.notification.app_icon.clone())
+        } else if is_icon(&self.notification.desktop_entry) {
+            Some(self.notification.desktop_entry.clone())
+        } else {
+            None
+        }
+    }
+
+    fn has_notification_image(&self) -> bool {
+        !self.notification.image.is_empty()
+    }
+
+    fn format_time(&self, timestamp: i64) -> String {
+        use chrono::{DateTime, Local, Utc};
+
+        let datetime = DateTime::from_timestamp(timestamp, 0)
+            .unwrap_or_else(Utc::now)
+            .with_timezone(&Local);
+
+        datetime.format("%-I:%M %P").to_string()
     }
 
     pub fn notification_id(&self) -> u32 {
         self.notification.id
     }
 }
+
+// Export the factory component for use in other modules
+pub type NotificationCardFactory = NotificationCard;
