@@ -50,5 +50,6 @@ glib-build-tools = "0.21"
 
 [features]
 default = []
+docs = []
 # networkmanager = ["nm-rs"]
 # audio = ["pipewire", "wireplumber"]
