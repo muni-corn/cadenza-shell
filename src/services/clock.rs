@@ -1,4 +1,3 @@
-use chrono::{DateTime, Local};
 use gtk4::glib;
 
 mod imp {
@@ -51,11 +50,11 @@ mod imp {
         fn update_time(&self) {
             let now: DateTime<Local> = Local::now();
 
-            // Format time string (24-hour format)
-            let time_str = now.format("%H:%M").to_string();
+            // Format time string
+            let time_str = now.format("%-I:%M %P").to_string();
 
             // Format date string
-            let date_str = now.format("%a, %b %d").to_string();
+            let date_str = now.format("%a, %b %-d").to_string();
 
             // Update properties and notify
             self.obj().set_time_string(time_str);
@@ -90,21 +89,6 @@ impl Default for ClockService {
 impl ClockService {
     pub fn new() -> Self {
         glib::Object::builder().build()
-    }
-
-    pub fn format_time_12h(&self) -> String {
-        let now: DateTime<Local> = Local::now();
-        now.format("%I:%M %p").to_string()
-    }
-
-    pub fn format_time_with_seconds(&self) -> String {
-        let now: DateTime<Local> = Local::now();
-        now.format("%H:%M:%S").to_string()
-    }
-
-    pub fn format_full_date(&self) -> String {
-        let now: DateTime<Local> = Local::now();
-        now.format("%A, %B %d, %Y").to_string()
     }
 
     pub fn is_am(&self) -> bool {
