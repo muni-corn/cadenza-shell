@@ -7,7 +7,7 @@ const NOTIFICATION_ICON: &str = "󰂚";
 const NOTIFICATION_NEW_ICON: &str = "󰂛";
 
 #[derive(Debug)]
-struct NotificationsWidget {
+pub struct NotificationsWidget {
     notification_count: u32,
     has_notifications: bool,
 }

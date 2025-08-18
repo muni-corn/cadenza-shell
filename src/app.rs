@@ -4,11 +4,11 @@ use relm4::prelude::*;
 use std::collections::HashMap;
 
 use crate::style::load_css;
-use crate::widgets::minimal_bar::MinimalBar;
+use crate::widgets::bar::Bar;
 
 #[derive(Debug)]
-struct MuseShell {
-    bars: HashMap<String, Controller<MinimalBar>>,
+pub(crate) struct MuseShellModel {
+    bars: HashMap<String, Controller<Bar>>,
     display: Display,
 }
 
@@ -87,17 +87,15 @@ impl SimpleComponent for MuseShellModel {
                 let connector = monitor.connector();
                 if let Some(connector) = connector {
                     let connector_str = connector.to_string();
-                    
-                    if !self.bars.contains_key(&connector_str) {
-                        log::info!("Creating bar for monitor: {}", connector_str);
-                        
-                        // Create a new bar component for this monitor
-                        let bar_controller = MinimalBar::builder()
-                            .launch(monitor.clone())
-                            .detach();
-                        
-                        self.bars.insert(connector_str, bar_controller);
-                    }
+
+                    self.bars
+                        .entry(connector_str.clone())
+                        .or_insert_with(move || {
+                            log::info!("creating bar for monitor: {}", connector_str);
+
+                            // create a new bar component for this monitor
+                            Bar::builder().launch(monitor.clone()).detach()
+                        });
                 }
             }
             MuseShellMsg::MonitorRemoved(connector) => {
