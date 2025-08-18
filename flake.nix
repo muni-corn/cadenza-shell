@@ -4,6 +4,11 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
 
+    fenix = {
+      url = "github:nix-community/fenix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     flake-parts = {
       url = "github:hercules-ci/flake-parts";
       inputs.nixpkgs-lib.follows = "nixpkgs";
@@ -14,8 +19,8 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
-    fenix = {
-      url = "github:nix-community/fenix";
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -38,6 +43,7 @@
       imports = [
         inputs.rust-flake.flakeModules.default
         inputs.rust-flake.flakeModules.nixpkgs
+        inputs.treefmt-nix.flakeModule
       ];
 
       perSystem =
@@ -52,6 +58,12 @@
       pname = "cadenza-shell";
         in
         {
+          # formatting
+          treefmt.programs = {
+            rustfmt.enable = true;
+            biome.enable = true;
+          };
+
           # Configure rust-flake
           rust-project = {
             # Use fenix for Rust toolchain
