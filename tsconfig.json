@@ -4,14 +4,24 @@
     "experimentalDecorators": false,
     "jsx": "react-jsx",
     "jsxImportSource": "ags/gtk4",
+    "lib": [
+      "ESNext"
+    ],
     "module": "ES2022",
     "moduleResolution": "Bundler",
     "noEmit": true,
     "skipLibCheck": true,
-    "lib": ["ESNext"],
     "strict": true,
-    "target": "esnext"
+    "target": "ES2020"
   },
-  "exclude": ["**/nix/store/**/*", "node_modules/**/*"],
-  "include": ["src/**/*.ts", "src/**/*.tsx", "env.d.ts", "@girs/"]
+  "exclude": [
+    "**/nix/store/**/*",
+    "node_modules/**/*"
+  ],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "env.d.ts",
+    "@girs/"
+  ]
 }
