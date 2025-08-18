@@ -61,7 +61,10 @@
           # formatting
           treefmt.programs = {
             rustfmt.enable = true;
-            biome.enable = true;
+            biome = {
+              enable = true;
+              settings = pkgs.lib.importJSON ./biome.json;
+            };
           };
 
           # Configure rust-flake
