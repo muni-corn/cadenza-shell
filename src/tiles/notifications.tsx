@@ -1,13 +1,13 @@
 import AstalNotifd from "gi://AstalNotifd";
 import { createState, onCleanup } from "ags";
-import { Attention, type SingleMonitorProps, Tile } from "../utils";
+import { Gtk } from "ags/gtk4";
 import {
   notificationCenterMonitor,
   notificationCenterVisible,
   setNotificationCenterMonitor,
   setNotificationCenterVisible,
 } from "../notifications/notification-center";
-import { Gtk } from "ags/gtk4";
+import { Attention, type SingleMonitorProps, Tile } from "../utils";
 
 const NOTIFICATIONS_NONE = "\udb80\udc9c";
 const NOTIFICATIONS_NEW = "\udb84\udd6b";

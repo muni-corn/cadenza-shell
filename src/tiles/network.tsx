@@ -28,7 +28,7 @@ export const Network = () => {
 
   return (
     <menubutton class="bar-button">
-      <Tile icon={icon} attention={attention}  />
+      <Tile icon={icon} attention={attention} />
       <popover widthRequest={400} heightRequest={400}>
         <WiFiMenu network={network} />
       </popover>
