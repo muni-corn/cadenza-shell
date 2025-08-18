@@ -65,10 +65,14 @@ impl BluetoothWidget {
 
             glib::timeout_add_local_once(
                 std::time::Duration::from_secs(3),
-                glib::clone!(@weak icon_label_clone => move || {
-                    icon_label_clone.remove_css_class("bright");
-                    icon_label_clone.add_css_class("dim");
-                }),
+                glib::clone!(
+                    #[weak]
+                    icon_label_clone,
+                    move || {
+                        icon_label_clone.remove_css_class("bright");
+                        icon_label_clone.add_css_class("dim");
+                    }
+                ),
             );
 
             glib::ControlFlow::Continue

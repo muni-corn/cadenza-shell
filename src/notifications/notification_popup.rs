@@ -60,12 +60,14 @@ impl NotificationPopup {
         let window = self.window.clone();
 
         // Connect to notification count changes to update visibility
-        self.service.connect_notification_count_notify(
-            glib::clone!(@weak window => move |service| {
+        self.service.connect_notification_count_notify(glib::clone!(
+            #[weak]
+            window,
+            move |service| {
                 let has_notifications = service.notification_count() > 0;
                 window.set_visible(has_notifications);
-            }),
-        );
+            }
+        ));
 
         // Monitor for new notifications
         // Note: In a real implementation, we'd need to connect to the actual notification signals

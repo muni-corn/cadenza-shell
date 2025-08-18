@@ -44,45 +44,68 @@ impl VolumeWidget {
                 .build();
 
             // Update icon when either volume or mute changes
-            let update_icon = glib::clone!(@weak icon_label, @weak service, @weak progress_bar => move || {
-                let icon = if service.muted() {
-                    MUTE_ICON
-                } else {
-                    let volume = service.volume();
-                    let idx = if volume == 0.0 {
-                        0 // Silent
-                    } else if volume < 0.5 {
-                        1 // Low
+            let update_icon = glib::clone!(
+                #[weak]
+                icon_label,
+                #[weak]
+                service,
+                #[weak]
+                progress_bar,
+                move || {
+                    let icon = if service.muted() {
+                        MUTE_ICON
                     } else {
-                        2 // High
+                        let volume = service.volume();
+                        let idx = if volume == 0.0 {
+                            0 // Silent
+                        } else if volume < 0.5 {
+                            1 // Low
+                        } else {
+                            2 // High
+                        };
+                        VOLUME_ICONS[idx]
                     };
-                    VOLUME_ICONS[idx]
-                };
-                icon_label.set_text(icon);
+                    icon_label.set_text(icon);
 
-                // Trigger fade animation
-                icon_label.remove_css_class("dim");
-                icon_label.add_css_class("bright");
-                progress_bar.remove_css_class("dim");
-                progress_bar.add_css_class("bright");
+                    // Trigger fade animation
+                    icon_label.remove_css_class("dim");
+                    icon_label.add_css_class("bright");
+                    progress_bar.remove_css_class("dim");
+                    progress_bar.add_css_class("bright");
 
-                glib::timeout_add_local_once(std::time::Duration::from_secs(3),
-                    glib::clone!(@weak icon_label, @weak progress_bar => move || {
-                        icon_label.remove_css_class("bright");
-                        icon_label.add_css_class("dim");
-                        progress_bar.remove_css_class("bright");
-                        progress_bar.add_css_class("dim");
-                    })
-                );
-            });
+                    glib::timeout_add_local_once(
+                        std::time::Duration::from_secs(3),
+                        glib::clone!(
+                            #[weak]
+                            icon_label,
+                            #[weak]
+                            progress_bar,
+                            move || {
+                                icon_label.remove_css_class("bright");
+                                icon_label.add_css_class("dim");
+                                progress_bar.remove_css_class("bright");
+                                progress_bar.add_css_class("dim");
+                            }
+                        ),
+                    );
+                }
+            );
 
-            service.connect_volume_notify(glib::clone!(@strong update_icon => move |_| {
-                update_icon();
-            }));
+            service.connect_volume_notify(glib::clone!(
+                #[strong]
+                update_icon,
+                move |_| {
+                    update_icon();
+                }
+            ));
 
-            service.connect_muted_notify(glib::clone!(@strong update_icon => move |_| {
-                update_icon();
-            }));
+            service.connect_muted_notify(glib::clone!(
+                #[strong]
+                update_icon,
+                move |_| {
+                    update_icon();
+                }
+            ));
 
             // Initial icon update
             update_icon();
