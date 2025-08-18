@@ -6,6 +6,7 @@ pub mod clock;
 pub mod mpris;
 pub mod network;
 pub mod notifications;
+pub mod notifications_relm4;
 pub mod tray;
 pub mod volume;
 pub mod weather;
