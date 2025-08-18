@@ -4,18 +4,18 @@ use relm4::prelude::*;
 use std::collections::HashMap;
 
 use crate::style::load_css;
-use crate::widgets::bar::create_bar;
+use crate::widgets::minimal_bar::MinimalBar;
 
 #[derive(Debug)]
 struct MuseShell {
-    // Store just the connector names for now
-    bars: HashMap<String, String>,
+    bars: HashMap<String, Controller<MinimalBar>>,
+    display: Display,
 }
 
 #[derive(Debug)]
 pub enum MuseShellMsg {
     MonitorAdded(gdk4::Monitor),
-    Quit,
+    MonitorRemoved(String), // monitor connector name
 }
 
 #[relm4::component(pub)]
@@ -26,7 +26,7 @@ impl SimpleComponent for MuseShellModel {
 
     view! {
         gtk::ApplicationWindow {
-            set_visible: false, // Hidden root window
+            set_visible: false, // This is a hidden root window
         }
     }
 
@@ -35,25 +35,48 @@ impl SimpleComponent for MuseShellModel {
         _root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // Load CSS styles
+        // load css styles at startup
         if let Err(e) = load_css() {
             log::warn!("failed to load css: {}", e);
         }
 
-        let display = Display::default().expect("Could not get default display");
-        let monitors = display.monitors();
-        
-        let model = MuseShell {
+        let display = Display::default().expect("could not get default display");
+
+        let model = MuseShellModel {
             bars: HashMap::new(),
+            display: display.clone(),
         };
 
         let widgets = view_output!();
 
-        // Create bars for existing monitors
+        // set up monitor detection
+        let monitors = display.monitors();
+
+        // create bars for existing monitors
         for monitor in monitors.iter::<gdk4::Monitor>() {
             let monitor = monitor.unwrap();
             sender.input(MuseShellMsg::MonitorAdded(monitor));
         }
+
+        // monitor for display changes (hotplug support)
+        let sender_clone = sender.clone();
+        monitors.connect_items_changed(move |monitors, position, removed, added| {
+            // handle removed monitors
+            for i in position..position + removed {
+                if let Some(monitor) = monitors.item(i).and_downcast::<gdk4::Monitor>() {
+                    if let Some(connector) = monitor.connector() {
+                        sender_clone.input(MuseShellMsg::MonitorRemoved(connector.to_string()));
+                    }
+                }
+            }
+
+            // handle added monitors
+            for i in position..position + added {
+                if let Some(monitor) = monitors.item(i).and_downcast::<gdk4::Monitor>() {
+                    sender_clone.input(MuseShellMsg::MonitorAdded(monitor));
+                }
+            }
+        });
 
         ComponentParts { model, widgets }
     }
@@ -68,23 +91,19 @@ impl SimpleComponent for MuseShellModel {
                     if !self.bars.contains_key(&connector_str) {
                         log::info!("Creating bar for monitor: {}", connector_str);
                         
-                        let _bar_controller = create_bar(monitor.clone());
+                        // Create a new bar component for this monitor
+                        let bar_controller = MinimalBar::builder()
+                            .launch(monitor.clone())
+                            .detach();
                         
-                        self.bars.insert(connector_str.clone(), connector_str);
+                        self.bars.insert(connector_str, bar_controller);
                     }
                 }
             }
-            AppMsg::Quit => {
-                log::info!("Quitting application");
-                relm4::main_application().quit();
+            MuseShellMsg::MonitorRemoved(connector) => {
+                log::info!("removing bar for monitor: {}", connector);
+                self.bars.remove(&connector);
             }
         }
     }
-}
-
-// Public interface to run the app
-pub fn run() -> gtk4::glib::ExitCode {
-    let app = RelmApp::new("com.muse.shell");
-    app.run::<MuseShell>(());
-    gtk4::glib::ExitCode::SUCCESS
 }
