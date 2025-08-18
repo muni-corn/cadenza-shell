@@ -2,9 +2,9 @@ use crate::settings;
 use chrono::Timelike;
 use gtk4::{glib, prelude::*};
 use relm4::{
-    component::{AsyncComponent, AsyncComponentParts},
-    gtk::{self, DrawingArea},
-    AsyncComponentSender,
+    ComponentSender,
+    component::{ComponentParts, SimpleComponent},
+    gtk::DrawingArea,
 };
 use std::{f64::consts::PI, time::Duration};
 
@@ -14,16 +14,13 @@ pub struct AnalogClock {
 }
 
 #[derive(Debug)]
-pub enum AnalogClockMsg {
-    UpdateTime,
-}
+pub enum AnalogClockMsg {}
 
-#[relm4::component(pub async)]
-impl AsyncComponent for AnalogClock {
+#[relm4::component(pub)]
+impl SimpleComponent for AnalogClock {
     type Init = f64;
     type Input = AnalogClockMsg;
     type Output = ();
-    type CommandOutput = ();
 
     view! {
         #[root]
@@ -110,41 +107,26 @@ impl AsyncComponent for AnalogClock {
         }
     }
 
-    async fn init(
+    fn init(
         radius: Self::Init,
         root: Self::Root,
-        sender: AsyncComponentSender<Self>,
-    ) -> AsyncComponentParts<Self> {
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
         let model = AnalogClock { radius };
 
         let widgets = view_output!();
 
-        // Start the timer for updates
-        let sender_clone = sender.clone();
-        glib::spawn_future_local(async move {
-            let mut interval = glib::interval(Duration::from_millis(100));
-            while let Some(_) = interval.next().await {
-                let _ = sender_clone.input(AnalogClockMsg::UpdateTime);
-            }
+        // Start the timer for updates - directly update the drawing area
+        let drawing_area_clone = widgets.drawing_area.clone();
+        glib::timeout_add_local(Duration::from_millis(100), move || {
+            drawing_area_clone.queue_draw();
+            glib::ControlFlow::Continue
         });
 
-        AsyncComponentParts { model, widgets }
+        ComponentParts { model, widgets }
     }
 
-    async fn update(
-        &mut self,
-        message: Self::Input,
-        _sender: AsyncComponentSender<Self>,
-        _root: &Self::Root,
-    ) {
-        match message {
-            AnalogClockMsg::UpdateTime => {
-                // Queue redraw
-            }
-        }
-    }
-
-    async fn update_view(&self, widgets: &mut Self::Widgets, _sender: AsyncComponentSender<Self>) {
-        widgets.drawing_area.queue_draw();
+    fn update(&mut self, _message: Self::Input, _sender: ComponentSender<Self>) {
+        // No messages to handle - drawing updates happen via timer
     }
 }
