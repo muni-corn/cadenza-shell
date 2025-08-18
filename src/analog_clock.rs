@@ -108,10 +108,14 @@ impl SimpleComponent for AnalogClock {
     }
 
     fn init(
-        radius: Self::Init,
+        _radius: Self::Init,
         root: Self::Root,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // Use configuration instead of hardcoded radius
+        let config = settings::get_config();
+        let radius = config.tiles.analog_clock_radius;
+
         let model = AnalogClock { radius };
 
         let widgets = view_output!();
