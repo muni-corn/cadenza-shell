@@ -20,7 +20,7 @@ const CLOCK_ICONS: &[&str] = &[
 ];
 
 #[derive(Debug)]
-pub struct ClockWidget {
+struct ClockWidget {
     time: DateTime<Local>,
     service: ClockService,
 }
@@ -146,4 +146,10 @@ impl ClockWidget {
     fn get_date_text(&self) -> String {
         self.time.format("%m/%d").to_string()
     }
+}
+
+pub type ClockController = Controller<ClockWidget>;
+
+pub fn create_clock_widget() -> relm4::ComponentBuilder<ClockWidget> {
+    ClockWidget::builder()
 }
