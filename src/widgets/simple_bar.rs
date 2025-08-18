@@ -3,12 +3,12 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::prelude::*;
 
-use crate::tiles::simple_battery::SimpleBatteryTile;
+use crate::tiles::battery::BatteryWidget;
 use crate::simple_messages::TileOutput;
 
 pub(crate) struct SimpleBar {
     monitor: Monitor,
-    battery: Controller<SimpleBatteryTile>,
+    battery: Controller<BatteryWidget>,
 }
 
 #[derive(Debug)]
@@ -94,7 +94,7 @@ impl SimpleComponent for SimpleBar {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         // Initialize battery tile
-        let battery = SimpleBatteryTile::builder()
+        let battery = BatteryWidget::builder()
             .launch(())
             .forward(sender.input_sender(), |output| {
                 match output {
