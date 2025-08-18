@@ -1,5 +1,4 @@
 mod analog_clock;
-mod analog_clock_relm4;
 mod app;
 mod commands;
 mod settings;

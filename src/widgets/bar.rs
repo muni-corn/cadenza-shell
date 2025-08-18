@@ -3,108 +3,54 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::prelude::*;
 
-use crate::tiles::battery;
-
+use crate::settings;
 
 #[derive(Debug)]
-struct Bar {
+pub struct Bar {
     monitor: Monitor,
 }
 
 #[derive(Debug)]
 pub enum BarMsg {
     TileClicked(String),
+    UpdateClock,
 }
 
 #[derive(Debug)]
-pub enum BarOutput {
-    // Currently no outputs needed
+pub struct BarWidgets {
+    clock_label: gtk::Label,
 }
 
-#[relm4::component]
 impl SimpleComponent for Bar {
     type Init = Monitor;
     type Input = BarMsg;
-    type Output = BarOutput;
+    type Output = ();
+    type Root = gtk::ApplicationWindow;
+    type Widgets = BarWidgets;
 
-    view! {
-        #[root]
-        window = gtk::ApplicationWindow {
-            set_title: Some("Muse Shell Bar"),
-            set_visible: true,
-            
-            // Configure window after creation
-            connect_realize => move |window| {
-                window.init_layer_shell();
-                window.set_layer(Layer::Top);
-                window.set_exclusive_zone(32);
-                window.set_anchor(Edge::Top, true);
-                window.set_anchor(Edge::Left, true);
-                window.set_anchor(Edge::Right, true);
-            },
-
-            #[name = "bar_container"]
-            gtk::Box {
-                set_orientation: gtk::Orientation::Horizontal,
-                add_css_class: "bar",
-                set_height_request: 32,
-
-                // Left section
-                #[name = "left_section"]
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 20,
-                    
-                    gtk::Label {
-                        set_text: "Workspaces",
-                        add_css_class: "placeholder",
-                    },
-                },
-
-                // Center section - clock placeholder
-                #[name = "center_section"] 
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_halign: gtk::Align::Center,
-                    set_hexpand: true,
-                    
-                    gtk::Label {
-                        set_text: "12:00",
-                        add_css_class: "clock",
-                    },
-                },
-
-                // Right section - system tiles
-                #[name = "right_section"]
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 8,
-                    set_halign: gtk::Align::End,
-                    set_hexpand: true,
-                    
-                    // Battery tile will be added after initialization
-                },
-            }
-        }
+    fn init_root() -> Self::Root {
+        gtk::ApplicationWindow::builder()
+            .title("muse-shell")
+            .default_height(32)
+            .visible(true)
+            .build()
     }
 
     fn init(
         monitor: Self::Init,
-        root: Self::Root,
-        _sender: ComponentSender<Self>,
+        window: Self::Root,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = Bar {
-            monitor: monitor.clone(),
-        };
+        log::debug!("Initializing layer shell for bar window");
 
-        let widgets = view_output!();
+        let model = Bar { monitor };
 
-        // Set monitor for the window after creation
-        widgets.window.set_monitor(Some(&monitor));
-
-        // Initialize battery tile and add to right section
-        let battery_widget = battery::create_battery_widget();
-        widgets.right_section.append(&battery_widget);
+        // Start clock update timer
+        let sender_clone = sender.clone();
+        gtk4::glib::timeout_add_seconds_local(1, move || {
+            sender_clone.input(BarMsg::UpdateClock);
+            gtk4::glib::ControlFlow::Continue
+        });
 
         // init layer shell
         if !window.is_layer_window() {
@@ -182,12 +128,15 @@ impl SimpleComponent for Bar {
         match msg {
             BarMsg::TileClicked(tile_name) => {
                 log::debug!("Tile clicked: {}", tile_name);
+                // Handle tile clicks - could show popups, menus, etc.
             }
+            BarMsg::UpdateClock => {}
         }
     }
 
-// Public function to create a bar for a monitor
-pub fn create_bar(monitor: Monitor) {
-    let _controller = Bar::builder().launch(monitor).detach();
-    // The controller is detached and will live independently
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        widgets
+            .clock_label
+            .set_label(&chrono::Local::now().format("%H:%M:%S").to_string());
+    }
 }

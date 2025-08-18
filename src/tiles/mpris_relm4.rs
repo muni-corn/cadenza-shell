@@ -21,7 +21,7 @@ impl Default for PlaybackStatus {
 }
 
 #[derive(Debug)]
-struct MprisWidget {
+pub struct MprisWidget {
     title: String,
     artist: String,
     status: PlaybackStatus,

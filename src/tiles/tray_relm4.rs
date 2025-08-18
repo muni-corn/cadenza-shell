@@ -4,7 +4,7 @@ use relm4::prelude::*;
 use crate::messages::TileOutput;
 
 #[derive(Debug)]
-struct TrayWidget {
+pub struct TrayWidget {
     item_count: u32,
     visible: bool,
 }

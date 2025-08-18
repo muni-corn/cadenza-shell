@@ -25,7 +25,7 @@ impl Default for WeatherData {
 }
 
 #[derive(Debug)]
-struct WeatherWidget {
+pub struct WeatherWidget {
     weather_data: WeatherData,
     loading: bool,
 }
