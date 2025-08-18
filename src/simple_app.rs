@@ -84,5 +84,6 @@ impl SimpleComponent for SimpleApp {
 
 pub fn run_simple_app() -> gtk4::glib::ExitCode {
     let app = RelmApp::new("com.muse.shell");
-    app.run::<SimpleApp>(())
+    app.run::<SimpleApp>(());
+    gtk4::glib::ExitCode::SUCCESS
 }
