@@ -1,108 +1,141 @@
-use crate::services::brightness::BrightnessService;
-use crate::utils::icons::{BRIGHTNESS_ICONS, percentage_to_icon_from_list};
-use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4::{Box, Label, Orientation, ProgressBar};
+use relm4::prelude::*;
 
-pub struct BrightnessWidget {
-    container: Box,
-    _service: BrightnessService,
+use crate::messages::TileOutput;
+use crate::services::brightness::BrightnessService;
+
+#[derive(Debug)]
+pub struct BrightnessTile {
+    brightness: f64,
+    available: bool,
+    service: BrightnessService,
 }
 
-impl BrightnessWidget {
-    pub fn new() -> Self {
-        let container = Box::builder()
-            .orientation(Orientation::Horizontal)
-            .spacing(8)
-            .css_classes(vec!["tile"])
-            .build();
+#[derive(Debug)]
+pub enum BrightnessMsg {
+    Click,
+    Scroll(f64), // delta
+    ServiceUpdate { brightness: f64, available: bool },
+}
 
-        let service = BrightnessService::new();
+#[relm4::component(pub)]
+impl SimpleComponent for BrightnessTile {
+    type Init = ();
+    type Input = BrightnessMsg;
+    type Output = TileOutput;
 
-        // Only show widget if brightness is available
-        service
-            .bind_property("available", &container, "visible")
-            .sync_create()
-            .build();
+    view! {
+        #[root]
+        tile_button = gtk::Button {
+            add_css_class: "tile",
+            add_css_class: "brightness",
+            #[watch]
+            set_visible: model.available,
 
-        if service.available() {
-            let icon_label = Label::builder()
-                .css_classes(vec!["icon", "dim"])
-                .width_request(16)
-                .build();
+            connect_clicked[sender] => move |_| {
+                sender.input(BrightnessMsg::Click);
+            },
 
-            let progress_bar = ProgressBar::builder()
-                .css_classes(vec!["dim"])
-                .valign(gtk4::Align::Center)
-                .width_request(16)
-                .build();
+            gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                set_spacing: 8,
+                set_halign: gtk::Align::Center,
 
-            // Bind brightness value directly to progress bar
-            service
-                .bind_property("brightness", &progress_bar, "fraction")
-                .sync_create()
-                .build();
+                gtk::Image {
+                    #[watch]
+                    set_icon_name: Some(&model.get_icon()),
+                    add_css_class: "tile-icon",
+                },
 
-            // Update icon based on brightness changes
-            service.connect_brightness_notify(glib::clone!(
-                #[weak]
-                icon_label,
-                move |service| {
-                    let brightness = service.brightness();
-                    let icon = percentage_to_icon_from_list(brightness, BRIGHTNESS_ICONS);
-                    icon_label.set_text(icon);
-
-                    // Trigger fade animation
-                    icon_label.remove_css_class("dim");
-                    icon_label.add_css_class("bright");
-
-                    glib::timeout_add_local_once(
-                        std::time::Duration::from_secs(3),
-                        glib::clone!(
-                            #[weak]
-                            icon_label,
-                            move || {
-                                icon_label.remove_css_class("bright");
-                                icon_label.add_css_class("dim");
-                            }
-                        ),
-                    );
-                }
-            ));
-
-            // Similar animation for progress bar
-            service.connect_brightness_notify(glib::clone!(
-                #[weak]
-                progress_bar,
-                move |_| {
-                    progress_bar.remove_css_class("dim");
-                    progress_bar.add_css_class("bright");
-
-                    glib::timeout_add_local_once(
-                        std::time::Duration::from_secs(3),
-                        glib::clone!(
-                            #[weak]
-                            progress_bar,
-                            move || {
-                                progress_bar.remove_css_class("bright");
-                                progress_bar.add_css_class("dim");
-                            }
-                        ),
-                    );
-                }
-            ));
-
-            container.append(&icon_label);
-            container.append(&progress_bar);
-        }
-
-        Self {
-            container,
-            _service: service,
+                gtk::Label {
+                    #[watch]
+                    set_text: &model.get_text(),
+                    add_css_class: "tile-text",
+                },
+            }
         }
     }
 
-    pub fn widget(&self) -> &Box {
-        &self.container
+    fn init(
+        _init: Self::Init,
+        root: Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        let service = BrightnessService::new();
+
+        let model = BrightnessTile {
+            brightness: 0.0,
+            available: false,
+            service: service.clone(),
+        };
+
+        let widgets = view_output!();
+
+        // Connect to brightness service
+        service.connect_brightness_notify(glib::clone!(
+            #[strong]
+            sender,
+            move |service| {
+                sender.input(BrightnessMsg::ServiceUpdate {
+                    brightness: service.brightness(),
+                    available: service.available(),
+                });
+            }
+        ));
+
+        // Initial update
+        if service.available() {
+            sender.input(BrightnessMsg::ServiceUpdate {
+                brightness: service.brightness(),
+                available: service.available(),
+            });
+        }
+
+        ComponentParts { model, widgets }
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        match msg {
+            BrightnessMsg::Click => {
+                sender
+                    .output(TileOutput::Clicked("brightness".to_string()))
+                    .ok();
+            }
+            BrightnessMsg::Scroll(delta) => {
+                let new_level = (self.brightness + delta * 0.05).clamp(0.0, 1.0);
+                self.service.set_brightness(new_level);
+            }
+            BrightnessMsg::ServiceUpdate {
+                brightness,
+                available,
+            } => {
+                self.brightness = brightness;
+                self.available = available;
+            }
+        }
+    }
+}
+
+impl BrightnessTile {
+    fn get_icon(&self) -> String {
+        if !self.available {
+            return "display-brightness-symbolic".to_string();
+        }
+
+        if self.brightness > 0.8 {
+            "display-brightness-high-symbolic".to_string()
+        } else if self.brightness > 0.4 {
+            "display-brightness-medium-symbolic".to_string()
+        } else {
+            "display-brightness-low-symbolic".to_string()
+        }
+    }
+
+    fn get_text(&self) -> String {
+        if !self.available {
+            return "N/A".to_string();
+        }
+
+        format!("{}%", (self.brightness * 100.0) as u32)
     }
 }
