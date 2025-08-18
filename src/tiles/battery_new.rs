@@ -4,7 +4,7 @@ use relm4::prelude::*;
 use crate::simple_messages::TileOutput;
 
 #[derive(Debug)]
-pub struct SimpleBatteryTile {
+pub(crate) struct SimpleBatteryTile {
     percentage: u32,
     charging: bool,
 }
@@ -15,7 +15,7 @@ pub enum BatteryMsg {
     UpdateData(u32, bool), // percentage, charging
 }
 
-#[relm4::component]
+#[relm4::component(pub)]
 impl SimpleComponent for SimpleBatteryTile {
     type Init = ();
     type Input = BatteryMsg;
@@ -26,7 +26,7 @@ impl SimpleComponent for SimpleBatteryTile {
         tile_button = gtk::Button {
             add_css_class: "tile",
             add_css_class: "battery",
-            
+
             connect_clicked[sender] => move |_| {
                 sender.input(BatteryMsg::Click);
             },
