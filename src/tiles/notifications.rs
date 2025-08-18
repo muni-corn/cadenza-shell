@@ -1,117 +1,207 @@
-use crate::services::notifications::NotificationService;
-use gtk4::glib;
+use std::collections::HashMap;
+
+use gdk4::Monitor;
 use gtk4::prelude::*;
-use gtk4::{Box, Button, Label, Orientation};
+use relm4::{WorkerController, prelude::*};
+
+use crate::{
+    services::notifications::{
+        NotificationService, NotificationServiceMsg, NotificationWorkerOutput, Notification,
+    },
+    notifications::notification_popup::{FreshNotifications, NotificationPopupMsg, NotificationPopupOutput},
+    tiles::Attention,
+    widgets::tile::{Tile, TileMsg, TileOutput},
+};
 
 const NOTIFICATION_ICON: &str = "󰂚";
 const NOTIFICATION_NEW_ICON: &str = "󰂛";
 
-pub struct NotificationTile {
-    container: Box,
-    button: Button,
-    icon_label: Label,
-    count_label: Label,
-    service: NotificationService,
+#[derive(Debug)]
+pub struct NotificationsTile {
+    notification_worker: WorkerController<NotificationService>,
+    notification_count: u32,
+    tile: Controller<Tile>,
+    popups: HashMap<String, Controller<FreshNotifications>>, // monitor_name -> popup
+    active_notifications: HashMap<u32, Notification>,
 }
 
-impl NotificationTile {
-    pub fn new(service: NotificationService) -> Self {
-        let container = Box::builder()
-            .orientation(Orientation::Horizontal)
-            .css_classes(vec!["tile"])
-            .build();
+#[derive(Debug)]
+pub enum NotificationsTileMsg {
+    TileClicked,
+    ServiceUpdate(NotificationWorkerOutput),
+    TogglePopup,
+    PopupOutput(NotificationPopupOutput),
+    MonitorAdded(Monitor),
+    Nothing,
+}
 
-        let button = Button::builder()
-            .css_classes(vec!["notification-button"])
-            .build();
+pub struct NotificationsTileWidgets {
+    _root: <NotificationsTile as Component>::Root,
+}
 
-        let button_content = Box::builder()
-            .orientation(Orientation::Horizontal)
-            .spacing(6)
-            .build();
+impl SimpleComponent for NotificationsTile {
+    type Init = ();
+    type Input = NotificationsTileMsg;
+    type Output = ();
+    type Root = gtk::Box;
+    type Widgets = NotificationsTileWidgets;
 
-        let icon_label = Label::builder()
-            .css_classes(vec!["icon"])
-            .label(NOTIFICATION_ICON)
-            .width_request(16)
-            .build();
+    fn init(
+        _init: Self::Init,
+        root: Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        // initialize notification worker
+        let notification_worker = NotificationService::builder()
+            .detach_worker(())
+            .forward(sender.input_sender(), NotificationsTileMsg::ServiceUpdate);
 
-        let count_label = Label::builder()
-            .css_classes(vec!["count"])
-            .visible(false)
-            .build();
+        // initialize the tile component
+        let tile =
+            Tile::builder()
+                .launch(Default::default())
+                .forward(sender.input_sender(), |msg| match msg {
+                    TileOutput::Clicked => NotificationsTileMsg::TileClicked,
+                    _ => NotificationsTileMsg::Nothing,
+                });
 
-        button_content.append(&icon_label);
-        button_content.append(&count_label);
-        button.set_child(Some(&button_content));
-        container.append(&button);
+        // create popups for all existing monitors
+        let display = gdk4::Display::default().expect("could not get default display");
+        let monitors = display.monitors();
 
-        let tile = Self {
-            container,
-            button,
-            icon_label,
-            count_label,
-            service,
+        for monitor in monitors.iter::<gdk4::Monitor>().flatten() {
+            sender.input(NotificationsTileMsg::MonitorAdded(monitor));
+        }
+
+        root.append(tile.widget());
+
+        let model = NotificationsTile {
+            notification_worker,
+            notification_count: 0,
+            tile,
+            popups: HashMap::new(),
+            active_notifications: HashMap::new(),
         };
 
-        tile.setup_bindings();
-        tile.setup_click_handler();
-
-        tile
+        ComponentParts {
+            model,
+            widgets: NotificationsTileWidgets { _root: root },
+        }
     }
 
-    fn setup_bindings(&self) {
-        // Bind notification count to count label
-        self.service.connect_notification_count_notify(glib::clone!(
-            #[weak(rename_to = count_label)]
-            self.count_label,
-            #[weak(rename_to = icon_label)]
-            self.icon_label,
-            move |service| {
-                let count = service.notification_count();
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        match msg {
+            NotificationsTileMsg::TileClicked => {
+                log::debug!("notifications tile clicked");
+                // request current notifications
+                self.notification_worker
+                    .emit(NotificationServiceMsg::GetNotifications);
+            }
+            NotificationsTileMsg::ServiceUpdate(output) => {
+                match output {
+                    NotificationWorkerOutput::Notifications(notifications) => {
+                        let count = notifications.len() as u32;
+                        self.active_notifications = notifications;
 
-                if count > 0 {
-                    count_label.set_text(&count.to_string());
-                    count_label.set_visible(true);
-                    icon_label.set_text(NOTIFICATION_NEW_ICON);
-                } else {
-                    count_label.set_visible(false);
-                    icon_label.set_text(NOTIFICATION_ICON);
+                        if count != self.notification_count {
+                            self.notification_count = count;
+
+                            // update tile appearance based on notification count
+                            let icon = if count > 0 {
+                                NOTIFICATION_NEW_ICON
+                            } else {
+                                NOTIFICATION_ICON
+                            };
+                            let primary_text = if count > 0 {
+                                Some(count.to_string())
+                            } else {
+                                None
+                            };
+                            let attention = if count > 0 {
+                                Attention::Warning
+                            } else {
+                                Attention::Normal
+                            };
+
+                            self.tile.emit(TileMsg::SetIcon(Some(icon.to_string())));
+                            self.tile.emit(TileMsg::SetPrimary(primary_text));
+                            self.tile.emit(TileMsg::SetAttention(attention));
+                        }
+                    }
+                    NotificationWorkerOutput::NotificationReceived(notification) => {
+                        log::debug!("new notification received: {}", notification.id);
+
+                        // store the notification
+                        self.active_notifications
+                            .insert(notification.id, notification.clone());
+
+                        // show in all existing popups
+                        for popup in self.popups.values() {
+                            popup.emit(NotificationPopupMsg::AddNotification(notification.clone()));
+                        }
+
+                        // refresh notifications count
+                        self.notification_worker
+                            .emit(NotificationServiceMsg::GetNotifications);
+                    }
+                    NotificationWorkerOutput::NotificationClosed { id, reason: _ } => {
+                        log::debug!("notification {} closed", id);
+
+                        // remove from active notifications
+                        self.active_notifications.remove(&id);
+
+                        // remove from all popups
+                        for popup in self.popups.values() {
+                            popup.emit(NotificationPopupMsg::RemoveNotification(id));
+                        }
+
+                        // refresh notifications count
+                        self.notification_worker
+                            .emit(NotificationServiceMsg::GetNotifications);
+                    }
+                    NotificationWorkerOutput::Error(e) => {
+                        log::error!("notification worker error: {}", e);
+                    }
+                    _ => {}
                 }
             }
-        ));
+            NotificationsTileMsg::Nothing => (),
+            NotificationsTileMsg::PopupOutput(output) => {
+                match output {
+                    NotificationPopupOutput::NotificationDismissed(id) => {
+                        log::debug!("notification {} dismissed from popup", id);
+                        // Tell the service to close this notification
+                        self.notification_worker
+                            .emit(NotificationServiceMsg::CloseNotification(id));
+                    }
+                    _ => {}
+                }
+            }
+            NotificationsTileMsg::MonitorAdded(monitor) => {
+                // create popup for this monitor
+                if let Some(connector) = monitor.connector() {
+                    let connector_str = connector.to_string();
 
-        // Bind has_notifications to widget visibility
-        self.service
-            .bind_property("has-notifications", &self.container, "visible")
-            .sync_create()
-            .build();
+                    if !self.popups.contains_key(&connector_str) {
+                        log::debug!("creating notification popup for monitor: {}", connector_str);
+
+                        let popup = FreshNotifications::builder()
+                            .launch(monitor)
+                            .forward(sender.input_sender(), NotificationsTileMsg::PopupOutput);
+
+                        // Send existing notifications to the new popup
+                        for notification in self.active_notifications.values() {
+                            popup.emit(NotificationPopupMsg::AddNotification(notification.clone()));
+                        }
+
+                        self.popups.insert(connector_str, popup);
+                    }
+                }
+            }
+        }
     }
 
-    fn setup_click_handler(&self) {
-        self.button.connect_clicked(move |_| {
-            // TODO: Toggle notification center visibility
-            // This would need to be connected to the notification center instance
-            log::info!("Notification tile clicked - should toggle notification center");
-        });
-    }
-
-    pub fn widget(&self) -> &Box {
-        &self.container
-    }
-
-    pub fn set_click_handler<F>(&self, handler: F)
-    where
-        F: Fn() + 'static,
-    {
-        self.button.connect_clicked(move |_| {
-            handler();
-        });
-    }
-}
-
-impl Default for NotificationTile {
-    fn default() -> Self {
-        Self::new(NotificationService::new())
+    fn init_root() -> Self::Root {
+        gtk::Box::new(gtk::Orientation::Horizontal, 0)
     }
 }
