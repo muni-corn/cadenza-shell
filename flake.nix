@@ -14,6 +14,11 @@
       inputs.nixpkgs-lib.follows = "nixpkgs";
     };
 
+    git-hooks-nix = {
+      url = "github:cachix/git-hooks.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     rust-flake = {
       url = "github:juspay/rust-flake";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -41,6 +46,7 @@
       ];
 
       imports = [
+        inputs.git-hooks-nix.flakeModule
         inputs.rust-flake.flakeModules.default
         inputs.rust-flake.flakeModules.nixpkgs
         inputs.treefmt-nix.flakeModule
@@ -49,6 +55,7 @@
       perSystem =
         {
           self',
+          config,
           pkgs,
           system,
           ...
@@ -58,13 +65,32 @@
       pname = "cadenza-shell";
         in
         {
+          # git hooks
+          pre-commit.settings.hooks = {
+            # commit linting
+            commitlint-rs = {
+              enable = true;
+              name = "commitlint-rs";
+              package = pkgs.commitlint-rs;
+              description = "Validate commit messages with commitlint-rs";
+              entry = "${pkgs.lib.getExe pkgs.commitlint-rs} -e";
+              always_run = true;
+              stages = [ "commit-msg" ];
+            };
+
+            # format on commit
+            treefmt.enable = true;
+          };
+
           # formatting
           treefmt.programs = {
-            rustfmt.enable = true;
             biome = {
               enable = true;
               settings = pkgs.lib.importJSON ./biome.json;
             };
+            nixfmt.enable = true;
+            rustfmt.enable = true;
+            taplo.enable = true;
           };
 
           # Configure rust-flake
@@ -144,7 +170,10 @@
           # Development shell
           devShells.default = pkgs.mkShell {
             # for some reason, using the dev shell directly doesn't work, but this does
-            inputsFrom = [ self'.devShells.rust ];
+            inputsFrom = [
+              self'.devShells.rust
+              config.pre-commit.devShell
+            ];
             packages = [ pkgs.cargo-outdated ];
           };
         };
