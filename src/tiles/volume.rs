@@ -1,127 +1,166 @@
-use crate::services::audio::AudioService;
-use crate::utils::icons::{MUTE_ICON, VOLUME_ICONS};
-use gtk4::glib;
 use gtk4::prelude::*;
-use gtk4::{Box, Label, Orientation, ProgressBar};
+use relm4::prelude::*;
 
-pub struct VolumeWidget {
-    container: Box,
+use crate::messages::TileOutput;
+use crate::services::audio::AudioService;
+
+#[derive(Debug)]
+pub struct VolumeTile {
+    volume: f64,
+    muted: bool,
+    available: bool,
     service: AudioService,
 }
 
-impl VolumeWidget {
-    pub fn new() -> Self {
-        let container = Box::builder()
-            .orientation(Orientation::Horizontal)
-            .spacing(8)
-            .css_classes(vec!["tile"])
-            .build();
+#[derive(Debug)]
+pub enum VolumeMsg {
+    Click,
+    RightClick,
+    Scroll(f64), // delta for volume adjustment
+    ServiceUpdate {
+        volume: f64,
+        muted: bool,
+        available: bool,
+    },
+}
 
+#[relm4::component(pub)]
+impl SimpleComponent for VolumeTile {
+    type Init = ();
+    type Input = VolumeMsg;
+    type Output = TileOutput;
+
+    view! {
+        #[root]
+        tile_button = gtk::Button {
+            add_css_class: "tile",
+            add_css_class: "volume",
+            #[watch]
+            set_visible: model.available,
+
+            connect_clicked[sender] => move |_| {
+                sender.input(VolumeMsg::Click);
+            },
+
+            gtk::Box {
+                set_orientation: gtk::Orientation::Horizontal,
+                set_spacing: 8,
+                set_halign: gtk::Align::Center,
+
+                gtk::Image {
+                    #[watch]
+                    set_icon_name: Some(&model.get_icon()),
+                    add_css_class: "tile-icon",
+                },
+
+                gtk::Label {
+                    #[watch]
+                    set_text: &model.get_text(),
+                    add_css_class: "tile-text",
+                },
+            }
+        }
+    }
+
+    fn init(
+        _init: Self::Init,
+        root: Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
         let service = AudioService::new();
 
-        // Only show widget if audio is available
-        service
-            .bind_property("available", &container, "visible")
-            .sync_create()
-            .build();
+        let model = VolumeTile {
+            volume: 0.0,
+            muted: false,
+            available: false,
+            service: service.clone(),
+        };
 
-        if service.available() {
-            let icon_label = Label::builder()
-                .css_classes(vec!["icon", "dim"])
-                .width_request(16)
-                .build();
+        let widgets = view_output!();
 
-            let progress_bar = ProgressBar::builder()
-                .css_classes(vec!["dim"])
-                .valign(gtk4::Align::Center)
-                .width_request(16)
-                .build();
+        // Connect to audio service updates
+        service.connect_volume_notify(glib::clone!(
+            #[strong]
+            sender,
+            move |service| {
+                sender.input(VolumeMsg::ServiceUpdate {
+                    volume: service.volume(),
+                    muted: service.muted(),
+                    available: service.available(),
+                });
+            }
+        ));
 
-            // Bind volume to progress bar
-            service
-                .bind_property("volume", &progress_bar, "fraction")
-                .sync_create()
-                .build();
+        service.connect_muted_notify(glib::clone!(
+            #[strong]
+            sender,
+            move |service| {
+                sender.input(VolumeMsg::ServiceUpdate {
+                    volume: service.volume(),
+                    muted: service.muted(),
+                    available: service.available(),
+                });
+            }
+        ));
 
-            // Update icon when either volume or mute changes
-            let update_icon = glib::clone!(
-                #[weak]
-                icon_label,
-                #[weak]
-                service,
-                #[weak]
-                progress_bar,
-                move || {
-                    let icon = if service.muted() {
-                        MUTE_ICON
-                    } else {
-                        let volume = service.volume();
-                        let idx = if volume == 0.0 {
-                            0 // Silent
-                        } else if volume < 0.5 {
-                            1 // Low
-                        } else {
-                            2 // High
-                        };
-                        VOLUME_ICONS[idx]
-                    };
-                    icon_label.set_text(icon);
+        ComponentParts { model, widgets }
+    }
 
-                    // Trigger fade animation
-                    icon_label.remove_css_class("dim");
-                    icon_label.add_css_class("bright");
-                    progress_bar.remove_css_class("dim");
-                    progress_bar.add_css_class("bright");
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        match msg {
+            VolumeMsg::Click => {
+                // Toggle mute
+                self.service.set_muted(!self.muted);
+                sender
+                    .output(TileOutput::Clicked("volume".to_string()))
+                    .ok();
+            }
+            VolumeMsg::RightClick => {
+                // Could show volume mixer
+            }
+            VolumeMsg::Scroll(delta) => {
+                let new_volume = (self.volume + delta * 0.05).clamp(0.0, 1.0);
+                self.service.set_volume(new_volume);
+            }
+            VolumeMsg::ServiceUpdate {
+                volume,
+                muted,
+                available,
+            } => {
+                self.volume = volume;
+                self.muted = muted;
+                self.available = available;
+            }
+        }
+    }
+}
 
-                    glib::timeout_add_local_once(
-                        std::time::Duration::from_secs(3),
-                        glib::clone!(
-                            #[weak]
-                            icon_label,
-                            #[weak]
-                            progress_bar,
-                            move || {
-                                icon_label.remove_css_class("bright");
-                                icon_label.add_css_class("dim");
-                                progress_bar.remove_css_class("bright");
-                                progress_bar.add_css_class("dim");
-                            }
-                        ),
-                    );
-                }
-            );
-
-            service.connect_volume_notify(glib::clone!(
-                #[strong]
-                update_icon,
-                move |_| {
-                    update_icon();
-                }
-            ));
-
-            service.connect_muted_notify(glib::clone!(
-                #[strong]
-                update_icon,
-                move |_| {
-                    update_icon();
-                }
-            ));
-
-            // Initial icon update
-            update_icon();
-
-            container.append(&icon_label);
-            container.append(&progress_bar);
+impl VolumeTile {
+    fn get_icon(&self) -> String {
+        if !self.available {
+            return "audio-volume-muted-symbolic".to_string();
         }
 
-        Self { container, service }
+        if self.muted || self.volume == 0.0 {
+            "audio-volume-muted-symbolic".to_string()
+        } else if self.volume > 0.8 {
+            "audio-volume-high-symbolic".to_string()
+        } else if self.volume > 0.3 {
+            "audio-volume-medium-symbolic".to_string()
+        } else {
+            "audio-volume-low-symbolic".to_string()
+        }
     }
 
-    pub fn widget(&self) -> &Box {
-        &self.container
-    }
+    fn get_text(&self) -> String {
+        if !self.available {
+            return "N/A".to_string();
+        }
 
-    pub fn service(&self) -> &AudioService {
-        &self.service
+        if self.muted {
+            "Muted".to_string()
+        } else {
+            format!("{}%", (self.volume * 100.0) as u32)
+        }
     }
 }
