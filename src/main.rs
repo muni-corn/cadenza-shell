@@ -8,6 +8,7 @@ mod style;
 mod tiles;
 mod utils;
 mod widgets;
+mod wifi_menu;
 
 use app::run;
 
