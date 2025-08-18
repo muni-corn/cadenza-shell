@@ -49,7 +49,7 @@ mod imp {
     use gtk4::glib::{self, Properties};
     use gtk4::prelude::*;
     use gtk4::subclass::prelude::*;
-    use gtk4::{Box, Label, Orientation};
+    use gtk4::{Label, Orientation};
     use std::cell::{Cell, RefCell};
 
     #[derive(Properties, Default)]
@@ -71,7 +71,6 @@ mod imp {
         tile_visible: Cell<bool>,
 
         // UI elements
-        container: Box,
         icon_label: Label,
         primary_label: Label,
         secondary_label: Label,
@@ -81,15 +80,9 @@ mod imp {
     impl ObjectSubclass for Tile {
         const NAME: &'static str = "MuseShellTile";
         type Type = super::Tile;
-        type ParentType = gtk4::Widget;
+        type ParentType = gtk4::Box;
 
         fn new() -> Self {
-            let container = Box::builder()
-                .orientation(Orientation::Horizontal)
-                .spacing(12)
-                .css_classes(vec!["tile"])
-                .build();
-
             let icon_label = Label::builder()
                 .css_classes(vec!["icon"])
                 .width_request(16)
@@ -99,17 +92,12 @@ mod imp {
 
             let secondary_label = Label::builder().css_classes(vec!["secondary"]).build();
 
-            container.append(&icon_label);
-            container.append(&primary_label);
-            container.append(&secondary_label);
-
             Self {
                 icon: RefCell::new(None),
                 primary: RefCell::new(None),
                 secondary: RefCell::new(None),
                 attention: Cell::new(Attention::Normal.into()),
                 tile_visible: Cell::new(true),
-                container,
                 icon_label,
                 primary_label,
                 secondary_label,
@@ -121,14 +109,26 @@ mod imp {
     impl ObjectImpl for Tile {
         fn constructed(&self) {
             self.parent_constructed();
-            self.obj().set_parent(&self.container);
-            
+
+            // Configure the box (self.obj() is the Box)
+            let obj = self.obj();
+            obj.set_orientation(Orientation::Horizontal);
+            obj.set_spacing(12);
+            obj.add_css_class("tile");
+
+            // Add children to the box
+            obj.append(&self.icon_label);
+            obj.append(&self.primary_label);
+            obj.append(&self.secondary_label);
+
             // Initial display update
             self.update_display();
         }
     }
 
     impl WidgetImpl for Tile {}
+
+    impl BoxImpl for Tile {}
 
     impl Tile {
         pub fn update_display(&self) {
@@ -174,7 +174,7 @@ mod imp {
             }
 
             // Update visibility
-            self.container.set_visible(self.tile_visible.get());
+            self.obj().set_visible(self.tile_visible.get());
         }
     }
 
@@ -189,7 +189,8 @@ mod imp {
 
 glib::wrapper! {
     pub struct Tile(ObjectSubclass<imp::Tile>)
-        @extends gtk4::Widget;
+        @extends gtk4::Box, gtk4::Widget,
+        @implements gtk4::Orientable;
 }
 
 // Attention enum is defined at module level
