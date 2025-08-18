@@ -13,8 +13,13 @@ gio = "0.20"
 gdk4 = { version = "0.9", features = ["v4_14"] }
 pango = "0.20"
 
+# Relm4 - Modern GTK4 framework
+relm4 = { version = "0.9", features = ["macros"] }
+relm4-components = "0.9"
+
 # Async and concurrency
 tokio = { version = "1", features = ["full"] }
+async-channel = "2.3"
 
 # System integration
 zbus = { version = "5", features = ["tokio"] }
