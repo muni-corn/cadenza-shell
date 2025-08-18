@@ -93,13 +93,12 @@ impl SimpleComponent for ClockWidget {
 
         let widgets = view_output!();
 
-        // Connect to clock service updates using generic notify
-        service.connect_notify_local(Some("current-time"), glib::clone!(
-            #[weak] sender,
-            move |service, _| {
-                sender.input(ClockMsg::TimeUpdate(service.current_time()));
-            }
-        ));
+        // Connect to clock service updates - use a timer for now
+        let sender_clone = sender.clone();
+        glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+            sender_clone.input(ClockMsg::TimeUpdate(Local::now()));
+            glib::ControlFlow::Continue
+        });
 
         ComponentParts { model, widgets }
     }
