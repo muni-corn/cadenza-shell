@@ -1,5 +1,6 @@
 mod analog_clock;
 mod app;
+mod commands;
 mod simple_messages;
 mod notifications;
 mod services;
