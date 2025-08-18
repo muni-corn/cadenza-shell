@@ -1,18 +1,21 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
+use relm4::WorkerController;
 
 use crate::simple_messages::TileOutput;
+use crate::services::battery_worker::{BatteryWorker, BatteryData, BatteryStatus};
 
 #[derive(Debug)]
 struct BatteryWidget {
     percentage: u32,
     charging: bool,
+    battery_worker: WorkerController<BatteryWorker>,
 }
 
 #[derive(Debug)]
 pub enum BatteryMsg {
     Click,
-    UpdateData(u32, bool), // percentage, charging
+    UpdateData(BatteryData),
 }
 
 #[relm4::component]
@@ -37,7 +40,8 @@ impl SimpleComponent for BatteryWidget {
                 set_halign: gtk::Align::Center,
 
                 gtk::Image {
-                    set_icon_name: Some("battery-symbolic"),
+                    #[watch]
+                    set_icon_name: Some(&model.get_battery_icon()),
                     add_css_class: "tile-icon",
                 },
 
@@ -55,9 +59,15 @@ impl SimpleComponent for BatteryWidget {
         _root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // Initialize the battery worker
+        let battery_worker = BatteryWorker::builder()
+            .detach_worker(())
+            .forward(sender.input_sender(), |data| BatteryMsg::UpdateData(data));
+
         let model = BatteryWidget {
             percentage: 50,
             charging: false,
+            battery_worker,
         };
 
         let widgets = view_output!();
@@ -71,11 +81,28 @@ impl SimpleComponent for BatteryWidget {
                 log::debug!("Battery tile clicked");
                 let _ = sender.output(TileOutput::Clicked("battery".to_string()));
             }
-            BatteryMsg::UpdateData(percentage, charging) => {
-                self.percentage = percentage;
-                self.charging = charging;
+            BatteryMsg::UpdateData(data) => {
+                if data.available {
+                    self.percentage = data.percentage;
+                    self.charging = matches!(data.status, BatteryStatus::Charging);
+                }
             }
         }
+    }
+}
+
+impl BatteryWidget {
+    fn get_battery_icon(&self) -> String {
+        use crate::utils::icons::{BATTERY_ICONS, BATTERY_CHARGING_ICONS};
+        
+        let icons = if self.charging {
+            BATTERY_CHARGING_ICONS
+        } else {
+            BATTERY_ICONS
+        };
+        
+        let index = ((self.percentage as f64 / 100.0) * (icons.len() - 1) as f64).round() as usize;
+        icons.get(index).unwrap_or(&"battery-symbolic").to_string()
     }
 }
 
