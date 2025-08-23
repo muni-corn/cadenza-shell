@@ -3,6 +3,7 @@ mod app;
 mod commands;
 mod notifications;
 mod services;
+mod settings;
 mod style;
 mod tiles;
 mod utils;
