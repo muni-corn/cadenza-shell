@@ -50,6 +50,8 @@ impl SimpleComponent for Bar {
             log::debug!("window already is a layer window");
         }
 
+        window.set_namespace(Some("bar"));
+
         window.set_layer(Layer::Top);
         log::debug!("set layer to top");
 
