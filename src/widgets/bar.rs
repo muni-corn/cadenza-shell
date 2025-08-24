@@ -7,7 +7,7 @@ use crate::{settings, tiles::clock::ClockTile};
 
 #[derive(Debug)]
 pub struct Bar {
-    monitor: Monitor,
+    _monitor: Monitor,
 }
 
 #[derive(Debug)]
@@ -38,37 +38,29 @@ impl SimpleComponent for Bar {
         window: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        log::debug!("Initializing layer shell for bar window");
-
-        let model = Bar { monitor };
+        let model = Bar { _monitor: monitor };
 
         // init layer shell
         if !window.is_layer_window() {
             window.init_layer_shell();
-            log::debug!("layer shell initialized: {}", window.is_layer_window());
-        } else {
-            log::debug!("window already is a layer window");
         }
 
         window.set_namespace(Some("bar"));
 
         window.set_layer(Layer::Top);
-        log::debug!("set layer to top");
 
         // Use configuration for bar height
         let config = settings::get_config();
         window.set_exclusive_zone(config.bar.height);
-        log::debug!("set exclusive zone to: {}", config.bar.height);
 
         window.set_anchor(Edge::Top, true);
         window.set_anchor(Edge::Left, true);
         window.set_anchor(Edge::Right, true);
-        log::debug!("set anchors: Top, Left, Right");
 
         let config = settings::get_config();
 
-        let bar = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Horizontal)
+        let bar = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
             .css_classes(["bar"])
             .height_request(config.bar.height)
             .hexpand(true)
@@ -80,17 +72,17 @@ impl SimpleComponent for Bar {
         window.set_child(Some(&bar));
 
         // Left section - workspaces and focused window
-        let left = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Horizontal)
+        let left = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
             .spacing(8)
             .css_classes(["bar-left"])
             .build();
 
         // Center section - spacer and clock
-        let center = gtk4::Box::builder()
+        let center = gtk::Box::builder()
             .hexpand(true)
-            .halign(gtk4::Align::Center)
-            .orientation(gtk4::Orientation::Horizontal)
+            .halign(gtk::Align::Center)
+            .orientation(gtk::Orientation::Horizontal)
             .build();
 
         let clock = ClockTile::builder().launch(()).detach();
@@ -98,8 +90,8 @@ impl SimpleComponent for Bar {
         center.append(clock.widget());
 
         // Right section - system tiles
-        let right = gtk4::Box::builder()
-            .orientation(gtk4::Orientation::Horizontal)
+        let right = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
             .spacing(8)
             .css_classes(["bar-right"])
             .build();
