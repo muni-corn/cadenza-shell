@@ -1,23 +1,30 @@
 fn main() {
     relm4_icons_build::bundle_icons(
-        // Name of the file that will be generated at `OUT_DIR`
+        // name of the file that will be generated at `OUT_DIR`
         "icon_names.rs",
-        // Optional app ID
+        // optional app id
         Some("com.musicaloft.muse-shell"),
-        // Custom base resource path:
-        // * defaults to `/com/example/myapp` in this case if not specified explicitly
-        // * or `/org/relm4` if app ID was not specified either
+        // custom base resource path
         None::<&str>,
-        // Directory with custom icons (if any)
+        // directory with custom icons (if any)
         None::<&str>,
-        // List of icons to include
+        // list of icons to include
         [
-            "clock",
             "clock-alt",
-            "clock-regular",
-            "ssd",
-            "size-horizontally",
-            "cross-small",
+            "clouds-outline",
+            "few-clouds-outline",
+            "fire",
+            "fog",
+            "moon-clouds-outline",
+            "moon-outline",
+            "rain-outline",
+            "rain-scattered-outline",
+            "snow",
+            "snow-outline",
+            "storm-outline",
+            "sun-outline",
+            "tornado",
+            "windy",
         ],
     );
 }
