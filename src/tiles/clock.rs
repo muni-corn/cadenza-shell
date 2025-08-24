@@ -6,12 +6,10 @@ use relm4::prelude::*;
 use tokio::time::interval;
 
 use crate::messages::TileOutput;
-use crate::services::clock::ClockService;
 
 #[derive(Debug)]
 pub struct ClockTile {
     time: DateTime<Local>,
-    service: ClockService,
 }
 
 #[derive(Debug)]
@@ -38,13 +36,9 @@ impl SimpleComponent for ClockTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let service = ClockService::new();
         let current_time = Local::now();
 
-        let model = ClockTile {
-            time: current_time,
-            service: service.clone(),
-        };
+        let model = ClockTile { time: current_time };
 
         let hbox = &gtk::Box::new(gtk4::Orientation::Horizontal, 16);
 
