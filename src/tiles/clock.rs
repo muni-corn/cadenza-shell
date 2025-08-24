@@ -5,6 +5,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 use tokio::time::interval;
 
+use crate::icon_names;
 use crate::messages::TileOutput;
 
 #[derive(Debug)]
@@ -42,16 +43,21 @@ impl SimpleComponent for ClockTile {
 
         let hbox = &gtk::Box::new(gtk4::Orientation::Horizontal, 16);
 
-        let time_label = gtk4::Label::builder()
+        let icon = gtk::Image::builder()
+            .icon_name(icon_names::CLOCK_REGULAR)
+            .build();
+
+        let time_label = gtk::Label::builder()
             .css_classes(["clock-time"])
             .label(model.get_time_text())
             .build();
 
-        let date_label = gtk4::Label::builder()
+        let date_label = gtk::Label::builder()
             .css_classes(["clock-date"])
             .label(model.get_date_text())
             .build();
 
+        hbox.append(&icon);
         hbox.append(&time_label);
         hbox.append(&date_label);
         root.set_child(Some(hbox));
@@ -93,10 +99,7 @@ impl SimpleComponent for ClockTile {
     }
 
     fn init_root() -> Self::Root {
-        gtk::Button::builder()
-            .css_classes(["tile"])
-            .visible(true)
-            .build()
+        gtk::Button::builder().css_classes(["tile"]).build()
     }
 }
 
