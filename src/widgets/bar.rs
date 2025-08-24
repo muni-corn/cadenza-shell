@@ -3,7 +3,7 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::prelude::*;
 
-use crate::settings;
+use crate::{settings, tiles::clock::ClockTile};
 
 #[derive(Debug)]
 pub struct Bar {
@@ -11,14 +11,11 @@ pub struct Bar {
 }
 
 #[derive(Debug)]
-pub enum BarMsg {
-    TileClicked(String),
-    UpdateClock,
-}
+pub enum BarMsg {}
 
 #[derive(Debug)]
 pub struct BarWidgets {
-    clock_label: gtk::Label,
+    _clock: Controller<ClockTile>, // saved so the Controller isn't dropped
 }
 
 impl SimpleComponent for Bar {
@@ -39,18 +36,11 @@ impl SimpleComponent for Bar {
     fn init(
         monitor: Self::Init,
         window: Self::Root,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         log::debug!("Initializing layer shell for bar window");
 
         let model = Bar { monitor };
-
-        // Start clock update timer
-        let sender_clone = sender.clone();
-        gtk4::glib::timeout_add_seconds_local(1, move || {
-            sender_clone.input(BarMsg::UpdateClock);
-            gtk4::glib::ControlFlow::Continue
-        });
 
         // init layer shell
         if !window.is_layer_window() {
@@ -101,12 +91,9 @@ impl SimpleComponent for Bar {
             .orientation(gtk4::Orientation::Horizontal)
             .build();
 
-        let clock_label = gtk4::Label::builder()
-            .label(chrono::Local::now().format("%H:%M").to_string())
-            .css_classes(["bar-clock"])
-            .build();
+        let clock = ClockTile::builder().launch(()).detach();
 
-        center.append(&clock_label);
+        center.append(clock.widget());
 
         // Right section - system tiles
         let right = gtk4::Box::builder()
@@ -119,24 +106,12 @@ impl SimpleComponent for Bar {
         bar.append(&center);
         bar.append(&right);
 
-        let widgets = BarWidgets { clock_label };
+        let widgets = BarWidgets { _clock: clock };
 
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
-        match msg {
-            BarMsg::TileClicked(tile_name) => {
-                log::debug!("Tile clicked: {}", tile_name);
-                // Handle tile clicks - could show popups, menus, etc.
-            }
-            BarMsg::UpdateClock => {}
-        }
-    }
+    fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>) {}
 
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        widgets
-            .clock_label
-            .set_label(&chrono::Local::now().format("%H:%M:%S").to_string());
-    }
+    fn update_view(&self, _widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {}
 }
