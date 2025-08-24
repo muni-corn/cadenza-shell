@@ -18,16 +18,16 @@ pub enum MuseShellMsg {
     MonitorRemoved(String), // monitor connector name
 }
 
-#[relm4::component(pub)]
 impl SimpleComponent for MuseShellModel {
     type Init = ();
     type Input = MuseShellMsg;
     type Output = ();
+    type Root = gtk::ApplicationWindow;
+    type Widgets = ();
 
-    view! {
-        gtk::ApplicationWindow {
-            set_visible: false, // This is a hidden root window
-        }
+    fn init_root() -> Self::Root {
+        // hidden root window
+        gtk::ApplicationWindow::builder().visible(false).build()
     }
 
     fn init(
@@ -46,8 +46,6 @@ impl SimpleComponent for MuseShellModel {
             bars: HashMap::new(),
             display: display.clone(),
         };
-
-        let widgets = view_output!();
 
         // set up monitor detection
         let monitors = display.monitors();
@@ -78,7 +76,7 @@ impl SimpleComponent for MuseShellModel {
             }
         });
 
-        ComponentParts { model, widgets }
+        ComponentParts { model, widgets: () }
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
