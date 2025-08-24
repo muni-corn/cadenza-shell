@@ -10,6 +10,11 @@ mod utils;
 mod widgets;
 mod wifi_menu;
 
+mod icon_names {
+    pub use shipped::*; // Include all shipped icons by default
+    include!(concat!(env!("OUT_DIR"), "/icon_names.rs"));
+}
+
 pub mod tests;
 
 use relm4::RelmApp;
@@ -20,7 +25,9 @@ use crate::app::MuseShellModel;
 async fn main() -> glib::ExitCode {
     env_logger::init();
 
-    // Initialize configuration system
+    relm4_icons::initialize_icons(icon_names::GRESOURCE_BYTES, icon_names::RESOURCE_PREFIX);
+
+    // initialize configuration system
     if let Err(e) = settings::init() {
         log::error!("failed to initialize settings: {}", e);
     }
