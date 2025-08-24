@@ -44,7 +44,7 @@ impl SimpleComponent for ClockTile {
         let hbox = &gtk::Box::new(gtk4::Orientation::Horizontal, 16);
 
         let icon = gtk::Image::builder()
-            .icon_name(icon_names::CLOCK_REGULAR)
+            .icon_name(icon_names::CLOCK_ALT)
             .build();
 
         let time_label = gtk::Label::builder()
