@@ -211,6 +211,7 @@
               config.pre-commit.devShell
             ];
             packages = [ pkgs.cargo-outdated ];
+            RUST_LOG = "info,muse_shell=debug";
           };
         };
     };
