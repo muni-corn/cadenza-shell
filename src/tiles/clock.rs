@@ -1,6 +1,9 @@
+use std::time::Duration;
+
 use chrono::{DateTime, Local};
 use gtk4::prelude::*;
 use relm4::prelude::*;
+use tokio::time::interval;
 
 use crate::messages::TileOutput;
 use crate::services::clock::ClockService;
@@ -14,47 +17,24 @@ pub struct ClockTile {
 #[derive(Debug)]
 pub enum ClockMsg {
     Click,
-    TimeUpdate(DateTime<Local>),
+    UpdateTime,
 }
 
-#[relm4::component(pub)]
+#[derive(Debug)]
+pub struct ClockWidgets {
+    time_label: gtk::Label,
+    date_label: gtk::Label,
+}
+
 impl SimpleComponent for ClockTile {
     type Init = ();
     type Input = ClockMsg;
     type Output = TileOutput;
-
-    view! {
-        #[root]
-        tile_button = gtk::Button {
-            add_css_class: "tile",
-            add_css_class: "clock",
-
-            connect_clicked[sender] => move |_| {
-                sender.input(ClockMsg::Click);
-            },
-
-            gtk::Box {
-                set_orientation: gtk::Orientation::Vertical,
-                set_spacing: 2,
-                set_halign: gtk::Align::Center,
-
-                gtk::Label {
-                    #[watch]
-                    set_text: &model.get_time_text(),
-                    add_css_class: "clock-time",
-                },
-
-                gtk::Label {
-                    #[watch]
-                    set_text: &model.get_date_text(),
-                    add_css_class: "clock-date",
-                },
-            }
-        }
-    }
+    type Root = gtk::Button;
+    type Widgets = ClockWidgets;
 
     fn init(
-        _init: Self::Init,
+        _: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -66,17 +46,41 @@ impl SimpleComponent for ClockTile {
             service: service.clone(),
         };
 
-        let widgets = view_output!();
+        let hbox = &gtk::Box::new(gtk4::Orientation::Horizontal, 16);
 
-        // Connect to clock service updates
-        service.connect_time_string_notify(glib::clone!(
-            #[strong]
-            sender,
-            move |_| {
-                sender.input(ClockMsg::TimeUpdate(Local::now()));
+        let time_label = gtk4::Label::builder()
+            .css_classes(["clock-time"])
+            .label(model.get_time_text())
+            .build();
+
+        let date_label = gtk4::Label::builder()
+            .css_classes(["clock-date"])
+            .label(model.get_date_text())
+            .build();
+
+        hbox.append(&time_label);
+        hbox.append(&date_label);
+        root.set_child(Some(hbox));
+
+        let sender_clone = sender.clone();
+        root.connect_clicked(move |_| {
+            sender_clone.input(ClockMsg::Click);
+        });
+
+        // Update from service every second via property notify
+        let sender_clone = sender.clone();
+        tokio::spawn(async move {
+            let mut interval = interval(Duration::from_secs(1));
+            loop {
+                interval.tick().await;
+                sender_clone.input(ClockMsg::UpdateTime);
             }
-        ));
+        });
 
+        let widgets = ClockWidgets {
+            date_label,
+            time_label,
+        };
         ComponentParts { model, widgets }
     }
 
@@ -85,19 +89,29 @@ impl SimpleComponent for ClockTile {
             ClockMsg::Click => {
                 sender.output(TileOutput::Clicked("clock".to_string())).ok();
             }
-            ClockMsg::TimeUpdate(time) => {
-                self.time = time;
-            }
+            ClockMsg::UpdateTime => self.time = Local::now(),
         }
+    }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        widgets.time_label.set_label(&self.get_time_text());
+        widgets.date_label.set_label(&self.get_date_text());
+    }
+
+    fn init_root() -> Self::Root {
+        gtk::Button::builder()
+            .css_classes(["tile"])
+            .visible(true)
+            .build()
     }
 }
 
 impl ClockTile {
     fn get_time_text(&self) -> String {
-        self.time.format("%H:%M").to_string()
+        self.time.format("%-I:%M %P").to_string()
     }
 
     fn get_date_text(&self) -> String {
-        self.time.format("%m/%d").to_string()
+        self.time.format("%a, %b %-d").to_string()
     }
 }
