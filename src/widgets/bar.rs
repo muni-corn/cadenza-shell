@@ -3,7 +3,10 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::prelude::*;
 
-use crate::{settings, tiles::clock::ClockTile};
+use crate::{
+    settings,
+    tiles::{clock::ClockTile, weather::WeatherTile},
+};
 
 #[derive(Debug)]
 pub struct Bar {
@@ -15,7 +18,9 @@ pub enum BarMsg {}
 
 #[derive(Debug)]
 pub struct BarWidgets {
-    _clock: Controller<ClockTile>, // saved so the Controller isn't dropped
+    // save Controllers so they aren't dropped
+    _clock: Controller<ClockTile>,
+    _weather: Controller<WeatherTile>,
 }
 
 impl SimpleComponent for Bar {
@@ -86,8 +91,10 @@ impl SimpleComponent for Bar {
             .build();
 
         let clock = ClockTile::builder().launch(()).detach();
+        let weather = WeatherTile::builder().launch(()).detach();
 
         center.append(clock.widget());
+        center.append(weather.widget());
 
         // Right section - system tiles
         let right = gtk::Box::builder()
@@ -100,7 +107,10 @@ impl SimpleComponent for Bar {
         bar.append(&center);
         bar.append(&right);
 
-        let widgets = BarWidgets { _clock: clock };
+        let widgets = BarWidgets {
+            _clock: clock,
+            _weather: weather,
+        };
 
         ComponentParts { model, widgets }
     }
