@@ -331,8 +331,15 @@ impl Worker for NotificationService {
     }
 }
 
-impl Default for NotificationService {
-    fn default() -> Self {
-        Self::new()
-    }
+async fn initialize_notifications_daemon(
+    sender: ComponentSender<NotificationService>,
+) -> Result<Connection> {
+    Ok(zbus::connection::Builder::session()?
+        .name("org.freedesktop.Notifications")?
+        .serve_at(
+            "/org/freedesktop/Notifications",
+            NotificationsDaemon::new(sender),
+        )?
+        .build()
+        .await?)
 }
