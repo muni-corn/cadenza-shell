@@ -47,6 +47,7 @@
   thread-safe sharing
 - **Icons**: Use const arrays in `src/utils/icons.rs`
 - **Services**: Implement as GObject subclasses with properties
+- **Components**: Prefer manual relm4 implementation over `view!` macro for cleaner, more maintainable code. Follow the pattern in `src/tiles/clock.rs` and `src/tiles/weather.rs`
 
 ### Legacy TypeScript Implementation
 
