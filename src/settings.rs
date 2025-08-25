@@ -70,9 +70,9 @@ impl Default for BarConfig {
     fn default() -> Self {
         Self {
             height: 32,
-            position: "top".to_string(),
-            spacing: 8,
-            margin: 8,
+            position: BarPosition::Top,
+            tile_spacing: 12,
+            edge_padding: 8,
         }
     }
 }
