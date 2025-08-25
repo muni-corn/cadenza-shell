@@ -30,73 +30,24 @@ pub enum WeatherMsg {
     UpdateWeather(WeatherData),
 }
 
-#[relm4::component(pub)]
+#[derive(Debug)]
+pub struct WeatherWidgets {
+    root: gtk::Button,
+    icon: gtk::Image,
+    temp_label: gtk::Label,
+    cond_label: gtk::Label,
+}
+
 impl SimpleComponent for WeatherTile {
     type Init = ();
     type Input = WeatherMsg;
     type Output = TileOutput;
-
-    view! {
-        #[root]
-        tile_button = gtk::Button {
-            add_css_class: "tile",
-            add_css_class: "weather",
-
-            #[watch]
-            set_visible: model.weather_data.is_some(),
-
-            connect_clicked[sender] => move |_| {
-                sender.input(WeatherMsg::Click);
-            },
-
-            gtk::Box {
-                set_orientation: gtk::Orientation::Horizontal,
-                set_spacing: 8,
-                set_halign: gtk::Align::Center,
-
-                gtk::Image {
-                    #[watch]
-                    set_icon_name: Some(
-                        if let Some(data) = &model.weather_data {
-                            data.icon.as_str()
-                        } else {
-                            icon_names::CLOUDS_OUTLINE
-                        }
-                    ),
-                },
-
-
-                gtk::Label {
-                    #[watch]
-                    set_label: &if let Some(data) = &model.weather_data {
-                        format!("{}°C", data.temperature)
-                    } else {
-                        "--".to_string()
-                    },
-                    add_css_class: "tile-text",
-                    add_css_class: "weather-temp"
-                },
-                gtk::Label {
-                    #[watch]
-                    set_label: if let Some(data) = &model.weather_data {
-                        data.condition.as_str()
-                    } else if model.loading {
-                        "Loading…"
-                    } else {
-                        "Unknown"
-                    },
-                    add_css_class: "tile-text",
-                    add_css_class: "weather-condition",
-                    set_ellipsize: gtk::pango::EllipsizeMode::End,
-                    set_max_width_chars: 12
-                },
-            }
-        }
-    }
+    type Root = gtk::Button;
+    type Widgets = WeatherWidgets;
 
     fn init(
         _init: Self::Init,
-        _root: Self::Root,
+        root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = WeatherTile {
@@ -104,10 +55,48 @@ impl SimpleComponent for WeatherTile {
             loading: false,
         };
 
+        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+        hbox.set_halign(gtk::Align::Center);
+
+        let icon = gtk::Image::builder()
+            .icon_name(icon_names::CLOUDS_OUTLINE)
+            .build();
+
+        let temp_label = gtk::Label::builder()
+            .css_classes(["tile-text", "weather-temp"])
+            .label("--")
+            .build();
+
+        let cond_label = gtk::Label::builder()
+            .css_classes(["tile-text", "weather-condition"])
+            .ellipsize(gtk::pango::EllipsizeMode::End)
+            .max_width_chars(12)
+            .label("Loading…")
+            .build();
+
+        hbox.append(&icon);
+        hbox.append(&temp_label);
+        hbox.append(&cond_label);
+        root.set_child(Some(&hbox));
+
+        root.add_css_class("tile");
+        root.add_css_class("weather");
+        root.set_visible(false); // start hidden until we have data
+
+        let sender_clone = sender.clone();
+        root.connect_clicked(move |_| {
+            sender_clone.input(WeatherMsg::Click);
+        });
+
         // start polling in background
         start_polling(sender.clone());
 
-        let widgets = view_output!();
+        let widgets = WeatherWidgets {
+            root,
+            icon,
+            temp_label,
+            cond_label,
+        };
 
         ComponentParts { model, widgets }
     }
@@ -125,6 +114,23 @@ impl SimpleComponent for WeatherTile {
             }
         }
     }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if let Some(data) = &self.weather_data {
+            widgets.root.set_visible(true);
+            widgets.icon.set_icon_name(Some(&data.icon));
+            widgets
+                .temp_label
+                .set_label(&format!("{}°", data.temperature));
+            widgets.cond_label.set_label(&data.condition);
+        } else {
+            widgets.root.set_visible(false);
+        }
+    }
+
+    fn init_root() -> Self::Root {
+        gtk::Button::builder().build()
+    }
 }
 
 #[derive(Deserialize, Debug)]
@@ -134,8 +140,8 @@ struct WttrDesc {
 
 #[derive(Deserialize, Debug)]
 struct WttrCondition {
-    #[serde(rename = "temp_C")]
-    temp_c: String,
+    #[serde(rename = "temp_F")]
+    temp_f: String,
     #[serde(rename = "weatherCode")]
     weather_code: String,
     #[serde(rename = "weatherDesc")]
@@ -244,7 +250,7 @@ async fn fetch_wttr() -> anyhow::Result<WeatherData> {
         .astronomy
         .first()
         .ok_or_else(|| anyhow::anyhow!("missing astronomy[0]"))?;
-    let temp_c = current.temp_c.parse::<i32>().unwrap_or(0);
+    let temp_f = current.temp_f.parse::<i32>().unwrap_or(0);
     let desc = current
         .weather_desc
         .first()
@@ -257,7 +263,7 @@ async fn fetch_wttr() -> anyhow::Result<WeatherData> {
     .to_string();
 
     Ok(WeatherData {
-        temperature: temp_c,
+        temperature: temp_f,
         condition: desc,
         icon,
     })
