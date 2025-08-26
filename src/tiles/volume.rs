@@ -1,8 +1,8 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::messages::TileOutput;
 use crate::services::audio::AudioService;
+use crate::widgets::tile::TileOutput;
 
 #[derive(Debug)]
 pub struct VolumeTile {
@@ -111,9 +111,7 @@ impl SimpleComponent for VolumeTile {
             VolumeMsg::Click => {
                 // Toggle mute
                 self.service.set_muted(!self.muted);
-                sender
-                    .output(TileOutput::Clicked("volume".to_string()))
-                    .ok();
+                sender.output(TileOutput::Clicked).ok();
             }
             VolumeMsg::RightClick => {
                 // Could show volume mixer

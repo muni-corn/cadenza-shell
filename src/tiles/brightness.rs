@@ -1,8 +1,8 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::messages::TileOutput;
 use crate::services::brightness::BrightnessService;
+use crate::widgets::tile::TileOutput;
 
 #[derive(Debug)]
 pub struct BrightnessTile {
@@ -97,9 +97,7 @@ impl SimpleComponent for BrightnessTile {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             BrightnessMsg::Click => {
-                sender
-                    .output(TileOutput::Clicked("brightness".to_string()))
-                    .ok();
+                sender.output(TileOutput::Clicked).ok();
             }
             BrightnessMsg::Scroll(delta) => {
                 let new_level = (self.brightness + delta * 0.05).clamp(0.0, 1.0);

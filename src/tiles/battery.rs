@@ -1,10 +1,9 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::messages::TileOutput;
 use crate::services::battery::BatteryService;
 use crate::utils::icons::{BATTERY_CHARGING_ICONS, BATTERY_ICONS, percentage_to_icon_from_list};
-use crate::widgets::tile::Attention;
+use crate::widgets::tile::{Attention, TileOutput};
 
 #[derive(Debug)]
 pub struct BatteryTile {
@@ -180,10 +179,7 @@ impl SimpleComponent for BatteryTile {
                 self.update_css_classes();
             }
             BatteryMsg::Click => {
-                log::debug!("Battery tile clicked");
-                sender
-                    .output(TileOutput::Clicked("battery".to_string()))
-                    .ok();
+                sender.output(TileOutput::Clicked).ok();
             }
             BatteryMsg::UpdateDisplay => {
                 // Trigger view update
