@@ -1,295 +1,234 @@
-use gtk4::glib;
-use gtk4::subclass::prelude::*;
+use gtk4::prelude::*;
+use relm4::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Attention {
-    Alarm = 0,
-    Warning = 1,
-    Normal = 2,
-    Dim = 3,
-}
-
-impl Default for Attention {
-    fn default() -> Self {
-        Self::Normal
-    }
-}
-
-impl From<i32> for Attention {
-    fn from(value: i32) -> Self {
-        match value {
-            0 => Self::Alarm,
-            1 => Self::Warning,
-            2 => Self::Normal,
-            3 => Self::Dim,
-            _ => Self::Normal,
-        }
-    }
-}
-
-impl From<Attention> for i32 {
-    fn from(attention: Attention) -> Self {
-        attention as i32
-    }
+    Alarm,
+    Warning,
+    Normal,
+    Dim,
 }
 
 impl Attention {
     pub fn css_class(&self) -> &'static str {
         match self {
-            Self::Alarm => "alarm",
-            Self::Warning => "warning",
-            Self::Normal => "",
-            Self::Dim => "dim",
+            Attention::Alarm => "alarm",
+            Attention::Warning => "warning",
+            Attention::Normal => "",
+            Attention::Dim => "dim",
         }
     }
 }
 
-mod imp {
-    use super::Attention;
-    use gtk4::glib::{self, Properties};
-    use gtk4::prelude::*;
-    use gtk4::subclass::prelude::*;
-    use gtk4::{Label, Orientation};
-    use std::cell::{Cell, RefCell};
-
-    #[derive(Properties, Default)]
-    #[properties(wrapper_type = super::Tile)]
-    pub struct Tile {
-        #[property(get, set, nullable)]
-        icon: RefCell<Option<String>>,
-
-        #[property(get, set, nullable)]
-        primary: RefCell<Option<String>>,
-
-        #[property(get, set, nullable)]
-        secondary: RefCell<Option<String>>,
-
-        #[property(get, set, minimum = 0, maximum = 3)]
-        attention: Cell<i32>,
-
-        #[property(get, set)]
-        tile_visible: Cell<bool>,
-
-        // UI elements
-        icon_label: Label,
-        primary_label: Label,
-        secondary_label: Label,
-    }
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for Tile {
-        const NAME: &'static str = "MuseShellTile";
-        type Type = super::Tile;
-        type ParentType = gtk4::Box;
-
-        fn new() -> Self {
-            let icon_label = Label::builder()
-                .css_classes(vec!["icon"])
-                .width_request(16)
-                .build();
-
-            let primary_label = Label::builder().css_classes(vec!["primary"]).build();
-
-            let secondary_label = Label::builder().css_classes(vec!["secondary"]).build();
-
-            Self {
-                icon: RefCell::new(None),
-                primary: RefCell::new(None),
-                secondary: RefCell::new(None),
-                attention: Cell::new(Attention::Normal.into()),
-                tile_visible: Cell::new(true),
-                icon_label,
-                primary_label,
-                secondary_label,
-            }
-        }
-    }
-
-    #[glib::derived_properties]
-    impl ObjectImpl for Tile {
-        fn constructed(&self) {
-            self.parent_constructed();
-
-            // Configure the box (self.obj() is the Box)
-            let obj = self.obj();
-            obj.set_orientation(Orientation::Horizontal);
-            obj.set_spacing(12);
-            obj.add_css_class("tile");
-
-            // Add children to the box
-            obj.append(&self.icon_label);
-            obj.append(&self.primary_label);
-            obj.append(&self.secondary_label);
-
-            // Initial display update
-            self.update_display();
-        }
-    }
-
-    impl WidgetImpl for Tile {}
-
-    impl BoxImpl for Tile {}
-
-    impl Tile {
-        pub fn update_display(&self) {
-            let attention = Attention::from(self.attention.get());
-
-            // Update icon
-            if let Some(icon) = self.icon.borrow().as_ref() {
-                let truncated = truncate(icon, 32);
-                self.icon_label.set_text(&truncated);
-                self.icon_label.set_visible(!truncated.is_empty());
-            } else {
-                self.icon_label.set_visible(false);
-            }
-
-            // Update primary text
-            if let Some(primary) = self.primary.borrow().as_ref() {
-                let truncated = truncate(primary, 32);
-                self.primary_label.set_text(&truncated);
-                self.primary_label.set_visible(!truncated.is_empty());
-            } else {
-                self.primary_label.set_visible(false);
-            }
-
-            // Update secondary text
-            if let Some(secondary) = self.secondary.borrow().as_ref() {
-                let truncated = truncate(secondary, 32);
-                self.secondary_label.set_text(&truncated);
-                self.secondary_label.set_visible(!truncated.is_empty());
-            } else {
-                self.secondary_label.set_visible(false);
-            }
-
-            // Update attention CSS classes
-            for label in [&self.icon_label, &self.primary_label, &self.secondary_label] {
-                // Remove existing attention classes
-                for att in [Attention::Alarm, Attention::Warning, Attention::Dim] {
-                    label.remove_css_class(att.css_class());
-                }
-                // Add current attention class
-                if attention != Attention::Normal {
-                    label.add_css_class(attention.css_class());
-                }
-            }
-
-            // Update visibility
-            self.obj().set_visible(self.tile_visible.get());
-        }
-    }
-
-    fn truncate(s: &str, n: usize) -> String {
-        if s.len() > n {
-            format!("{}…", &s[..n])
-        } else {
-            s.to_string()
-        }
-    }
-}
-
-glib::wrapper! {
-    pub struct Tile(ObjectSubclass<imp::Tile>)
-        @extends gtk4::Box, gtk4::Widget,
-        @implements gtk4::Orientable;
-}
-
-// Attention enum is defined at module level
-
-impl Default for Tile {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl Tile {
-    pub fn new() -> Self {
-        glib::Object::builder().build()
-    }
-
-    pub fn builder() -> TileBuilder {
-        TileBuilder::new()
-    }
-
-    // Custom setters that trigger display updates
-    pub fn set_tile_icon(&self, icon: Option<String>) {
-        self.set_icon(icon);
-        self.imp().update_display();
-    }
-
-    pub fn set_tile_primary(&self, primary: Option<String>) {
-        self.set_primary(primary);
-        self.imp().update_display();
-    }
-
-    pub fn set_tile_secondary(&self, secondary: Option<String>) {
-        self.set_secondary(secondary);
-        self.imp().update_display();
-    }
-
-    pub fn set_tile_attention(&self, attention: Attention) {
-        let value: i32 = attention.into();
-        self.set_attention(value);
-        self.imp().update_display();
-    }
-
-    pub fn set_tile_visibility(&self, visible: bool) {
-        self.set_tile_visible(visible);
-        self.imp().update_display();
-    }
-}
-
-// Builder pattern for easy construction
-pub struct TileBuilder {
+#[derive(Clone, Debug)]
+pub struct Tile {
     icon: Option<String>,
     primary: Option<String>,
     secondary: Option<String>,
     attention: Attention,
-    visible: bool,
 }
 
-impl TileBuilder {
-    fn new() -> Self {
+#[derive(Debug)]
+pub enum TileMsg {
+    Click,
+    UpdateData {
+        icon: Option<String>,
+        primary: Option<String>,
+        secondary: Option<String>,
+    },
+    SetVisible(bool),
+    SetAttention(Attention),
+}
+
+// Tile-specific messages
+#[derive(Debug)]
+pub enum TileMessage {
+    Click,
+    RightClick,
+    MiddleClick,
+    ScrollUp,
+    ScrollDown,
+    ShowPopup,
+    HidePopup,
+}
+
+#[derive(Debug)]
+pub enum TileMenuType {
+    Context,
+    Settings,
+    Actions,
+}
+
+#[derive(Debug)]
+pub enum TilePopupType {
+    Details,
+    Controls,
+    Menu,
+}
+
+#[derive(Debug)]
+pub enum TileOutput {
+    Clicked,
+    MenuRequested(String, TileMenuType),
+    PopupRequested(String, TilePopupType),
+}
+
+#[derive(Debug)]
+pub struct TileWidgets {
+    icon: gtk::Image,
+    primary_label: gtk::Label,
+    secondary_label: gtk::Label,
+}
+
+pub struct TileInit {
+    pub icon_name: Option<String>,
+    pub primary: Option<String>,
+    pub secondary: Option<String>,
+    pub attention: Attention,
+}
+
+impl Default for TileInit {
+    fn default() -> Self {
         Self {
-            icon: None,
+            icon_name: None,
             primary: None,
             secondary: None,
             attention: Attention::Normal,
-            visible: true,
+        }
+    }
+}
+
+impl SimpleComponent for Tile {
+    type Init = TileInit;
+    type Input = TileMsg;
+    type Output = TileOutput;
+    type Root = gtk::Button;
+    type Widgets = TileWidgets;
+
+    fn init(
+        init: Self::Init,
+        root: Self::Root,
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
+        let model = Tile {
+            icon: init.icon_name,
+            primary: init.primary,
+            secondary: init.secondary,
+            attention: init.attention,
+        };
+
+        // create container
+        let container = gtk::Box::new(gtk::Orientation::Horizontal, 8);
+
+        // create widgets
+        let icon = gtk::Image::builder()
+            .css_classes(vec!["icon", model.attention.css_class()])
+            .width_request(16)
+            .build();
+
+        let primary_label = gtk::Label::builder()
+            .css_classes(vec!["primary", model.attention.css_class()])
+            .build();
+
+        let secondary_label = gtk::Label::builder()
+            .css_classes(vec!["secondary", model.attention.css_class()])
+            .ellipsize(gtk::pango::EllipsizeMode::End)
+            .max_width_chars(20)
+            .build();
+
+        // add all widgets to container
+        container.append(&icon);
+        container.append(&primary_label);
+        container.append(&secondary_label);
+
+        // add the container to the button
+        root.set_child(Some(&container));
+
+        // setup click handler
+        let sender_clone = sender.clone();
+        root.connect_clicked(move |_| {
+            sender_clone.input(TileMsg::Click);
+        });
+
+        let widgets = TileWidgets {
+            icon,
+            primary_label,
+            secondary_label,
+        };
+
+        ComponentParts { model, widgets }
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        match msg {
+            TileMsg::Click => {
+                let _ = sender.output(TileOutput::Clicked);
+            }
+            TileMsg::UpdateData {
+                icon,
+                primary,
+                secondary,
+            } => {
+                if icon.is_some() {
+                    self.icon = icon;
+                }
+                if primary.is_some() {
+                    self.primary = primary;
+                }
+                if secondary.is_some() {
+                    self.secondary = secondary;
+                }
+            }
+            TileMsg::SetAttention(attention) => {
+                self.attention = attention;
+            }
         }
     }
 
-    pub fn icon<S: Into<String>>(mut self, icon: S) -> Self {
-        self.icon = Some(icon.into());
-        self
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        // Update root visibility
+        if let Some(root) = widgets.icon.parent().and_then(|p| p.parent()) {
+            if let Some(button) = root.downcast_ref::<gtk::Button>() {
+                button.set_visible(self.visible);
+            }
+        }
+
+        // Update attention CSS classes
+        let attention_class = self.attention.css_class();
+        widgets.icon.set_css_classes(&["icon", attention_class]);
+        widgets
+            .primary_label
+            .set_css_classes(&["primary", attention_class]);
+        widgets
+            .secondary_label
+            .set_css_classes(&["secondary", attention_class]);
+
+        // update icon
+        if let Some(icon_name) = &self.icon {
+            widgets.icon.set_icon_name(Some(icon_name));
+            widgets.icon.set_visible(true);
+        } else {
+            widgets.icon.set_visible(false);
+        }
+
+        // update primary label
+        if let Some(primary_text) = &self.primary {
+            widgets.primary_label.set_label(primary_text);
+            widgets.primary_label.set_visible(true);
+        } else {
+            widgets.primary_label.set_visible(false);
+        }
+
+        // update secondary label
+        if let Some(secondary_text) = &self.secondary {
+            widgets.secondary_label.set_label(secondary_text);
+            widgets.secondary_label.set_visible(true);
+        } else {
+            widgets.secondary_label.set_visible(false);
+        }
     }
 
-    pub fn primary<S: Into<String>>(mut self, primary: S) -> Self {
-        self.primary = Some(primary.into());
-        self
-    }
-
-    pub fn secondary<S: Into<String>>(mut self, secondary: S) -> Self {
-        self.secondary = Some(secondary.into());
-        self
-    }
-
-    pub fn attention(mut self, attention: Attention) -> Self {
-        self.attention = attention;
-        self
-    }
-
-    pub fn visible(mut self, visible: bool) -> Self {
-        self.visible = visible;
-        self
-    }
-
-    pub fn build(self) -> Tile {
-        let tile = Tile::new();
-        tile.set_tile_icon(self.icon);
-        tile.set_tile_primary(self.primary);
-        tile.set_tile_secondary(self.secondary);
-        tile.set_tile_attention(self.attention);
-        tile.set_tile_visibility(self.visible);
-        tile
+    fn init_root() -> Self::Root {
+        gtk::Button::builder().css_classes(["tile"]).build()
     }
 }
