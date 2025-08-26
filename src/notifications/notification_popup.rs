@@ -41,11 +41,8 @@ impl SimpleComponent for FreshNotifications {
     view! {
         #[root]
         window = gtk4::ApplicationWindow {
-            set_title: Some("Muse Shell Notification Popup"),
             #[watch]
             set_visible: model.visible && !model.notifications.is_empty(),
-
-            // Layer shell setup is done in init
 
             #[local_ref]
             notifications_container -> gtk4::Box {
