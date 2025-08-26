@@ -1,7 +1,7 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::messages::TileOutput;
+use crate::widgets::tile::TileOutput;
 
 #[derive(Debug)]
 pub struct BluetoothTile {
@@ -78,9 +78,7 @@ impl SimpleComponent for BluetoothTile {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             BluetoothMsg::Click => {
-                sender
-                    .output(TileOutput::Clicked("bluetooth".to_string()))
-                    .ok();
+                sender.output(TileOutput::Clicked).ok();
             }
             BluetoothMsg::Toggle => {
                 self.enabled = !self.enabled;

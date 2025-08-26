@@ -1,9 +1,10 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::messages::{NetworkType, TileOutput};
+use crate::messages::NetworkType;
 use crate::services::network::{DeviceType, NetworkService};
 use crate::utils::icons::{NETWORK_WIFI_ICONS, percentage_to_icon_from_list};
+use crate::widgets::tile::TileOutput;
 
 #[derive(Debug)]
 pub enum NetworkType {
@@ -128,9 +129,7 @@ impl SimpleComponent for NetworkTile {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             NetworkMsg::Click => {
-                sender
-                    .output(TileOutput::Clicked("network".to_string()))
-                    .ok();
+                sender.output(TileOutput::Clicked).ok();
             }
             NetworkMsg::RightClick => {
                 // Could show network menu

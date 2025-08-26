@@ -7,7 +7,7 @@ use serde::Deserialize;
 use tokio::time::sleep;
 
 use crate::icon_names;
-use crate::messages::TileOutput;
+use crate::widgets::tile::TileOutput;
 
 #[derive(Debug, Clone)]
 pub struct WeatherData {
@@ -110,7 +110,7 @@ impl SimpleComponent for WeatherTile {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             WeatherMsg::Click => {
-                let _ = sender.output(TileOutput::Clicked("weather".to_string()));
+                let _ = sender.output(TileOutput::Clicked);
             }
             WeatherMsg::StartLoading => self.loading = true,
             WeatherMsg::StopLoading => self.loading = false,
