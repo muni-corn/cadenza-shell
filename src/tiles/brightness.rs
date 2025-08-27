@@ -120,12 +120,25 @@ impl BrightnessTile {
             return "display-brightness-symbolic".to_string();
         }
 
-        if self.brightness > 0.8 {
+        let log_brightness = self.get_logarithmic_brightness();
+
+        if log_brightness > 2. / 3. {
             "display-brightness-high-symbolic".to_string()
-        } else if self.brightness > 0.4 {
+        } else if log_brightness > 1. / 3. {
             "display-brightness-medium-symbolic".to_string()
         } else {
             "display-brightness-low-symbolic".to_string()
+        }
+    }
+
+    fn get_logarithmic_brightness(&self) -> f64 {
+        // use logarithmic scale for perceived brightness
+        // convert linear brightness to logarithmic perception
+        if self.brightness <= 0.0 {
+            0.0
+        } else {
+            // logarithmic mapping: log10(brightness * 9.0 + 1.0) gives us 0-1 range
+            (self.brightness * 9.0 + 1.0).log10()
         }
     }
 
@@ -134,6 +147,9 @@ impl BrightnessTile {
             return "N/A".to_string();
         }
 
-        format!("{}%", (self.brightness * 100.0) as u32)
+        format!(
+            "{}%",
+            (self.get_logarithmic_brightness() * 100.0).round() as u32
+        )
     }
 }
