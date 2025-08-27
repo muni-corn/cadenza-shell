@@ -8,9 +8,11 @@ mod imp {
     use gtk4::glib;
     use gtk4::prelude::*;
     use gtk4::subclass::prelude::*;
+    use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
     use std::cell::{Cell, RefCell};
     use std::fs;
     use std::path::Path;
+    use std::sync::mpsc;
 
     #[derive(glib::Properties, Default)]
     #[properties(wrapper_type = super::BrightnessService)]
@@ -24,6 +26,7 @@ mod imp {
         interface: RefCell<String>,
         min: Cell<u32>,
         max: Cell<u32>,
+        _watcher: RefCell<Option<RecommendedWatcher>>,
     }
 
     #[glib::object_subclass]
@@ -80,51 +83,96 @@ mod imp {
         }
 
         fn read_brightness_range(&self) -> Result<(u32, u32)> {
-            // Read min/max brightness using brillo or direct sysfs access
-            let min_result = std::process::Command::new("brillo").args(["-rc"]).output();
-            let max_result = std::process::Command::new("brillo").args(["-rm"]).output();
-
-            match (min_result, max_result) {
-                (Ok(min), Ok(max)) => {
-                    let min_val: u32 = String::from_utf8_lossy(&min.stdout).trim().parse()?;
-                    let max_val: u32 = String::from_utf8_lossy(&max.stdout).trim().parse()?;
-                    Ok((min_val, max_val))
-                }
-                _ => {
-                    // Fallback to reading from sysfs directly
-                    let interface = self.interface.borrow();
-                    let max_path = format!("/sys/class/backlight/{}/max_brightness", interface);
-                    let max_content = fs::read_to_string(max_path)?;
-                    let max_val: u32 = max_content.trim().parse()?;
-                    Ok((0, max_val))
-                }
-            }
+            // read min/max brightness from sysfs directly
+            let interface = self.interface.borrow();
+            let max_path = format!("/sys/class/backlight/{}/max_brightness", interface);
+            let max_content = fs::read_to_string(max_path)?;
+            let max_val: u32 = max_content.trim().parse()?;
+            Ok((0, max_val))
         }
 
         fn start_monitoring(&self) {
             let obj = self.obj().clone();
+            let interface = self.interface.borrow().clone();
+            let brightness_path = format!("/sys/class/backlight/{}/brightness", interface);
 
-            glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
-                if let Ok(brightness) = obj.imp().read_current_brightness() {
-                    obj.set_brightness(brightness);
+            // create channel for file system events
+            let (tx, rx) = mpsc::channel();
+
+            // create file watcher with notify v8 api
+            let watcher_result = RecommendedWatcher::new(
+                move |res: notify::Result<notify::Event>| {
+                    if let Ok(event) = res {
+                        // check if it's a modify event
+                        if matches!(event.kind, notify::EventKind::Modify(_)) {
+                            let _ = tx.send(());
+                        }
+                    }
+                },
+                Config::default(),
+            );
+
+            match watcher_result {
+                Ok(mut watcher) => {
+                    // watch the brightness file
+                    if let Err(e) =
+                        watcher.watch(&Path::new(&brightness_path), RecursiveMode::NonRecursive)
+                    {
+                        log::warn!("failed to watch brightness file: {}", e);
+                        return;
+                    }
+
+                    // store watcher to keep it alive
+                    self._watcher.replace(Some(watcher));
+
+                    // use timeout instead of async future to avoid blocking recv()
+                    let obj_clone = obj.clone();
+                    glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
+                        // non-blocking check for file system events
+                        match rx.try_recv() {
+                            Ok(_) => {
+                                // file changed, update brightness
+                                if let Ok(brightness) = obj_clone.imp().read_current_brightness() {
+                                    obj_clone.set_brightness(brightness);
+                                }
+                            }
+                            Err(mpsc::TryRecvError::Empty) => {
+                                // no events, continue
+                            }
+                            Err(mpsc::TryRecvError::Disconnected) => {
+                                // watcher disconnected, stop timeout
+                                return glib::ControlFlow::Break;
+                            }
+                        }
+                        glib::ControlFlow::Continue
+                    });
+
+                    // schedule initial value read on next tick to avoid blocking
+                    let obj_initial = obj.clone();
+                    glib::idle_add_local_once(move || {
+                        if let Ok(brightness) = obj_initial.imp().read_current_brightness() {
+                            obj_initial.set_brightness(brightness);
+                        }
+                    });
                 }
-                glib::ControlFlow::Continue
-            });
+                Err(e) => {
+                    log::warn!(
+                        "failed to create file watcher, falling back to polling: {}",
+                        e
+                    );
+                    // fallback to polling
+                    glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
+                        if let Ok(brightness) = obj.imp().read_current_brightness() {
+                            obj.set_brightness(brightness);
+                        }
+                        glib::ControlFlow::Continue
+                    });
+                }
+            }
         }
 
         fn read_current_brightness(&self) -> Result<f64> {
-            // Try brillo first
-            if let Ok(output) = std::process::Command::new("brillo").args(["-rG"]).output() {
-                if let Ok(raw_str) = String::from_utf8(output.stdout) {
-                    if let Ok(raw) = raw_str.trim().parse::<u32>() {
-                        let min = self.min.get();
-                        let max = self.max.get();
-                        return Ok((raw - min) as f64 / (max - min) as f64);
-                    }
-                }
-            }
-
-            // Fallback to reading from sysfs
+            // read brightness from sysfs directly
             let interface = self.interface.borrow();
             let path = format!("/sys/class/backlight/{}/brightness", interface);
             let content = fs::read_to_string(path)?;
@@ -159,23 +207,9 @@ impl BrightnessService {
         let raw_value = min + ((max - min) as f64 * percent) as u32;
         let clamped = raw_value.clamp(min, max);
 
-        // Use brillo for privileged write
-        let result = std::process::Command::new("brillo")
-            .args(["-Sr", &clamped.to_string()])
-            .output();
-
-        match result {
-            Ok(_) => {
-                // The property will be updated by the monitoring loop
-                Ok(())
-            }
-            Err(e) => {
-                log::warn!("Failed to set brightness using brillo: {}", e);
-                // Try direct sysfs write (requires appropriate permissions)
-                let interface = imp.interface();
-                let path = format!("/sys/class/backlight/{}/brightness", interface);
-                fs::write(path, clamped.to_string()).map_err(|e| e.into())
-            }
-        }
+        // write directly to sysfs (requires appropriate permissions)
+        let interface = imp.interface();
+        let path = format!("/sys/class/backlight/{}/brightness", interface);
+        fs::write(path, clamped.to_string()).map_err(|e| e.into())
     }
 }
