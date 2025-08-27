@@ -50,49 +50,36 @@ impl SimpleComponent for Bar {
     ) -> ComponentParts<Self> {
         let model = Bar { monitor };
 
+        let config = settings::get_config();
+
+        let left = LeftGroup::builder().launch((model.monitor.clone(), config.bar));
+        let center = CenterGroup::builder().launch(config.bar);
+        let right = RightGroup::builder().launch(config.bar);
+
+        let bar = gtk::CenterBox::builder()
+            .css_classes(["bar"])
+            .height_request(config.bar.height)
+            .hexpand(true)
+            .shrink_center_last(true)
+            .margin_start(config.bar.margin)
+            .margin_end(config.bar.margin)
+            .start_widget(left.widget())
+            .center_widget(center.widget())
+            .end_widget(right.widget())
+            .build();
+
         // init layer shell
         if !window.is_layer_window() {
             window.init_layer_shell();
         }
 
         window.set_namespace(Some("bar"));
-
         window.set_layer(Layer::Top);
-
-        // Use configuration for bar height
-        let config = settings::get_config();
         window.set_exclusive_zone(config.bar.height);
-
         window.set_anchor(Edge::Top, true);
         window.set_anchor(Edge::Left, true);
         window.set_anchor(Edge::Right, true);
-
-        let config = settings::get_config();
-
-        let bar = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .css_classes(["bar"])
-            .height_request(config.bar.height)
-            .hexpand(true)
-            .spacing(config.bar.spacing)
-            .margin_start(config.bar.margin)
-            .margin_end(config.bar.margin)
-            .build();
-
         window.set_child(Some(&bar));
-
-        // Left section - workspaces and focused window
-        let left = LeftGroup::builder().launch(model.monitor.clone());
-
-        // Center section - clock, weather, media
-        let center = CenterGroup::builder().launch(());
-
-        // Right section - system tiles
-        let right = RightGroup::builder().launch(());
-
-        bar.append(left.widget());
-        bar.append(center.widget());
-        bar.append(right.widget());
 
         let widgets = BarWidgets {
             _left: left.detach(),
