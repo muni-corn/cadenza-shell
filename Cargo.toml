@@ -42,6 +42,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 sysinfo = "0.37"
 procfs = "0.17"
 futures-lite = { version = "2", default-features = false }
+notify = "8"
 
 # Network management (placeholder - will implement later)
 # nm-rs = { version = "0.1", optional = true }
