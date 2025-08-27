@@ -1,3 +1,7 @@
+mod center;
+mod left;
+mod right;
+
 use gdk4::Monitor;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
@@ -5,12 +9,12 @@ use relm4::prelude::*;
 
 use crate::{
     settings,
-    tiles::{clock::ClockTile, weather::WeatherTile},
+    widgets::bar::{center::CenterGroup, left::LeftGroup, right::RightGroup},
 };
 
 #[derive(Debug)]
 pub struct Bar {
-    _monitor: Monitor,
+    monitor: Monitor,
 }
 
 #[derive(Debug)]
@@ -19,8 +23,9 @@ pub enum BarMsg {}
 #[derive(Debug)]
 pub struct BarWidgets {
     // save Controllers so they aren't dropped
-    _clock: Controller<ClockTile>,
-    _weather: Controller<WeatherTile>,
+    _left: Controller<LeftGroup>,
+    _center: Controller<CenterGroup>,
+    _right: Controller<RightGroup>,
 }
 
 impl SimpleComponent for Bar {
@@ -43,7 +48,7 @@ impl SimpleComponent for Bar {
         window: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = Bar { _monitor: monitor };
+        let model = Bar { monitor };
 
         // init layer shell
         if !window.is_layer_window() {
@@ -77,39 +82,22 @@ impl SimpleComponent for Bar {
         window.set_child(Some(&bar));
 
         // Left section - workspaces and focused window
-        let left = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(8)
-            .css_classes(["bar-left"])
-            .build();
+        let left = LeftGroup::builder().launch(model.monitor.clone());
 
-        // Center section - spacer and clock
-        let center = gtk::Box::builder()
-            .hexpand(true)
-            .halign(gtk::Align::Center)
-            .orientation(gtk::Orientation::Horizontal)
-            .build();
-
-        let clock = ClockTile::builder().launch(()).detach();
-        let weather = WeatherTile::builder().launch(()).detach();
-
-        center.append(clock.widget());
-        center.append(weather.widget());
+        // Center section - clock, weather, media
+        let center = CenterGroup::builder().launch(());
 
         // Right section - system tiles
-        let right = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(8)
-            .css_classes(["bar-right"])
-            .build();
+        let right = RightGroup::builder().launch(());
 
-        bar.append(&left);
-        bar.append(&center);
-        bar.append(&right);
+        bar.append(left.widget());
+        bar.append(center.widget());
+        bar.append(right.widget());
 
         let widgets = BarWidgets {
-            _clock: clock,
-            _weather: weather,
+            _left: left.detach(),
+            _center: center.detach(),
+            _right: right.detach(),
         };
 
         ComponentParts { model, widgets }
