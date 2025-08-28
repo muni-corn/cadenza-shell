@@ -1,8 +1,9 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::services::battery::BatteryService;
-use crate::utils::icons::{BATTERY_CHARGING_ICONS, BATTERY_ICONS, percentage_to_icon_from_list};
+use crate::icon_names::{BATTERY_LEVEL_0_CHARGING, BATTERY_LEVEL_100_CHARGED, BATTERY_MISSING};
+use crate::services::battery::{BatteryService, BatteryStatus};
+use crate::utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list};
 use crate::widgets::tile::{Attention, TileOutput};
 
 #[derive(Debug)]
@@ -59,7 +60,7 @@ impl SimpleComponent for BatteryTile {
                 #[name = "battery_icon"]
                 gtk::Image {
                     #[watch]
-                    set_icon_name: Some(&model.get_icon()),
+                    set_icon_name: Some(model.get_icon()),
                     add_css_class: "tile-icon",
                 },
 
@@ -189,18 +190,18 @@ impl SimpleComponent for BatteryTile {
 }
 
 impl BatteryTile {
-    fn get_icon(&self) -> String {
+    fn get_icon(&self) -> &str {
         if !self.available {
-            return "battery-missing-symbolic".to_string();
-        }
-
-        let icons = if self.charging {
-            BATTERY_CHARGING_ICONS
+            BATTERY_MISSING
+        } else if self.charging {
+            if self.service.status() == BatteryStatus::Full {
+                BATTERY_LEVEL_100_CHARGED
+            } else {
+                BATTERY_LEVEL_0_CHARGING
+            }
         } else {
-            BATTERY_ICONS
-        };
-
-        percentage_to_icon_from_list(self.percentage, icons).to_string()
+            percentage_to_icon_from_list(self.percentage, BATTERY_ICON_NAMES)
+        }
     }
 
     fn get_text(&self) -> String {
