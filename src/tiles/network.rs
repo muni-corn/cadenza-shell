@@ -3,7 +3,7 @@ use relm4::prelude::*;
 
 use crate::messages::NetworkType;
 use crate::services::network::{DeviceType, NetworkService};
-use crate::utils::icons::{NETWORK_WIFI_ICONS, percentage_to_icon_from_list};
+use crate::utils::icons::{NETWORK_WIFI_ICON_NAMES, percentage_to_icon_from_list};
 use crate::widgets::tile::TileOutput;
 
 #[derive(Debug)]
@@ -158,7 +158,7 @@ impl NetworkTile {
         match self.connection_type {
             NetworkType::Wifi => {
                 if let Some(strength) = self.signal_strength {
-                    percentage_to_icon_from_list(strength, NETWORK_WIFI_ICONS).to_string()
+                    percentage_to_icon_from_list(strength, NETWORK_WIFI_ICON_NAMES).to_string()
                 } else {
                     "network-wireless-symbolic".to_string()
                 }

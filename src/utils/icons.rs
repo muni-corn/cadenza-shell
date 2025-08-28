@@ -19,7 +19,8 @@ pub const BATTERY_ICON_NAMES: &[&str] = &[
     BATTERY_LEVEL_100,
 ];
 
-pub const NETWORK_WIFI_ICONS: &[&str] = &["󰤯", "󰤟", "󰤢", "󰤥", "󰤨"];
+pub const NETWORK_WIFI_ICON_NAMES: &[&str] =
+    &[RADIOWAVES_4, RADIOWAVES_3, RADIOWAVES_2, RADIOWAVES_1];
 pub const NETWORK_WIRED_ICONS: &[&str] = &["󰈀"];
 
 pub const BLUETOOTH_ICONS: &[&str] = &["󰂯", "󰂱"];
