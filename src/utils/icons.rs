@@ -1,3 +1,5 @@
+use crate::icon_names::*;
+
 // Icon constants for various widgets
 pub const BRIGHTNESS_ICONS: &[&str] = &[
     "\u{F00DB}",
@@ -9,8 +11,17 @@ pub const BRIGHTNESS_ICONS: &[&str] = &[
 ];
 pub const VOLUME_ICONS: &[&str] = &["󰕿", "󰖀", "󰕾"];
 pub const MUTE_ICON: &str = "󰖁";
-pub const BATTERY_ICONS: &[&str] = &["󰁺", "󰁻", "󰁼", "󰁽", "󰁾", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"];
-pub const BATTERY_CHARGING_ICONS: &[&str] = &["󰢟", "󰢜", "󰂆", "󰂇", "󰂈", "󰢝", "󰂉", "󰢞", "󰂊", "󰂋"];
+pub const BATTERY_ICON_NAMES: &[&str] = &[
+    BATTERY_LEVEL_30,
+    BATTERY_LEVEL_40,
+    BATTERY_LEVEL_50,
+    BATTERY_LEVEL_60,
+    BATTERY_LEVEL_70,
+    BATTERY_LEVEL_80,
+    BATTERY_LEVEL_90,
+    BATTERY_LEVEL_100,
+];
+
 pub const NETWORK_WIFI_ICONS: &[&str] = &["󰤯", "󰤟", "󰤢", "󰤥", "󰤨"];
 pub const NETWORK_WIRED_ICONS: &[&str] = &["󰈀"];
 
