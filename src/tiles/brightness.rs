@@ -2,6 +2,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::services::brightness::BrightnessService;
+use crate::utils::icons::{BRIGHTNESS_ICON_NAMES, percentage_to_icon_from_list};
 use crate::widgets::tile::TileOutput;
 
 #[derive(Debug)]
@@ -43,7 +44,7 @@ impl SimpleComponent for BrightnessTile {
 
                 gtk::Image {
                     #[watch]
-                    set_icon_name: Some(&model.get_icon()),
+                    set_icon_name: Some(model.get_icon()),
                     add_css_class: "tile-icon",
                 },
 
@@ -115,19 +116,12 @@ impl SimpleComponent for BrightnessTile {
 }
 
 impl BrightnessTile {
-    fn get_icon(&self) -> String {
+    fn get_icon(&self) -> &str {
         if !self.available {
-            return "display-brightness-symbolic".to_string();
-        }
-
-        let log_brightness = self.get_logarithmic_brightness();
-
-        if log_brightness > 2. / 3. {
-            "display-brightness-high-symbolic".to_string()
-        } else if log_brightness > 1. / 3. {
-            "display-brightness-medium-symbolic".to_string()
+            "display-brightness-symbolic"
         } else {
-            "display-brightness-low-symbolic".to_string()
+            let log_brightness = self.get_logarithmic_brightness();
+            percentage_to_icon_from_list(log_brightness, BRIGHTNESS_ICON_NAMES)
         }
     }
 

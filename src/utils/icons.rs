@@ -1,13 +1,10 @@
 use crate::icon_names::*;
 
 // Icon constants for various widgets
-pub const BRIGHTNESS_ICONS: &[&str] = &[
-    "\u{F00DB}",
-    "\u{F00DC}",
-    "\u{F00DD}",
-    "\u{F00DE}",
-    "\u{F00DF}",
-    "\u{F00E0}",
+pub const BRIGHTNESS_ICON_NAMES: &[&str] = &[
+    DISPLAY_BRIGHTNESS_LOW,
+    DISPLAY_BRIGHTNESS_MEDIUM,
+    DISPLAY_BRIGHTNESS_HIGH,
 ];
 pub const VOLUME_ICONS: &[&str] = &["󰕿", "󰖀", "󰕾"];
 pub const MUTE_ICON: &str = "󰖁";
