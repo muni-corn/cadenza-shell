@@ -98,7 +98,7 @@ impl WiFiMenu {
     }
 
     fn get_network_icon(&self) -> String {
-        use crate::utils::icons::NETWORK_WIFI_ICONS;
+        use crate::utils::icons::NETWORK_WIFI_ICON_NAMES;
 
         if !self.wifi_state.enabled {
             return "󰤮".to_string(); // disabled icon
@@ -107,7 +107,7 @@ impl WiFiMenu {
         if self.wifi_state.connected_ssid.is_some() {
             // find the connected access point and show strength-based icon
             if let Some(ap) = self.wifi_state.access_points.iter().find(|ap| ap.is_active) {
-                let icons = NETWORK_WIFI_ICONS;
+                let icons = NETWORK_WIFI_ICON_NAMES;
                 let index =
                     ((ap.strength as f64 / 100.0) * (icons.len() - 1) as f64).round() as usize;
                 return icons.get(index).unwrap_or(&"󰤟").to_string();
@@ -443,9 +443,9 @@ impl FactoryComponent for AccessPointWidget {
 
 impl AccessPointWidget {
     fn get_strength_icon(&self) -> String {
-        use crate::utils::icons::NETWORK_WIFI_ICONS;
+        use crate::utils::icons::NETWORK_WIFI_ICON_NAMES;
 
-        let icons = NETWORK_WIFI_ICONS;
+        let icons = NETWORK_WIFI_ICON_NAMES;
         let strength_ratio = self.access_point.strength as f64 / 100.0;
         let index = (strength_ratio * (icons.len() - 1) as f64).round() as usize;
 
