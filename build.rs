@@ -10,7 +10,25 @@ fn main() {
         None::<&str>,
         // list of icons to include
         [
+            // battery
+            "battery-level-30",
+            "battery-level-40",
+            "battery-level-50",
+            "battery-level-60",
+            "battery-level-70",
+            "battery-level-80",
+            "battery-level-90",
+            "battery-level-100",
+            "battery-level-0-charging",
+            "battery-level-100-charged",
+            "battery-missing",
+            // brightness
+            "display-brightness-low",
+            "display-brightness-medium",
+            "display-brightness-high",
+            // clock
             "clock-alt",
+            // weather
             "clouds-outline",
             "few-clouds-outline",
             "fire",
@@ -25,6 +43,11 @@ fn main() {
             "sun-outline",
             "tornado",
             "windy",
+            // wifi
+            "radiowaves-1",
+            "radiowaves-2",
+            "radiowaves-3",
+            "radiowaves-4",
         ],
     );
 }
