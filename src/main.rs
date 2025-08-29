@@ -32,6 +32,9 @@ async fn main() -> glib::ExitCode {
         log::error!("failed to initialize settings: {}", e);
     }
 
-    RelmApp::new("com.musicaloft.muse-shell").run::<MuseShellModel>(());
+    RelmApp::new("com.musicaloft.muse-shell")
+        .visible_on_activate(false)
+        .run::<MuseShellModel>(());
+
     gtk4::glib::ExitCode::FAILURE
 }

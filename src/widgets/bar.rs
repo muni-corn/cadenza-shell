@@ -32,11 +32,11 @@ impl SimpleComponent for Bar {
     type Init = Monitor;
     type Input = BarMsg;
     type Output = ();
-    type Root = gtk::ApplicationWindow;
+    type Root = gtk::Window;
     type Widgets = BarWidgets;
 
     fn init_root() -> Self::Root {
-        gtk::ApplicationWindow::builder()
+        gtk::Window::builder()
             .title("muse-shell")
             .default_height(32)
             .visible(true)

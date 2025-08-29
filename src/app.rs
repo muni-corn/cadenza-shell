@@ -22,12 +22,12 @@ impl SimpleComponent for MuseShellModel {
     type Init = ();
     type Input = MuseShellMsg;
     type Output = ();
-    type Root = gtk::ApplicationWindow;
+    type Root = gtk::Window;
     type Widgets = ();
 
     fn init_root() -> Self::Root {
         // hidden root window
-        gtk::ApplicationWindow::builder().visible(false).build()
+        gtk::Window::new()
     }
 
     fn init(
