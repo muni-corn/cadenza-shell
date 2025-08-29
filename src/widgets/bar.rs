@@ -61,8 +61,6 @@ impl SimpleComponent for Bar {
             .height_request(config.bar.height)
             .hexpand(true)
             .shrink_center_last(true)
-            .margin_start(config.bar.margin)
-            .margin_end(config.bar.margin)
             .start_widget(left.widget())
             .center_widget(center.widget())
             .end_widget(right.widget())
