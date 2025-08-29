@@ -3,7 +3,6 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 use std::collections::HashMap;
 
-use crate::style::load_css;
 use crate::widgets::bar::Bar;
 
 #[derive(Debug)]
@@ -36,9 +35,6 @@ impl SimpleComponent for MuseShellModel {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         // load css styles at startup
-        if let Err(e) = load_css() {
-            log::warn!("failed to load css: {}", e);
-        }
 
         let display = Display::default().expect("could not get default display");
 

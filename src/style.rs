@@ -1,4 +1,15 @@
-pub mod theme;
+use rsass::{
+    compile_scss,
+    output::{Format, Style::Compressed},
+};
 
-// Re-export the main CSS loading function for backward compatibility
-pub use theme::load_css;
+pub fn compile_styles() -> Result<String, rsass::Error> {
+    compile_scss(
+        include_bytes!("style.scss"),
+        Format {
+            style: Compressed,
+            ..Default::default()
+        },
+    )
+    .map(|vec| String::from_utf8_lossy(&vec).into_owned())
+}
