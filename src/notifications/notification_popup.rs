@@ -40,7 +40,7 @@ impl SimpleComponent for FreshNotifications {
 
     view! {
         #[root]
-        window = gtk4::ApplicationWindow {
+        window = gtk4::Window {
             #[watch]
             set_visible: model.visible && !model.notifications.is_empty(),
 
