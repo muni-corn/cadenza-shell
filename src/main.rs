@@ -19,7 +19,7 @@ pub mod tests;
 
 use relm4::RelmApp;
 
-use crate::app::MuseShellModel;
+use crate::{app::MuseShellModel, style::compile_styles};
 
 #[tokio::main]
 async fn main() -> glib::ExitCode {
@@ -30,6 +30,11 @@ async fn main() -> glib::ExitCode {
     // Initialize configuration system
     if let Err(e) = settings::init() {
         log::error!("failed to initialize settings: {}", e);
+    }
+
+    match compile_styles() {
+        Ok(css) => relm4::set_global_css(&css),
+        Err(e) => log::error!("couldn't load scss: {e}"),
     }
 
     RelmApp::new("com.musicaloft.muse-shell")
