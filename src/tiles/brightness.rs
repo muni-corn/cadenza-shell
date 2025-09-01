@@ -9,13 +9,12 @@ use crate::widgets::tile::TileOutput;
 pub struct BrightnessTile {
     brightness: f64,
     available: bool,
-    service: BrightnessService,
+    _service: BrightnessService,
 }
 
 #[derive(Debug)]
 pub enum BrightnessMsg {
     Click,
-    Scroll(f64), // delta
     ServiceUpdate { brightness: f64, available: bool },
 }
 
@@ -67,7 +66,7 @@ impl SimpleComponent for BrightnessTile {
         let model = BrightnessTile {
             brightness: 0.0,
             available: false,
-            service: service.clone(),
+            _service: service.clone(),
         };
 
         let widgets = view_output!();
@@ -99,10 +98,6 @@ impl SimpleComponent for BrightnessTile {
         match msg {
             BrightnessMsg::Click => {
                 sender.output(TileOutput::Clicked).ok();
-            }
-            BrightnessMsg::Scroll(delta) => {
-                let new_level = (self.brightness + delta * 0.05).clamp(0.0, 1.0);
-                self.service.set_brightness(new_level);
             }
             BrightnessMsg::ServiceUpdate {
                 brightness,
