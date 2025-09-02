@@ -5,8 +5,10 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 use tokio::time::interval;
 
-use crate::icon_names;
-use crate::widgets::tile::{Attention, Tile, TileInit, TileMsg, TileOutput};
+use crate::{
+    icon_names,
+    widgets::tile::{Attention, Tile, TileInit, TileMsg, TileOutput},
+};
 
 #[derive(Debug)]
 pub struct ClockTile {

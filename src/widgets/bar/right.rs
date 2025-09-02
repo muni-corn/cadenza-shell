@@ -19,9 +19,9 @@ pub struct RightWidgets {
 }
 
 impl SimpleComponent for RightGroup {
+    type Init = BarConfig;
     type Input = ();
     type Output = ();
-    type Init = ();
     type Root = gtk::Box;
     type Widgets = RightWidgets;
 

@@ -17,9 +17,9 @@ pub struct CenterWidgets {
 }
 
 impl SimpleComponent for CenterGroup {
+    type Init = BarConfig;
     type Input = ();
     type Output = ();
-    type Init = ();
     type Root = gtk::Box;
     type Widgets = CenterWidgets;
 

@@ -1,5 +1,4 @@
-use gtk4::glib;
-use gtk4::subclass::prelude::*;
+use gtk4::{glib, subclass::prelude::*};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum BatteryStatus {
@@ -17,14 +16,16 @@ impl Default for BatteryStatus {
 }
 
 mod imp {
-    use super::BatteryStatus;
+    use std::{
+        cell::{Cell, RefCell},
+        fs,
+        path::Path,
+    };
+
     use anyhow::Result;
-    use gtk4::glib;
-    use gtk4::prelude::*;
-    use gtk4::subclass::prelude::*;
-    use std::cell::{Cell, RefCell};
-    use std::fs;
-    use std::path::Path;
+    use gtk4::{glib, prelude::*, subclass::prelude::*};
+
+    use super::BatteryStatus;
 
     #[derive(glib::Properties, Default)]
     #[properties(wrapper_type = super::BatteryService)]
@@ -47,9 +48,10 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for BatteryService {
-        const NAME: &'static str = "MuseShellBatteryService";
-        type Type = super::BatteryService;
         type ParentType = glib::Object;
+        type Type = super::BatteryService;
+
+        const NAME: &'static str = "MuseShellBatteryService";
     }
 
     #[glib::derived_properties]

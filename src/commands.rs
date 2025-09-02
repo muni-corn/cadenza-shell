@@ -149,7 +149,8 @@ impl Command for AppCommand {
         match self {
             AppCommand::ToggleNotificationCenter => {
                 log::info!("toggling notification center");
-                // In a real implementation, this would send a message to the notification center component
+                // In a real implementation, this would send a message to the notification
+                // center component
                 Ok(())
             }
             AppCommand::DismissNotification(id) => {

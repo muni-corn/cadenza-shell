@@ -6,8 +6,7 @@ use relm4::prelude::*;
 use serde::Deserialize;
 use tokio::time::sleep;
 
-use crate::icon_names;
-use crate::widgets::tile::TileOutput;
+use crate::{icon_names, widgets::tile::TileOutput};
 
 #[derive(Debug, Clone)]
 pub struct WeatherData {

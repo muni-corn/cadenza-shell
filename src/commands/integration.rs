@@ -65,7 +65,8 @@ pub mod relm4_integration {
         CommandFailed(String),
     }
 
-    /// Example showing how commands might be integrated into a component's update method
+    /// Example showing how commands might be integrated into a component's
+    /// update method
     pub fn handle_command_message(
         msg: CommandMsg,
         command_executor: &mut GlobalCommandExecutor,

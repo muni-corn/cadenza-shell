@@ -1,4 +1,5 @@
-use crate::settings;
+use std::{f64::consts::PI, time::Duration};
+
 use chrono::Timelike;
 use gtk4::{glib, prelude::*};
 use relm4::{
@@ -6,7 +7,8 @@ use relm4::{
     component::{ComponentParts, SimpleComponent},
     gtk::DrawingArea,
 };
-use std::{f64::consts::PI, time::Duration};
+
+use crate::settings;
 
 #[derive(Debug)]
 pub struct AnalogClock {

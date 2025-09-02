@@ -1,5 +1,4 @@
-use gtk4::glib;
-use gtk4::subclass::prelude::*;
+use gtk4::{glib, subclass::prelude::*};
 use zbus::proxy;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -112,16 +111,16 @@ trait AccessPoint {
 }
 
 mod imp {
+    use std::cell::{Cell, RefCell};
+
+    use anyhow::Result;
+    use gtk4::{glib, prelude::*, subclass::prelude::*};
+    use zbus::Connection;
+
     use super::{
         AccessPointProxy, DeviceType, NetworkDeviceProxy, NetworkManagerProxy, NetworkState,
         WirelessDeviceProxy,
     };
-    use anyhow::Result;
-    use gtk4::glib;
-    use gtk4::prelude::*;
-    use gtk4::subclass::prelude::*;
-    use std::cell::{Cell, RefCell};
-    use zbus::Connection;
 
     #[derive(glib::Properties, Default)]
     #[properties(wrapper_type = super::NetworkService)]
@@ -151,9 +150,10 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for NetworkService {
-        const NAME: &'static str = "MuseShellNetworkService";
-        type Type = super::NetworkService;
         type ParentType = glib::Object;
+        type Type = super::NetworkService;
+
+        const NAME: &'static str = "MuseShellNetworkService";
     }
 
     #[glib::derived_properties]

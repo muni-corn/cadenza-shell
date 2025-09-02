@@ -1,14 +1,16 @@
-use anyhow::Result;
-use gtk4::glib;
 use std::process::Command;
 
+use anyhow::Result;
+use gtk4::glib;
+
 mod imp {
+    use std::{
+        cell::{Cell, RefCell},
+        process::Command,
+    };
+
     use anyhow::Result;
-    use gtk4::glib;
-    use gtk4::prelude::*;
-    use gtk4::subclass::prelude::*;
-    use std::cell::{Cell, RefCell};
-    use std::process::Command;
+    use gtk4::{glib, prelude::*, subclass::prelude::*};
 
     #[derive(glib::Properties, Default)]
     #[properties(wrapper_type = super::AudioService)]
@@ -27,9 +29,10 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for AudioService {
-        const NAME: &'static str = "MuseShellAudioService";
-        type Type = super::AudioService;
         type ParentType = glib::Object;
+        type Type = super::AudioService;
+
+        const NAME: &'static str = "MuseShellAudioService";
     }
 
     #[glib::derived_properties]
@@ -94,7 +97,8 @@ mod imp {
 
             let volume = if output.status.success() {
                 let volume_str = String::from_utf8_lossy(&output.stdout);
-                // Parse volume percentage from output like "Volume: front-left: 65536 /  100% / 0.00 dB"
+                // Parse volume percentage from output like "Volume: front-left: 65536 /  100% /
+                // 0.00 dB"
                 if let Some(percent_pos) = volume_str.find('%') {
                     let before_percent = &volume_str[..percent_pos];
                     if let Some(last_space) = before_percent.rfind(' ') {

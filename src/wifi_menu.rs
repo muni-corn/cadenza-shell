@@ -1,6 +1,5 @@
 use gtk4::prelude::*;
-use relm4::factory::FactoryVecDeque;
-use relm4::prelude::*;
+use relm4::{factory::FactoryVecDeque, prelude::*};
 
 // WiFi menu component that displays available networks and allows connections
 #[derive(Debug, Clone)]
@@ -387,10 +386,10 @@ pub enum AccessPointOutput {
 
 #[relm4::factory]
 impl FactoryComponent for AccessPointWidget {
+    type CommandOutput = ();
     type Init = AccessPoint;
     type Input = AccessPointMsg;
     type Output = AccessPointOutput;
-    type CommandOutput = ();
     type ParentWidget = gtk::Box;
 
     view! {

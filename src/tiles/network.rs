@@ -1,10 +1,11 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::messages::NetworkType;
-use crate::services::network::{DeviceType, NetworkService};
-use crate::utils::icons::{NETWORK_WIFI_ICON_NAMES, percentage_to_icon_from_list};
-use crate::widgets::tile::TileOutput;
+use crate::{
+    services::network::{DeviceType, NetworkService},
+    utils::icons::{NETWORK_WIFI_ICON_NAMES, percentage_to_icon_from_list},
+    widgets::tile::TileOutput,
+};
 
 #[derive(Debug)]
 pub enum NetworkType {
