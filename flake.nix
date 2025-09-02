@@ -4,8 +4,8 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
 
-    fenix = {
-      url = "github:nix-community/fenix";
+    devenv = {
+      url = "github:cachix/devenv";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -21,6 +21,11 @@
 
     rust-flake = {
       url = "github:juspay/rust-flake";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
+    rust-overlay = {
+      url = "github:oxalica/rust-overlay";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -47,6 +52,7 @@
 
       imports = [
         inputs.git-hooks-nix.flakeModule
+        inputs.devenv.flakeModule
         inputs.rust-flake.flakeModules.default
         inputs.rust-flake.flakeModules.nixpkgs
         inputs.treefmt-nix.flakeModule
@@ -54,69 +60,126 @@
 
       perSystem =
         {
-          self',
           config,
           pkgs,
           system,
           ...
         }:
         let
-          
-      pname = "cadenza-shell";
+          pname = "cadenza-shell";
+
+          # GTK/Rust dependencies
+          buildInputs = with pkgs; [
+            gtk4
+            gtk4-layer-shell
+            glib
+            pango
+            gdk-pixbuf
+            pipewire
+            wireplumber
+            networkmanager
+          ];
+          # Additional build inputs for GTK
+          nativeBuildInputs = with pkgs; [
+            pkg-config
+            wrapGAppsHook4
+            makeWrapper
+          ];
         in
         {
-          # git hooks
-          pre-commit.settings.hooks = {
-            # commit linting
-            commitlint-rs =
-              let
-                config = pkgs.writers.writeYAML "commitlintrc.yml" {
-                  rules = {
-                    description-empty.level = "error";
-                    description-format = {
-                      level = "error";
-                      format = "^[a-z].*$";
-                    };
-                    description-max-length = {
-                      level = "error";
-                      length = 72;
-                    };
-                    scope-max-length = {
-                      level = "warning";
-                      length = 10;
-                    };
-                    scope-empty.level = "warning";
-                    type = {
-                      level = "error";
-                      options = [
-                        "build"
-                        "chore"
-                        "ci"
-                        "docs"
-                        "feat"
-                        "fix"
-                        "perf"
-                        "refactor"
-                        "style"
-                        "test"
-                      ];
+          # rust setup
+          devenv.shells.default = {
+            env.RUST_LOG = "info,muse_shell=debug";
+
+            languages.rust = {
+              enable = true;
+              channel = "nightly";
+              mold.enable = true;
+            };
+
+            packages = [
+              config.treefmt.build.wrapper
+              pkgs.cargo-outdated
+            ]
+            ++ buildInputs
+            ++ nativeBuildInputs
+            ++ (builtins.attrValues config.treefmt.build.programs);
+
+            # git hooks
+            git-hooks.hooks = {
+              # commit linting
+              commitlint-rs =
+                let
+                  config = pkgs.writers.writeYAML "commitlintrc.yml" {
+                    rules = {
+                      description-empty.level = "error";
+                      description-format = {
+                        level = "error";
+                        format = "^[a-z].*$";
+                      };
+                      description-max-length = {
+                        level = "error";
+                        length = 72;
+                      };
+                      scope-max-length = {
+                        level = "warning";
+                        length = 10;
+                      };
+                      scope-empty.level = "warning";
+                      type = {
+                        level = "error";
+                        options = [
+                          "build"
+                          "chore"
+                          "ci"
+                          "docs"
+                          "feat"
+                          "fix"
+                          "perf"
+                          "refactor"
+                          "style"
+                          "test"
+                        ];
+                      };
                     };
                   };
+
+                in
+                {
+                  enable = true;
+                  name = "commitlint-rs";
+                  package = pkgs.commitlint-rs;
+                  description = "Validate commit messages with commitlint-rs";
+                  entry = "${pkgs.lib.getExe pkgs.commitlint-rs} -g ${config} -e";
+                  always_run = true;
+                  stages = [ "commit-msg" ];
                 };
 
-              in
-              {
+              # format on commit
+              treefmt = {
                 enable = true;
-                name = "commitlint-rs";
-                package = pkgs.commitlint-rs;
-                description = "Validate commit messages with commitlint-rs";
-                entry = "${pkgs.lib.getExe pkgs.commitlint-rs} -g ${config} -e";
-                always_run = true;
-                stages = [ "commit-msg" ];
+                packageOverrides.treefmt = config.treefmt.build.wrapper;
               };
+            };
+          };
 
-            # format on commit
-            treefmt.enable = true;
+          # setup rust packages
+          rust-project = {
+            # ensure scss files are included with build
+            src = pkgs.lib.cleanSourceWith {
+              src = inputs.self;
+              filter =
+                path: type:
+                (pkgs.lib.hasSuffix ".scss" path) || (config.rust-project.crane-lib.filterCargoSources path type);
+            };
+
+            # use the same rust toolchain from the dev shell for consistency
+            toolchain = config.devenv.shells.default.languages.rust.toolchainPackage;
+
+            # specify dependencies
+            defaults.perCrate.crane.args = {
+              inherit nativeBuildInputs buildInputs;
+            };
           };
 
           # formatting
@@ -130,32 +193,6 @@
             taplo.enable = true;
           };
 
-          # Configure rust-flake
-          rust-project = {
-            # Use fenix for Rust toolchain
-            toolchain = inputs.fenix.packages.${system}.stable.toolchain;
-
-            crates.${pname}.crane.args = {
-              # GTK/Rust dependencies
-              buildInputs = with pkgs; [
-                gtk4
-                gtk4-layer-shell
-                glib
-                pango
-                gdk-pixbuf
-                pipewire
-                wireplumber
-                networkmanager
-              ];
-
-              # Additional build inputs for GTK
-              nativeBuildInputs = with pkgs; [
-                pkg-config
-                wrapGAppsHook4
-              ];
-            };
-          };
-
           # Legacy TypeScript build (for compatibility)
           packages = {
             typescript = pkgs.stdenv.mkDerivation {
@@ -163,7 +200,6 @@
               src = ./.;
 
               nativeBuildInputs = with pkgs; [
-                wrapGAppsHook
                 gobject-introspection
                 inputs.ags.packages.${system}.default
               ];
@@ -200,19 +236,8 @@
               '';
             };
 
-            # Set the Rust build as default
-            default = self'.packages.muse-shell;
-          };
-
-          # Development shell
-          devShells.default = pkgs.mkShell {
-            # for some reason, using the dev shell directly doesn't work, but this does
-            inputsFrom = [
-              self'.devShells.rust
-              config.pre-commit.devShell
-            ];
-            packages = [ pkgs.cargo-outdated ];
-            RUST_LOG = "info,muse_shell=debug";
+            # set the rust build as default
+            default = config.rust-project.crates.${pname}.crane.outputs.packages.${pname};
           };
         };
     };
