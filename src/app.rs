@@ -1,7 +1,8 @@
+use std::collections::HashMap;
+
 use gdk4::Display;
 use gtk4::prelude::*;
 use relm4::prelude::*;
-use std::collections::HashMap;
 
 use crate::widgets::bar::Bar;
 

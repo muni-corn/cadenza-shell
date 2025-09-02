@@ -1,10 +1,12 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::icon_names::{BATTERY_LEVEL_0_CHARGING, BATTERY_LEVEL_100_CHARGED, BATTERY_MISSING};
-use crate::services::battery::{BatteryService, BatteryStatus};
-use crate::utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list};
-use crate::widgets::tile::{Attention, TileOutput};
+use crate::{
+    icon_names::{BATTERY_LEVEL_0_CHARGING, BATTERY_LEVEL_100_CHARGED, BATTERY_MISSING},
+    services::battery::{BatteryService, BatteryStatus},
+    utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
+    widgets::tile::{Attention, TileOutput},
+};
 
 #[derive(Debug)]
 pub struct BatteryTile {

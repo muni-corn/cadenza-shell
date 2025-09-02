@@ -1,8 +1,8 @@
+use std::{collections::HashMap, sync::Arc};
+
 use anyhow::Result;
-use gtk4::glib;
-use gtk4::subclass::prelude::*;
+use relm4::{ComponentSender, Worker};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tokio::sync::RwLock;
 use zbus::{
     Connection, interface,
@@ -62,21 +62,17 @@ pub struct NotificationHints {
     #[serde(with = "as_value")]
     resident: bool,
 
-mod imp {
-    use super::{Notification, NotificationsDaemonProxy};
-    use anyhow::Result;
-    use futures_lite::StreamExt;
-    use gtk4::glib;
-    use gtk4::prelude::*;
-    use gtk4::subclass::prelude::*;
-    use std::cell::RefCell;
-    use zbus::Connection;
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
+    sound_file: Option<String>,
 
-    #[derive(glib::Properties, Default)]
-    #[properties(wrapper_type = super::NotificationService)]
-    pub struct NotificationService {
-        #[property(get, set)]
-        notification_count: std::cell::Cell<u32>,
+    #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
+    sound_name: Option<String>,
+
+    #[serde(with = "as_value")]
+    suppress_sound: bool,
+
+    #[serde(with = "as_value")]
+    transient: bool,
 
     #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
     urgency: Option<NotificationUrgency>,
@@ -85,12 +81,16 @@ mod imp {
     others: HashMap<String, OwnedValue>,
 }
 
-    #[glib::object_subclass]
-    impl ObjectSubclass for NotificationService {
-        const NAME: &'static str = "MuseShellNotificationService";
-        type Type = super::NotificationService;
-        type ParentType = glib::Object;
-    }
+#[derive(Serialize_repr, Deserialize_repr, PartialEq, Default, Debug, Type, Clone, Copy)]
+#[repr(u8)]
+pub enum NotificationUrgency {
+    Low = 0,
+
+    #[default]
+    Normal = 1,
+
+    Critical = 2,
+}
 
 static NOTIFICATION_ID: AtomicU32 = AtomicU32::new(1);
 

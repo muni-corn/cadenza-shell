@@ -1,6 +1,8 @@
+use std::path::Path;
+
+use glib::clone;
 use gtk4::prelude::*;
 use relm4::prelude::*;
-use std::path::Path;
 
 use crate::services::notifications::{Notification, NotificationUrgency};
 
@@ -36,10 +38,10 @@ pub enum NotificationCardOutput {
 
 #[relm4::factory(pub)]
 impl FactoryComponent for NotificationCard {
-    type Init = NotificationData;
+    type CommandOutput = ();
+    type Init = Notification;
     type Input = NotificationCardMsg;
     type Output = NotificationCardOutput;
-    type CommandOutput = ();
     type ParentWidget = gtk4::Box;
 
     view! {

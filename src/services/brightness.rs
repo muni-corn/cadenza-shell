@@ -1,18 +1,19 @@
-use anyhow::Result;
-use gtk4::glib;
-use gtk4::subclass::prelude::*;
 use std::fs;
 
+use anyhow::Result;
+use gtk4::{glib, subclass::prelude::*};
+
 mod imp {
+    use std::{
+        cell::{Cell, RefCell},
+        fs,
+        path::Path,
+        sync::mpsc,
+    };
+
     use anyhow::Result;
-    use gtk4::glib;
-    use gtk4::prelude::*;
-    use gtk4::subclass::prelude::*;
+    use gtk4::{glib, prelude::*, subclass::prelude::*};
     use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
-    use std::cell::{Cell, RefCell};
-    use std::fs;
-    use std::path::Path;
-    use std::sync::mpsc;
 
     #[derive(glib::Properties, Default)]
     #[properties(wrapper_type = super::BrightnessService)]
@@ -31,9 +32,10 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for BrightnessService {
-        const NAME: &'static str = "MuseShellBrightnessService";
-        type Type = super::BrightnessService;
         type ParentType = glib::Object;
+        type Type = super::BrightnessService;
+
+        const NAME: &'static str = "MuseShellBrightnessService";
     }
 
     #[glib::derived_properties]

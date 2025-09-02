@@ -1,8 +1,6 @@
-use gtk4::glib;
-use gtk4::subclass::prelude::*;
+use gtk4::{glib, subclass::prelude::*};
 use serde::{Deserialize, Serialize};
-use tokio::io::AsyncWriteExt;
-use tokio::net::UnixStream;
+use tokio::{io::AsyncWriteExt, net::UnixStream};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Workspace {
@@ -47,15 +45,16 @@ pub struct WorkspaceRef {
 }
 
 mod imp {
-    use super::{Client, Workspace};
+    use std::{cell::RefCell, collections::HashMap};
+
     use anyhow::Result;
-    use gtk4::glib;
-    use gtk4::prelude::*;
-    use gtk4::subclass::prelude::*;
-    use std::cell::RefCell;
-    use std::collections::HashMap;
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::UnixStream;
+    use gtk4::{glib, prelude::*, subclass::prelude::*};
+    use tokio::{
+        io::{AsyncReadExt, AsyncWriteExt},
+        net::UnixStream,
+    };
+
+    use super::{Client, Workspace};
 
     #[derive(glib::Properties, Default)]
     #[properties(wrapper_type = super::HyprlandService)]
@@ -83,9 +82,10 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for HyprlandService {
-        const NAME: &'static str = "MuseShellHyprlandService";
-        type Type = super::HyprlandService;
         type ParentType = glib::Object;
+        type Type = super::HyprlandService;
+
+        const NAME: &'static str = "MuseShellHyprlandService";
     }
 
     #[glib::derived_properties]

@@ -1,9 +1,7 @@
+use std::{fs, path::Path, time::Duration};
+
 use anyhow::Result;
-use relm4::Worker;
-use relm4::prelude::*;
-use std::fs;
-use std::path::Path;
-use std::time::Duration;
+use relm4::{Worker, prelude::*};
 use tokio::time;
 
 #[derive(Debug, Clone, Copy, PartialEq)]

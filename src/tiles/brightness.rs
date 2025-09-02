@@ -1,9 +1,11 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::services::brightness::BrightnessService;
-use crate::utils::icons::{BRIGHTNESS_ICON_NAMES, percentage_to_icon_from_list};
-use crate::widgets::tile::TileOutput;
+use crate::{
+    services::brightness::BrightnessService,
+    utils::icons::{BRIGHTNESS_ICON_NAMES, percentage_to_icon_from_list},
+    widgets::tile::TileOutput,
+};
 
 #[derive(Debug)]
 pub struct BrightnessTile {

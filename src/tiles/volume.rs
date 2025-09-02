@@ -1,8 +1,7 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::services::audio::AudioService;
-use crate::widgets::tile::TileOutput;
+use crate::{services::audio::AudioService, widgets::tile::TileOutput};
 
 #[derive(Debug)]
 pub struct VolumeTile {

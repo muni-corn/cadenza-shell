@@ -9,9 +9,9 @@ pub struct LeftGroup;
 pub struct LeftWidgets {}
 
 impl SimpleComponent for LeftGroup {
+    type Init = (gdk4::Monitor, BarConfig);
     type Input = ();
     type Output = ();
-    type Init = gdk4::Monitor;
     type Root = gtk::Box;
     type Widgets = LeftWidgets;
 

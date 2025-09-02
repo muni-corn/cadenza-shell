@@ -1,9 +1,9 @@
+use std::collections::HashMap;
+
 use gdk4::Monitor;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
-use relm4::factory::FactoryVecDeque;
-use relm4::prelude::*;
-use std::collections::HashMap;
+use relm4::{factory::FactoryVecDeque, prelude::*};
 
 use super::notification_card::{NotificationCard, NotificationCardOutput};
 use crate::services::notifications::Notification;

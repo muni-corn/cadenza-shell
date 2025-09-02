@@ -1,7 +1,7 @@
+use std::{fs, path::PathBuf};
+
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::PathBuf;
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 pub struct MuseShellConfig {

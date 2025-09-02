@@ -1,8 +1,10 @@
+use std::collections::HashMap;
+
 /// Multi-monitor support testing for muse-shell with Relm4
-/// This module contains tests and utilities for verifying multi-monitor functionality
+/// This module contains tests and utilities for verifying multi-monitor
+/// functionality
 use gdk4::{Display, Monitor};
 use gtk4::prelude::*;
-use std::collections::HashMap;
 
 #[derive(Debug, Clone)]
 pub struct MonitorInfo {

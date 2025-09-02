@@ -1,6 +1,5 @@
 use gtk4::prelude::*;
-use relm4::factory::FactoryVecDeque;
-use relm4::prelude::*;
+use relm4::{factory::FactoryVecDeque, prelude::*};
 
 #[derive(Debug, Clone)]
 pub struct AccessPoint {
@@ -381,10 +380,10 @@ pub enum AccessPointOutput {
 
 #[relm4::factory]
 impl FactoryComponent for AccessPointWidget {
+    type CommandOutput = ();
     type Init = AccessPoint;
     type Input = AccessPointMsg;
     type Output = AccessPointOutput;
-    type CommandOutput = ();
     type ParentWidget = gtk::Box;
 
     view! {

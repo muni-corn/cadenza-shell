@@ -1,11 +1,10 @@
 use gtk4::glib;
 
 mod imp {
-    use chrono::{DateTime, Local, Timelike};
-    use gtk4::glib;
-    use gtk4::prelude::*;
-    use gtk4::subclass::prelude::*;
     use std::cell::RefCell;
+
+    use chrono::{DateTime, Local, Timelike};
+    use gtk4::{glib, prelude::*, subclass::prelude::*};
 
     #[derive(glib::Properties, Default)]
     #[properties(wrapper_type = super::ClockService)]
@@ -28,9 +27,10 @@ mod imp {
 
     #[glib::object_subclass]
     impl ObjectSubclass for ClockService {
-        const NAME: &'static str = "MuseShellClockService";
-        type Type = super::ClockService;
         type ParentType = glib::Object;
+        type Type = super::ClockService;
+
+        const NAME: &'static str = "MuseShellClockService";
     }
 
     #[glib::derived_properties]
