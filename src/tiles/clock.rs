@@ -7,7 +7,7 @@ use tokio::time::interval;
 
 use crate::{
     icon_names,
-    widgets::tile::{Attention, Tile, TileInit, TileMsg, TileOutput},
+    widgets::tile::{Tile, TileInit, TileMsg},
 };
 
 #[derive(Debug)]
@@ -15,15 +15,9 @@ pub struct ClockTile {
     _tile: Controller<Tile>,
 }
 
-#[derive(Debug)]
-pub enum ClockMsg {
-    Clicked,
-    Nothing,
-}
-
 impl SimpleComponent for ClockTile {
     type Init = ();
-    type Input = ClockMsg;
+    type Input = ();
     type Output = ();
     type Root = gtk::Box;
     type Widgets = ();
@@ -31,7 +25,7 @@ impl SimpleComponent for ClockTile {
     fn init(
         _: Self::Init,
         root: Self::Root,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let current_time = Local::now();
 
@@ -42,14 +36,9 @@ impl SimpleComponent for ClockTile {
                 icon_name: Some(icon_names::CLOCK_ALT.to_string()),
                 primary: Some(format_time(&current_time)),
                 secondary: Some(format_date(&current_time)),
-                visible: true,
-                attention: Attention::Normal,
-                extra_classes: vec!["clock".to_string()],
+                ..Default::default()
             })
-            .forward(sender.input_sender(), |output| match output {
-                TileOutput::Clicked => ClockMsg::Clicked,
-                _ => ClockMsg::Nothing,
-            });
+            .detach();
 
         root.append(tile.widget());
 
