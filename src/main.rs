@@ -38,7 +38,7 @@ async fn main() -> glib::ExitCode {
     }
 
     RelmApp::new("com.musicaloft.muse-shell")
-        .visible_on_activate(false)
+        .visible_on_activate(cfg!(debug_assertions))
         .run::<MuseShellModel>(());
 
     gtk4::glib::ExitCode::FAILURE
