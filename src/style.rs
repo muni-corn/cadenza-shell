@@ -1,13 +1,13 @@
 use rsass::{
     compile_scss,
-    output::{Format, Style::Compressed},
+    output::{Format, Style},
 };
 
 pub fn compile_styles() -> Result<String, rsass::Error> {
     compile_scss(
         include_bytes!("style.scss"),
         Format {
-            style: Compressed,
+            style: Style::Expanded,
             ..Default::default()
         },
     )
