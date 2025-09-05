@@ -5,7 +5,7 @@ use crate::{
     icon_names::{BATTERY_LEVEL_0_CHARGING, BATTERY_LEVEL_100_CHARGED, BATTERY_MISSING},
     services::battery::{BatteryService, BatteryStatus},
     utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
-    widgets::tile::{Attention, TileOutput},
+    widgets::tile::{Attention, Tile, TileInit, TileMsg},
 };
 
 #[derive(Debug)]
@@ -16,7 +16,7 @@ pub struct BatteryTile {
     is_low: bool,
     is_critical: bool,
     service: BatteryService,
-    attention: Attention,
+    tile: Controller<Tile>,
 }
 
 #[derive(Debug)]
@@ -28,53 +28,18 @@ pub enum BatteryMsg {
         is_low: bool,
         is_critical: bool,
     },
-    Click,
-    UpdateDisplay,
 }
 
 pub struct BatteryWidgets {
     root: <BatteryTile as Component>::Root,
 }
 
-#[relm4::component(pub)]
 impl SimpleComponent for BatteryTile {
     type Init = ();
     type Input = BatteryMsg;
-    type Output = TileOutput;
-
-    view! {
-        #[root]
-        tile_button = gtk::Button {
-            add_css_class: "tile",
-            add_css_class: "battery",
-            #[watch]
-            set_visible: model.available,
-
-            connect_clicked[sender] => move |_| {
-                sender.input(BatteryMsg::Click);
-            },
-
-            gtk::Box {
-                set_orientation: gtk::Orientation::Horizontal,
-                set_spacing: 8,
-                set_halign: gtk::Align::Center,
-
-                #[name = "battery_icon"]
-                gtk::Image {
-                    #[watch]
-                    set_icon_name: Some(model.get_icon()),
-                    add_css_class: "tile-icon",
-                },
-
-                #[name = "battery_label"]
-                gtk::Label {
-                    #[watch]
-                    set_text: &model.get_text(),
-                    add_css_class: "tile-text",
-                },
-            }
-        }
-    }
+    type Output = ();
+    type Root = gtk::Box;
+    type Widgets = BatteryWidgets;
 
     fn init(
         _init: Self::Init,
@@ -83,6 +48,11 @@ impl SimpleComponent for BatteryTile {
     ) -> ComponentParts<Self> {
         let service = BatteryService::new();
 
+        // initialize the tile component
+        let tile = Tile::builder().launch(Default::default()).detach();
+
+        root.append(tile.widget());
+
         let model = BatteryTile {
             percentage: 0.0,
             charging: false,
@@ -90,12 +60,10 @@ impl SimpleComponent for BatteryTile {
             is_low: false,
             is_critical: false,
             service: service.clone(),
-            attention: Attention::Dim,
+            tile,
         };
 
-        let widgets = view_output!();
-
-        // Connect to battery service property changes
+        // connect to battery service property changes
         service.connect_percentage_notify(glib::clone!(
             #[strong]
             sender,
@@ -138,7 +106,7 @@ impl SimpleComponent for BatteryTile {
             }
         ));
 
-        // Initial state update
+        // initial state update
         if service.available() {
             sender.input(BatteryMsg::ServiceUpdate {
                 percentage: service.percentage(),
@@ -149,10 +117,10 @@ impl SimpleComponent for BatteryTile {
             });
         }
 
-        ComponentParts { model, widgets }
+        ComponentParts { model, widgets: () }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
             BatteryMsg::ServiceUpdate {
                 percentage,
@@ -167,27 +135,35 @@ impl SimpleComponent for BatteryTile {
                 self.is_low = is_low;
                 self.is_critical = is_critical;
 
-                // Update attention state
-                self.attention = if is_critical {
+                // update attention state
+                let attention = if is_critical {
                     Attention::Alarm
                 } else if is_low {
                     Attention::Warning
-                } else if charging {
-                    Attention::Normal
                 } else {
-                    Attention::Dim
+                    Attention::Normal
                 };
 
-                // Update CSS classes based on state
-                self.update_css_classes();
-            }
-            BatteryMsg::Click => {
-                sender.output(TileOutput::Clicked).ok();
-            }
-            BatteryMsg::UpdateDisplay => {
-                // Trigger view update
+                // update the tile with new data
+                self.tile.emit(TileMsg::UpdateData {
+                    icon: Some(self.get_icon().to_string()),
+                    primary: Some(self.get_text()),
+                    secondary: self.get_secondary_text(),
+                });
+
+                // update visibility and attention
+                self.tile.emit(TileMsg::SetVisible(available));
+                self.tile.emit(TileMsg::SetAttention(attention));
             }
         }
+    }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        widgets.root.set_visible(self.available);
+    }
+
+    fn init_root() -> Self::Root {
+        gtk::Box::new(gtk::Orientation::Horizontal, 0)
     }
 }
 
@@ -219,22 +195,14 @@ impl BatteryTile {
             return None;
         }
 
-        let status = if self.charging {
-            "Charging"
+        if self.charging {
+            Some("Charging".to_string())
         } else if self.is_critical {
-            "Critical"
+            Some("Critical".to_string())
         } else if self.is_low {
-            "Low"
+            Some("Low".to_string())
         } else {
-            return None;
-        };
-
-        Some(status.to_string())
-    }
-
-    fn update_css_classes(&self) {
-        // This would be called to update CSS classes dynamically
-        // In a real implementation, we'd need access to the widget
-        // For now, we'll handle this in the view macro
+            None
+        }
     }
 }
