@@ -6,7 +6,15 @@ use relm4::prelude::*;
 use serde::Deserialize;
 use tokio::time::sleep;
 
-use crate::{icon_names, widgets::tile::TileOutput};
+use crate::{
+    icon_names::{
+        WEATHER_CLOUDY_REGULAR, WEATHER_FOG_REGULAR, WEATHER_MOON_REGULAR,
+        WEATHER_PARTLY_CLOUDY_DAY_REGULAR, WEATHER_PARTLY_CLOUDY_NIGHT_REGULAR,
+        WEATHER_RAIN_REGULAR, WEATHER_RAIN_SHOWERS_DAY_REGULAR, WEATHER_SNOW_REGULAR,
+        WEATHER_SNOW_SHOWER_DAY_REGULAR, WEATHER_SUNNY_REGULAR, WEATHER_THUNDERSTORM_REGULAR,
+    },
+    widgets::tile::{Tile, TileMsg},
+};
 
 #[derive(Debug, Clone)]
 pub struct WeatherData {
@@ -22,19 +30,10 @@ pub struct WeatherTile {
 }
 
 #[derive(Debug)]
-pub enum WeatherMsg {
-    Click,
-    StartLoading,
-    StopLoading,
-    UpdateWeather(WeatherData),
-}
-
-#[derive(Debug)]
-pub struct WeatherWidgets {
-    root: gtk::Button,
-    icon: gtk::Image,
-    temp_label: gtk::Label,
-    cond_label: gtk::Label,
+pub enum WeatherUpdateMsg {
+    Start,
+    Abort,
+    Finish(WeatherData),
 }
 
 #[derive(Debug)]
@@ -45,9 +44,9 @@ pub struct WeatherWidgets {
 
 impl SimpleComponent for WeatherTile {
     type Init = ();
-    type Input = WeatherMsg;
-    type Output = TileOutput;
-    type Root = gtk::Button;
+    type Input = WeatherUpdateMsg;
+    type Output = ();
+    type Root = gtk::Box;
     type Widgets = WeatherWidgets;
 
     fn init(
@@ -55,81 +54,38 @@ impl SimpleComponent for WeatherTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // Initialize the Tile component
+        let tile = Tile::builder().launch(Default::default()).detach();
+
+        root.append(tile.widget());
+
+        // start polling in background
+        start_polling(sender.clone());
+
         let model = WeatherTile {
             weather_data: None,
             loading: false,
         };
 
-        let hbox = gtk::Box::new(gtk::Orientation::Horizontal, 8);
-        hbox.set_halign(gtk::Align::Center);
-
-        let icon = gtk::Image::builder()
-            .icon_name(icon_names::CLOUDS_OUTLINE)
-            .build();
-
-        let temp_label = gtk::Label::builder()
-            .css_classes(["tile-text", "weather-temp"])
-            .label("--")
-            .build();
-
-        let cond_label = gtk::Label::builder()
-            .css_classes(["tile-text", "weather-condition"])
-            .ellipsize(gtk::pango::EllipsizeMode::End)
-            .max_width_chars(12)
-            .label("Loading…")
-            .build();
-
-        hbox.append(&icon);
-        hbox.append(&temp_label);
-        hbox.append(&cond_label);
-        root.set_child(Some(&hbox));
-
-        root.add_css_class("tile");
-        root.add_css_class("weather");
-        root.set_visible(false); // start hidden until we have data
-
-        let sender_clone = sender.clone();
-        root.connect_clicked(move |_| {
-            sender_clone.input(WeatherMsg::Click);
-        });
-
-        // start polling in background
-        start_polling(sender.clone());
-
-        let widgets = WeatherWidgets {
-            root,
-            icon,
-            temp_label,
-            cond_label,
-        };
-
-        ComponentParts { model, widgets }
+        ComponentParts {
+            model,
+            widgets: WeatherWidgets { root, tile },
+        }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            WeatherMsg::Click => {
-                let _ = sender.output(TileOutput::Clicked);
+            WeatherUpdateMsg::Start => {
+                self.loading = true;
             }
-            WeatherMsg::StartLoading => self.loading = true,
-            WeatherMsg::StopLoading => self.loading = false,
+            WeatherUpdateMsg::Abort => {
+                self.weather_data = None;
+                self.loading = false;
+            }
             WeatherUpdateMsg::Finish(data) => {
                 self.weather_data = Some(data);
                 self.loading = false;
             }
-        }
-    }
-
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        if let Some(data) = &self.weather_data {
-            widgets.root.set_visible(true);
-            widgets.icon.set_icon_name(Some(&data.icon));
-            widgets
-                .temp_label
-                .set_label(&format!("{}°", data.temperature));
-            widgets.cond_label.set_label(&data.condition);
-        } else {
-            widgets.root.set_visible(false);
         }
     }
 
@@ -150,7 +106,7 @@ impl SimpleComponent for WeatherTile {
     }
 
     fn init_root() -> Self::Root {
-        gtk::Button::builder().build()
+        gtk::Box::builder().visible(false).build()
     }
 }
 
@@ -296,19 +252,19 @@ fn start_polling(sender: ComponentSender<WeatherTile>) {
         loop {
             match fetch_wttr().await {
                 Ok(data) => {
-                    sender.input(WeatherMsg::UpdateWeather(data));
+                    sender.input(WeatherUpdateMsg::Finish(data));
                     backoff = None;
                     continue;
                 }
                 Err(e) => {
                     log::error!("weather fetch failed: {e:?}");
-                    sender.input(WeatherMsg::StopLoading);
+                    sender.input(WeatherUpdateMsg::Abort);
                     backoff = Some(next_backoff(backoff));
                 }
             }
             let wait = backoff.unwrap_or(600);
             sleep(Duration::from_secs(wait)).await;
-            sender.input(WeatherMsg::StartLoading);
+            sender.input(WeatherUpdateMsg::Start);
         }
     });
 }
