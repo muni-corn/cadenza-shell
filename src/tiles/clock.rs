@@ -12,8 +12,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct ClockTile {
-    time: DateTime<Local>,
-    tile: Controller<Tile>,
+    _tile: Controller<Tile>,
 }
 
 #[derive(Debug)]
@@ -25,7 +24,7 @@ pub enum ClockMsg {
 impl SimpleComponent for ClockTile {
     type Init = ();
     type Input = ClockMsg;
-    type Output = TileOutput;
+    type Output = ();
     type Root = gtk::Box;
     type Widgets = ();
 
@@ -69,17 +68,12 @@ impl SimpleComponent for ClockTile {
             }
         });
 
-        let model = ClockTile {
-            time: current_time,
-            tile,
-        };
+        let model = ClockTile { _tile: tile };
 
         ComponentParts { model, widgets: () }
     }
 
-    fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>) {
-        // TODO: handle tile clicks
-    }
+    fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>) {}
 
     fn init_root() -> Self::Root {
         gtk::Box::new(gtk::Orientation::Horizontal, 0)
