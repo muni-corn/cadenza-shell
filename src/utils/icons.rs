@@ -10,6 +10,9 @@ pub const VOLUME_ICONS: &[&str] = &["󰕿", "󰖀", "󰕾"];
 pub const MUTE_ICON: &str = "󰖁";
 pub const BATTERY_ICON_NAMES: &[&str] = &[
     BATTERY_LEVEL_30,
+    BATTERY_LEVEL_30,
+    BATTERY_LEVEL_30,
+    BATTERY_LEVEL_30,
     BATTERY_LEVEL_40,
     BATTERY_LEVEL_50,
     BATTERY_LEVEL_60,
