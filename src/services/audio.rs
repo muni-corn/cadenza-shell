@@ -79,10 +79,10 @@ mod imp {
 
             if output.status.success() {
                 let sinks = String::from_utf8_lossy(&output.stdout);
-                if let Some(first_line) = sinks.lines().next() {
-                    if let Some(sink_name) = first_line.split_whitespace().nth(1) {
-                        return Ok(sink_name.to_string());
-                    }
+                if let Some(first_line) = sinks.lines().next()
+                    && let Some(sink_name) = first_line.split_whitespace().nth(1)
+                {
+                    return Ok(sink_name.to_string());
                 }
             }
 
