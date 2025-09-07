@@ -58,10 +58,10 @@ impl SimpleComponent for MuseShellModel {
         monitors.connect_items_changed(move |monitors, position, removed, added| {
             // handle removed monitors
             for i in position..position + removed {
-                if let Some(monitor) = monitors.item(i).and_downcast::<gdk4::Monitor>() {
-                    if let Some(connector) = monitor.connector() {
-                        sender_clone.input(MuseShellMsg::MonitorRemoved(connector.to_string()));
-                    }
+                if let Some(monitor) = monitors.item(i).and_downcast::<gdk4::Monitor>()
+                    && let Some(connector) = monitor.connector()
+                {
+                    sender_clone.input(MuseShellMsg::MonitorRemoved(connector.to_string()));
                 }
             }
 

@@ -225,16 +225,16 @@ pub fn get_config() -> MuseShellConfig {
 
 /// Update the global configuration
 pub fn update_config(new_config: MuseShellConfig) -> Result<()> {
-    if let Some(config_mutex) = CONFIG.get() {
-        if let Ok(mut config) = config_mutex.lock() {
-            *config = new_config.clone();
+    if let Some(config_mutex) = CONFIG.get()
+        && let Ok(mut config) = config_mutex.lock()
+    {
+        *config = new_config.clone();
 
-            // Also save to file
-            let config_path = ConfigManager::get_config_path();
-            let content = serde_json::to_string_pretty(&new_config)?;
-            fs::write(&config_path, content)?;
-            log::info!("updated and saved configuration");
-        }
+        // also save to file
+        let config_path = ConfigManager::get_config_path();
+        let content = serde_json::to_string_pretty(&new_config)?;
+        fs::write(&config_path, content)?;
+        log::info!("updated and saved configuration");
     }
     Ok(())
 }
@@ -244,11 +244,11 @@ pub fn reload_config() -> Result<()> {
     let config_path = ConfigManager::get_config_path();
     let reloaded_config = ConfigManager::load_config(&config_path)?;
 
-    if let Some(config_mutex) = CONFIG.get() {
-        if let Ok(mut config) = config_mutex.lock() {
-            *config = reloaded_config;
-            log::info!("reloaded configuration from file");
-        }
+    if let Some(config_mutex) = CONFIG.get()
+        && let Ok(mut config) = config_mutex.lock()
+    {
+        *config = reloaded_config;
+        log::info!("reloaded configuration from file");
     }
     Ok(())
 }

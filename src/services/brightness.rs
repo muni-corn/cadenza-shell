@@ -118,7 +118,7 @@ mod imp {
                 Ok(mut watcher) => {
                     // watch the brightness file
                     if let Err(e) =
-                        watcher.watch(&Path::new(&brightness_path), RecursiveMode::NonRecursive)
+                        watcher.watch(Path::new(&brightness_path), RecursiveMode::NonRecursive)
                     {
                         log::warn!("failed to watch brightness file: {}", e);
                         return;

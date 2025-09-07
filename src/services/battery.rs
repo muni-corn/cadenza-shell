@@ -7,19 +7,14 @@ use std::{
 use anyhow::Result;
 use gtk4::{glib, prelude::*, subclass::prelude::*};
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum BatteryStatus {
+    #[default]
     Unknown,
     Charging,
     Discharging,
     NotCharging,
     Full,
-}
-
-impl Default for BatteryStatus {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 mod imp {
@@ -140,10 +135,10 @@ fn detect_battery() -> Result<String> {
         let path = entry.path();
 
         // check if this is a battery (not AC adapter)
-        if let Ok(type_content) = fs::read_to_string(path.join("type")) {
-            if type_content.trim() == "Battery" {
-                return Ok(path.to_string_lossy().to_string());
-            }
+        if let Ok(type_content) = fs::read_to_string(path.join("type"))
+            && type_content.trim() == "Battery"
+        {
+            return Ok(path.to_string_lossy().to_string());
         }
     }
 

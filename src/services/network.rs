@@ -1,8 +1,9 @@
 use gtk4::{glib, subclass::prelude::*};
 use zbus::proxy;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum NetworkState {
+    #[default]
     Unknown = 0,
     Asleep = 10,
     Disconnected = 20,
@@ -11,12 +12,6 @@ pub enum NetworkState {
     ConnectedLocal = 50,
     ConnectedSite = 60,
     ConnectedGlobal = 70,
-}
-
-impl Default for NetworkState {
-    fn default() -> Self {
-        Self::Unknown
-    }
 }
 
 impl From<u32> for NetworkState {
@@ -208,10 +203,10 @@ mod imp {
 
             // Get primary connection info
             if is_connected {
-                if let Ok(primary_conn) = nm_proxy.primary_connection().await {
-                    if let Err(e) = self.update_primary_device_info(conn, &primary_conn).await {
-                        log::warn!("Failed to update primary device info: {}", e);
-                    }
+                if let Ok(primary_conn) = nm_proxy.primary_connection().await
+                    && let Err(e) = self.update_primary_device_info(conn, &primary_conn).await
+                {
+                    log::warn!("Failed to update primary device info: {}", e);
                 }
             } else {
                 // Reset connection info when disconnected

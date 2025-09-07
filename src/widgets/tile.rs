@@ -186,14 +186,7 @@ impl SimpleComponent for Tile {
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        // Update root visibility
-        if let Some(root) = widgets.icon.parent().and_then(|p| p.parent()) {
-            if let Some(button) = root.downcast_ref::<gtk::Button>() {
-                button.set_visible(self.visible);
-            }
-        }
-
-        // Update attention CSS classes
+        // update attention css classes
         let attention_class = self.attention.css_class();
         widgets.icon.set_css_classes(&["icon", attention_class]);
         widgets
