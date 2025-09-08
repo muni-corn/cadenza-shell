@@ -3,7 +3,7 @@ use relm4::prelude::*;
 
 use crate::{
     icon_names::{BATTERY_LEVEL_0_CHARGING, BATTERY_LEVEL_100_CHARGED, BATTERY_MISSING},
-    services::battery::{BatteryService, BatteryStatus},
+    services::battery::BatteryService,
     utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Attention, Tile, TileInit, TileMsg},
 };
@@ -64,10 +64,10 @@ impl SimpleComponent for BatteryTile {
         };
 
         // connect to battery service property changes
-        service.connect_percentage_notify(glib::clone!(
+        let update_closure = glib::clone!(
             #[strong]
             sender,
-            move |service| {
+            move |service: &BatteryService| {
                 sender.input(BatteryMsg::ServiceUpdate {
                     percentage: service.percentage(),
                     charging: service.charging(),
@@ -76,35 +76,13 @@ impl SimpleComponent for BatteryTile {
                     is_critical: service.is_critical(),
                 });
             }
-        ));
+        );
 
-        service.connect_charging_notify(glib::clone!(
-            #[strong]
-            sender,
-            move |service| {
-                sender.input(BatteryMsg::ServiceUpdate {
-                    percentage: service.percentage(),
-                    charging: service.charging(),
-                    available: service.available(),
-                    is_low: service.is_low(),
-                    is_critical: service.is_critical(),
-                });
-            }
-        ));
-
-        service.connect_available_notify(glib::clone!(
-            #[strong]
-            sender,
-            move |service| {
-                sender.input(BatteryMsg::ServiceUpdate {
-                    percentage: service.percentage(),
-                    charging: service.charging(),
-                    available: service.available(),
-                    is_low: service.is_low(),
-                    is_critical: service.is_critical(),
-                });
-            }
-        ));
+        service.connect_percentage_notify(update_closure.clone());
+        service.connect_charging_notify(update_closure.clone());
+        service.connect_available_notify(update_closure.clone());
+        service.connect_time_to_empty_notify(update_closure.clone());
+        service.connect_time_to_full_notify(update_closure.clone());
 
         // initial state update
         if service.available() {
@@ -117,7 +95,10 @@ impl SimpleComponent for BatteryTile {
             });
         }
 
-        ComponentParts { model, widgets: () }
+        ComponentParts {
+            model,
+            widgets: BatteryWidgets { root },
+        }
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
@@ -172,7 +153,7 @@ impl BatteryTile {
         if !self.available {
             BATTERY_MISSING
         } else if self.charging {
-            if self.service.status() == BatteryStatus::Full {
+            if self.service.percentage() > 0.99 {
                 BATTERY_LEVEL_100_CHARGED
             } else {
                 BATTERY_LEVEL_0_CHARGING
@@ -187,7 +168,11 @@ impl BatteryTile {
             return "N/A".to_string();
         }
 
-        format!("{}%", (self.percentage * 100.0) as u32)
+        if self.service.percentage() > 0.99 {
+            "Full".to_string()
+        } else {
+            format!("{}%", (self.percentage * 100.0) as u32)
+        }
     }
 
     fn get_secondary_text(&self) -> Option<String> {
@@ -195,12 +180,9 @@ impl BatteryTile {
             return None;
         }
 
-        if self.charging {
-            Some("Charging".to_string())
-        } else if self.is_critical {
-            Some("Critical".to_string())
-        } else if self.is_low {
-            Some("Low".to_string())
+        let readable_time = self.service.get_readable_time();
+        if !readable_time.is_empty() {
+            Some(readable_time)
         } else {
             None
         }
