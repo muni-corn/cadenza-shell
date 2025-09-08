@@ -20,10 +20,7 @@ mod imp {
         charging: Cell<bool>,
 
         #[property(get, set)]
-        time_to_empty: Cell<i32>, // seconds, -1 if unknown
-
-        #[property(get, set)]
-        time_to_full: Cell<i32>, // seconds, -1 if unknown
+        time_remaining: Cell<i32>, // seconds, -1 if unknown
 
         system: RefCell<Option<System>>,
     }
@@ -34,8 +31,7 @@ mod imp {
                 percentage: Cell::new(0.0),
                 available: Cell::new(false),
                 charging: Cell::new(false),
-                time_to_empty: Cell::new(-1),
-                time_to_full: Cell::new(-1),
+                time_remaining: Cell::new(-1),
                 system: RefCell::new(None),
             }
         }
@@ -63,13 +59,10 @@ mod imp {
                 self.available.set(true);
 
                 // initial state update
-                if let Some((charging, percentage, time_to_empty, time_to_full)) =
-                    self.read_battery_state()
-                {
+                if let Some((charging, percentage, time_remaining)) = self.read_battery_state() {
                     self.percentage.set(percentage);
                     self.charging.set(charging);
-                    self.time_to_empty.set(time_to_empty);
-                    self.time_to_full.set(time_to_full);
+                    self.time_remaining.set(time_remaining);
                 }
 
                 // start monitoring
@@ -91,7 +84,7 @@ mod imp {
             system.battery_life().is_ok()
         }
 
-        fn read_battery_state(&self) -> Option<(bool, f64, i32, i32)> {
+        fn read_battery_state(&self) -> Option<(bool, f64, i32)> {
             let system_guard = self.system.borrow();
             let system = system_guard.as_ref()?;
 
@@ -105,13 +98,7 @@ mod imp {
 
             let charging = system.on_ac_power().ok()?;
 
-            let (time_to_empty, time_to_full) = if charging {
-                (-1, time_remaining) // time to full  
-            } else {
-                (time_remaining, -1) // time to empty
-            };
-
-            Some((charging, percentage, time_to_empty, time_to_full))
+            Some((charging, percentage, time_remaining))
         }
 
         fn start_monitoring(&self) {
@@ -119,8 +106,7 @@ mod imp {
 
             // monitor battery changes every 10 seconds
             glib::timeout_add_local(std::time::Duration::from_secs(10), move || {
-                if let Some((charging, percentage, time_to_empty, time_to_full)) =
-                    obj.imp().read_battery_state()
+                if let Some((charging, percentage, time_remaining)) = obj.imp().read_battery_state()
                 {
                     // only update if values changed to avoid unnecessary signals
                     if (obj.percentage() - percentage).abs() > 0.01 {
@@ -131,12 +117,8 @@ mod imp {
                         obj.set_charging(charging);
                     }
 
-                    if obj.time_to_empty() != time_to_empty {
-                        obj.set_time_to_empty(time_to_empty);
-                    }
-
-                    if obj.time_to_full() != time_to_full {
-                        obj.set_time_to_full(time_to_full);
+                    if obj.time_remaining() != time_remaining {
+                        obj.set_time_remaining(time_remaining);
                     }
                 }
                 glib::ControlFlow::Continue
@@ -161,21 +143,13 @@ impl BatteryService {
     }
 
     pub fn is_low(&self) -> bool {
-        let time_remaining = if self.charging() {
-            self.time_to_full()
-        } else {
-            self.time_to_empty()
-        };
+        let time_remaining = self.time_remaining();
         (self.percentage() <= 0.2 || (time_remaining > 0 && time_remaining <= 3600))
             && !self.charging()
     }
 
     pub fn is_critical(&self) -> bool {
-        let time_remaining = if self.charging() {
-            self.time_to_full()
-        } else {
-            self.time_to_empty()
-        };
+        let time_remaining = self.time_remaining();
         (self.percentage() <= 0.1 || (time_remaining > 0 && time_remaining <= 1800))
             && !self.charging()
     }
@@ -185,11 +159,7 @@ impl BatteryService {
             return "Plugged in".to_string();
         }
 
-        let time_remaining = if self.charging() {
-            self.time_to_full()
-        } else {
-            self.time_to_empty()
-        };
+        let time_remaining = self.time_remaining();
 
         if time_remaining < 30 * 60 {
             let minutes = (time_remaining + 59) / 60; // round up
