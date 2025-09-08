@@ -81,8 +81,7 @@ impl SimpleComponent for BatteryTile {
         service.connect_percentage_notify(update_closure.clone());
         service.connect_charging_notify(update_closure.clone());
         service.connect_available_notify(update_closure.clone());
-        service.connect_time_to_empty_notify(update_closure.clone());
-        service.connect_time_to_full_notify(update_closure.clone());
+        service.connect_time_remaining_notify(update_closure.clone());
 
         // initial state update
         if service.available() {
