@@ -3,6 +3,8 @@ use std::{sync::Arc, time::Duration};
 use systemstat::{Platform, System};
 use tokio::sync::RwLock;
 
+use crate::services::Service;
+
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct BatteryState {
     pub percentage: f64,
@@ -60,7 +62,34 @@ pub struct BatteryService {
 }
 
 impl BatteryService {
-    pub fn launch() -> Self {
+    async fn read_battery_state(system_arc: &Arc<RwLock<System>>) -> Option<BatteryState> {
+        let battery_life = system_arc
+            .read()
+            .await
+            .battery_life()
+            .map_err(|e| log::error!("error getting battery state: {}", e))
+            .ok()?;
+
+        // get percentage (0.0 to 1.0)
+        let percentage = battery_life.remaining_capacity as f64;
+
+        // get time remaining
+        let time_remaining = battery_life.remaining_time;
+
+        let charging = system_arc.read().await.on_ac_power().ok().unwrap_or(false);
+
+        Some(BatteryState {
+            percentage,
+            charging,
+            time_remaining,
+        })
+    }
+}
+
+impl Service for BatteryService {
+    type State = Option<BatteryState>;
+
+    fn launch() -> Self {
         let service = Self {
             state: Arc::new(RwLock::new(None)),
             system: Arc::new(RwLock::new(System::new())),
@@ -89,7 +118,7 @@ impl BatteryService {
         service
     }
 
-    pub fn with(self, callback: impl FnMut(Option<BatteryState>) + Send + Sync + 'static) -> Self {
+    fn with(self, callback: impl FnMut(Self::State) + Send + Sync + 'static) -> Self {
         let callbacks_clone = Arc::clone(&self.callbacks);
 
         // this is probably extremely grotesque, but heck it we ball
@@ -99,28 +128,5 @@ impl BatteryService {
         });
 
         self
-    }
-
-    async fn read_battery_state(system_arc: &Arc<RwLock<System>>) -> Option<BatteryState> {
-        let battery_life = system_arc
-            .read()
-            .await
-            .battery_life()
-            .map_err(|e| log::error!("error getting battery state: {}", e))
-            .ok()?;
-
-        // get percentage (0.0 to 1.0)
-        let percentage = battery_life.remaining_capacity as f64;
-
-        // get time remaining
-        let time_remaining = battery_life.remaining_time;
-
-        let charging = system_arc.read().await.on_ac_power().ok().unwrap_or(false);
-
-        Some(BatteryState {
-            percentage,
-            charging,
-            time_remaining,
-        })
     }
 }
