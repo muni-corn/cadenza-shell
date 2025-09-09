@@ -9,7 +9,6 @@ use crate::tiles::{
 #[derive(Debug)]
 pub struct RightGroup;
 
-#[derive(Debug)]
 pub struct RightWidgets {
     _brightness: Controller<BrightnessTile>,
     _volume: Controller<VolumeTile>,
