@@ -1,182 +1,126 @@
-use std::cell::{Cell, RefCell};
+use std::{sync::Arc, time::Duration};
 
-use chrono::Local;
-use gtk4::{glib, prelude::*, subclass::prelude::*};
 use systemstat::{Platform, System};
+use tokio::sync::RwLock;
 
-mod imp {
-    use super::*;
-
-    #[derive(glib::Properties)]
-    #[properties(wrapper_type = super::BatteryService)]
-    pub struct BatteryService {
-        #[property(get, set, minimum = 0.0, maximum = 1.0)]
-        percentage: Cell<f64>,
-
-        #[property(get, set)]
-        available: Cell<bool>,
-
-        #[property(get, set)]
-        charging: Cell<bool>,
-
-        #[property(get, set)]
-        time_remaining: Cell<i32>, // seconds, -1 if unknown
-
-        system: RefCell<Option<System>>,
-    }
-
-    impl Default for BatteryService {
-        fn default() -> Self {
-            Self {
-                percentage: Cell::new(0.0),
-                available: Cell::new(false),
-                charging: Cell::new(false),
-                time_remaining: Cell::new(-1),
-                system: RefCell::new(None),
-            }
-        }
-    }
-
-    #[glib::object_subclass]
-    impl ObjectSubclass for BatteryService {
-        type ParentType = glib::Object;
-        type Type = super::BatteryService;
-
-        const NAME: &'static str = "MuseShellBatteryService";
-    }
-
-    #[glib::derived_properties]
-    impl ObjectImpl for BatteryService {
-        fn constructed(&self) {
-            self.parent_constructed();
-
-            // initialize systemstat
-            let system = System::new();
-            self.system.replace(Some(system));
-
-            // check if battery is available
-            if self.has_battery() {
-                self.available.set(true);
-
-                // initial state update
-                if let Some((charging, percentage, time_remaining)) = self.read_battery_state() {
-                    self.percentage.set(percentage);
-                    self.charging.set(charging);
-                    self.time_remaining.set(time_remaining);
-                }
-
-                // start monitoring
-                self.start_monitoring();
-            } else {
-                log::warn!("no battery detected, battery service unavailable");
-                self.available.set(false);
-            }
-        }
-    }
-
-    impl BatteryService {
-        fn has_battery(&self) -> bool {
-            let system_guard = self.system.borrow();
-            let Some(ref system) = *system_guard else {
-                return false;
-            };
-
-            system.battery_life().is_ok()
-        }
-
-        fn read_battery_state(&self) -> Option<(bool, f64, i32)> {
-            let system_guard = self.system.borrow();
-            let system = system_guard.as_ref()?;
-
-            let battery_life = system.battery_life().ok()?;
-
-            // get percentage (0.0 to 1.0)
-            let percentage = battery_life.remaining_capacity as f64;
-
-            // get time remaining in seconds
-            let time_remaining = battery_life.remaining_time.as_secs() as i32;
-
-            let charging = system.on_ac_power().ok()?;
-
-            Some((charging, percentage, time_remaining))
-        }
-
-        fn start_monitoring(&self) {
-            let obj = self.obj().clone();
-
-            // monitor battery changes every 10 seconds
-            glib::timeout_add_local(std::time::Duration::from_secs(10), move || {
-                if let Some((charging, percentage, time_remaining)) = obj.imp().read_battery_state()
-                {
-                    // only update if values changed to avoid unnecessary signals
-                    if (obj.percentage() - percentage).abs() > 0.01 {
-                        obj.set_percentage(percentage);
-                    }
-
-                    if obj.charging() != charging {
-                        obj.set_charging(charging);
-                    }
-
-                    if obj.time_remaining() != time_remaining {
-                        obj.set_time_remaining(time_remaining);
-                    }
-                }
-                glib::ControlFlow::Continue
-            });
-        }
-    }
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub struct BatteryState {
+    pub percentage: f64,
+    pub charging: bool,
+    pub time_remaining: Duration,
 }
 
-glib::wrapper! {
-    pub struct BatteryService(ObjectSubclass<imp::BatteryService>);
-}
-
-impl Default for BatteryService {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl BatteryService {
-    pub fn new() -> Self {
-        glib::Object::builder().build()
-    }
-
+impl BatteryState {
     pub fn is_low(&self) -> bool {
-        let time_remaining = self.time_remaining();
-        (self.percentage() <= 0.2 || (time_remaining > 0 && time_remaining <= 3600))
-            && !self.charging()
+        let time_remaining_secs = self.time_remaining.as_secs();
+
+        (self.percentage <= 0.2 || time_remaining_secs <= 3600) && !self.charging
     }
 
     pub fn is_critical(&self) -> bool {
-        let time_remaining = self.time_remaining();
-        (self.percentage() <= 0.1 || (time_remaining > 0 && time_remaining <= 1800))
-            && !self.charging()
+        let time_remaining_secs = self.time_remaining.as_secs();
+
+        (self.percentage <= 0.1 || time_remaining_secs <= 1800) && !self.charging
     }
 
     pub fn get_readable_time(&self) -> String {
-        if self.charging() && self.percentage() > 0.99 {
-            return "Plugged in".to_string();
-        }
+        use chrono::Local;
 
-        let time_remaining = self.time_remaining();
-
-        if time_remaining < 30 * 60 {
-            let minutes = (time_remaining + 59) / 60; // round up
-            return format!("{} min left", minutes);
-        }
-
-        // calculate actual completion time
-        let now = Local::now();
-        let completion_time = now + chrono::Duration::seconds(time_remaining as i64);
-
-        // format as "h:mm am/pm" (matches TypeScript DATE_FORMAT)
-        let formatted = completion_time.format("%-I:%M %P").to_string();
-
-        if self.charging() {
-            format!("Full at {}", formatted)
+        if self.charging && self.percentage > 0.99 {
+            "Plugged in".to_string()
         } else {
-            format!("Until {}", formatted)
+            let time_remaining = self.time_remaining.as_secs();
+            if time_remaining < 30 * 60 {
+                format!("{} min left", time_remaining / 60)
+            } else {
+                // calculate actual completion time
+                let now = Local::now();
+                let completion_time = now + chrono::Duration::seconds(time_remaining as i64);
+
+                // format as "h:mm am/pm"
+                let formatted = completion_time.format("%-I:%M %P").to_string();
+
+                if self.charging {
+                    format!("Full at {}", formatted)
+                } else {
+                    format!("Until {}", formatted)
+                }
+            }
         }
+    }
+}
+
+type CallbackVec = Vec<Box<dyn FnMut(Option<BatteryState>) + Send + Sync>>;
+type CallbackCollection = Arc<RwLock<CallbackVec>>;
+
+pub struct BatteryService {
+    state: Arc<RwLock<Option<BatteryState>>>,
+    system: Arc<RwLock<System>>,
+    callbacks: CallbackCollection,
+}
+
+impl BatteryService {
+    pub fn launch() -> Self {
+        let service = Self {
+            state: Arc::new(RwLock::new(None)),
+            system: Arc::new(RwLock::new(System::new())),
+            callbacks: Arc::new(RwLock::new(Vec::new())),
+        };
+
+        // main loop
+        let state = Arc::clone(&service.state);
+        let system_arc = Arc::clone(&service.system);
+        let callbacks_arc = Arc::clone(&service.callbacks);
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(10));
+            loop {
+                interval.tick().await;
+
+                let new_state = Self::read_battery_state(&system_arc).await;
+                let changed = { new_state != *state.read().await };
+                if changed {
+                    for callback in &mut *callbacks_arc.write().await {
+                        callback(new_state)
+                    }
+                }
+            }
+        });
+
+        service
+    }
+
+    pub fn with(self, callback: impl FnMut(Option<BatteryState>) + Send + Sync + 'static) -> Self {
+        let callbacks_clone = Arc::clone(&self.callbacks);
+
+        // this is probably extremely grotesque, but heck it we ball
+        // (unfortunately, using blocking_write causes a panic)
+        tokio::spawn(async move {
+            callbacks_clone.write().await.push(Box::new(callback));
+        });
+
+        self
+    }
+
+    async fn read_battery_state(system_arc: &Arc<RwLock<System>>) -> Option<BatteryState> {
+        let battery_life = system_arc
+            .read()
+            .await
+            .battery_life()
+            .map_err(|e| log::error!("error getting battery state: {}", e))
+            .ok()?;
+
+        // get percentage (0.0 to 1.0)
+        let percentage = battery_life.remaining_capacity as f64;
+
+        // get time remaining
+        let time_remaining = battery_life.remaining_time;
+
+        let charging = system_arc.read().await.on_ac_power().ok().unwrap_or(false);
+
+        Some(BatteryState {
+            percentage,
+            charging,
+            time_remaining,
+        })
     }
 }
