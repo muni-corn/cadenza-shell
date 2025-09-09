@@ -20,7 +20,6 @@ pub struct Bar {
 #[derive(Debug)]
 pub enum BarMsg {}
 
-#[derive(Debug)]
 pub struct BarWidgets {
     // save Controllers so they aren't dropped
     _left: Controller<LeftGroup>,

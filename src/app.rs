@@ -6,7 +6,6 @@ use relm4::prelude::*;
 
 use crate::widgets::bar::Bar;
 
-#[derive(Debug)]
 pub(crate) struct MuseShellModel {
     bars: HashMap<String, Controller<Bar>>,
     display: Display,
