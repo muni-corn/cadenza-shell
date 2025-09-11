@@ -1,3 +1,5 @@
+#![feature(trait_alias)]
+
 mod analog_clock;
 mod app;
 mod commands;
