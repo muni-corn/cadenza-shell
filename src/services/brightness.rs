@@ -1,4 +1,4 @@
-use std::{fs, path::Path, sync::mpsc};
+use std::{fs, path::Path, sync::mpsc, thread};
 
 use anyhow::Result;
 use notify::{RecursiveMode, Watcher};
@@ -51,8 +51,7 @@ impl Worker for BrightnessService {
                 log::error!("couldn't send initial state");
             });
 
-        tokio::spawn(async move {
-            log::debug!("creating channel for watcher");
+        thread::spawn(move || {
             let (tx, rx) = mpsc::channel();
             let brightness_path = format!("/sys/class/backlight/{}/brightness", &interface);
 
