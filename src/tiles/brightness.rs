@@ -2,145 +2,123 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    services::brightness::BrightnessService,
+    services::{
+        Service,
+        brightness::{BrightnessEvent, BrightnessService},
+    },
     utils::icons::{BRIGHTNESS_ICON_NAMES, percentage_to_icon_from_list},
-    widgets::tile::TileOutput,
+    widgets::tile::{Tile, TileInit, TileMsg},
 };
 
-#[derive(Debug)]
 pub struct BrightnessTile {
-    brightness: f64,
-    available: bool,
+    brightness_percentage: Option<f64>,
     _service: BrightnessService,
+    tile: Controller<Tile>,
 }
 
 #[derive(Debug)]
 pub enum BrightnessMsg {
-    Click,
-    ServiceUpdate { brightness: f64, available: bool },
+    ServiceUpdate(<BrightnessService as Service>::Event),
 }
 
-#[relm4::component(pub)]
 impl SimpleComponent for BrightnessTile {
     type Init = ();
     type Input = BrightnessMsg;
-    type Output = TileOutput;
-
-    view! {
-        #[root]
-        tile_button = gtk::Button {
-            add_css_class: "tile",
-            add_css_class: "brightness",
-            #[watch]
-            set_visible: model.available,
-
-            connect_clicked[sender] => move |_| {
-                sender.input(BrightnessMsg::Click);
-            },
-
-            gtk::Box {
-                set_orientation: gtk::Orientation::Horizontal,
-                set_spacing: 8,
-                set_halign: gtk::Align::Center,
-
-                gtk::Image {
-                    #[watch]
-                    set_icon_name: Some(model.get_icon()),
-                    add_css_class: "tile-icon",
-                },
-
-                gtk::Label {
-                    #[watch]
-                    set_text: &model.get_text(),
-                    add_css_class: "tile-text",
-                },
-            }
-        }
-    }
+    type Output = ();
+    type Root = gtk::Box;
+    type Widgets = ();
 
     fn init(
         _init: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let service = BrightnessService::new();
+        log::debug!("init called");
+        let _service = BrightnessService::launch().with(move |state| {
+            log::debug!("service callback triggered");
+            sender.input(BrightnessMsg::ServiceUpdate(state));
+        });
+
+        // initialize the tile component
+        let tile = Tile::builder()
+            .launch(TileInit {
+                name: "brightness".to_string(),
+                visible: false,
+                ..Default::default()
+            })
+            .detach();
+
+        root.append(tile.widget());
 
         let model = BrightnessTile {
-            brightness: 0.0,
-            available: false,
-            _service: service.clone(),
+            brightness_percentage: None,
+            _service,
+            tile,
         };
 
-        let widgets = view_output!();
-
-        // Connect to brightness service
-        service.connect_brightness_notify(glib::clone!(
-            #[strong]
-            sender,
-            move |service| {
-                sender.input(BrightnessMsg::ServiceUpdate {
-                    brightness: service.brightness(),
-                    available: service.available(),
-                });
-            }
-        ));
-
-        // Initial update
-        if service.available() {
-            sender.input(BrightnessMsg::ServiceUpdate {
-                brightness: service.brightness(),
-                available: service.available(),
-            });
-        }
-
-        ComponentParts { model, widgets }
+        ComponentParts { model, widgets: () }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            BrightnessMsg::Click => {
-                sender.output(TileOutput::Clicked).ok();
-            }
-            BrightnessMsg::ServiceUpdate {
-                brightness,
-                available,
-            } => {
-                self.brightness = brightness;
-                self.available = available;
-            }
+            BrightnessMsg::ServiceUpdate(state) => match state {
+                BrightnessEvent::Percentage(p) => {
+                    self.brightness_percentage = Some(p);
+
+                    // update the tile with new data
+                    self.tile.emit(TileMsg::UpdateData {
+                        icon: Some(self.get_icon().to_string()),
+                        primary: Some(self.get_text()),
+                        secondary: None,
+                    });
+
+                    // update visibility
+                    self.tile.emit(TileMsg::SetVisible(true));
+                }
+                BrightnessEvent::Unavailable => {
+                    self.brightness_percentage = None;
+
+                    // hide the tile when brightness is unavailable
+                    self.tile.emit(TileMsg::SetVisible(false));
+                }
+            },
         }
+    }
+
+    fn init_root() -> Self::Root {
+        gtk::Box::new(gtk::Orientation::Horizontal, 0)
     }
 }
 
 impl BrightnessTile {
+    /// Gets the icon for this tile, using a logarithmic curve for brightness.
     fn get_icon(&self) -> &str {
-        if !self.available {
-            "display-brightness-symbolic"
-        } else {
-            let log_brightness = self.get_logarithmic_brightness();
-            percentage_to_icon_from_list(log_brightness, BRIGHTNESS_ICON_NAMES)
-        }
+        self.brightness_percentage
+            .as_ref()
+            .map(|p| {
+                let log_brightness = to_logarithmic(*p);
+                percentage_to_icon_from_list(log_brightness, BRIGHTNESS_ICON_NAMES)
+            })
+            .unwrap_or_default()
     }
 
-    fn get_logarithmic_brightness(&self) -> f64 {
-        // use logarithmic scale for perceived brightness
-        // convert linear brightness to logarithmic perception
-        if self.brightness <= 0.0 {
-            0.0
-        } else {
-            // logarithmic mapping: log10(brightness * 9.0 + 1.0) gives us 0-1 range
-            (self.brightness * 9.0 + 1.0).log10()
-        }
-    }
-
+    /// Gets the percentage text for this tile, using a logarithmic curve for
+    /// brightness.
     fn get_text(&self) -> String {
-        if !self.available {
-            return "N/A".to_string();
-        }
+        self.brightness_percentage
+            .as_ref()
+            .map(|p| format!("{}%", (to_logarithmic(*p) * 100.0).round() as u32))
+            .unwrap_or_default()
+    }
+}
 
-        format!(
-            "{}%",
-            (self.get_logarithmic_brightness() * 100.0).round() as u32
-        )
+fn to_logarithmic(brightness: f64) -> f64 {
+    // use logarithmic scale for perceived brightness
+    // convert linear brightness to logarithmic perception
+    if brightness <= 0.0 {
+        0.0
+    } else {
+        // logarithmic mapping: log10(brightness * 9.0 + 1.0) gives us 0-1 range
+        (brightness * 9.0 + 1.0).log10()
     }
 }
