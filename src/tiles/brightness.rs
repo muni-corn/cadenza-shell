@@ -1,24 +1,21 @@
 use gtk4::prelude::*;
-use relm4::prelude::*;
+use relm4::{Worker, prelude::*};
 
 use crate::{
-    services::{
-        Service,
-        brightness::{BrightnessEvent, BrightnessService},
-    },
+    services::brightness::{BrightnessEvent, BrightnessService},
     utils::icons::{BRIGHTNESS_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Tile, TileInit, TileMsg},
 };
 
 pub struct BrightnessTile {
     brightness_percentage: Option<f64>,
-    _service: BrightnessService,
+    _service: Controller<BrightnessService>,
     tile: Controller<Tile>,
 }
 
 #[derive(Debug)]
 pub enum BrightnessMsg {
-    ServiceUpdate(<BrightnessService as Service>::Event),
+    ServiceUpdate(<BrightnessService as Worker>::Output),
 }
 
 impl SimpleComponent for BrightnessTile {
@@ -33,11 +30,11 @@ impl SimpleComponent for BrightnessTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        log::debug!("init called");
-        let _service = BrightnessService::launch().with(move |state| {
-            log::debug!("service callback triggered");
-            sender.input(BrightnessMsg::ServiceUpdate(state));
-        });
+        let _service = BrightnessService::builder()
+            .launch(())
+            .forward(sender.input_sender(), |state| {
+                BrightnessMsg::ServiceUpdate(state)
+            });
 
         // initialize the tile component
         let tile = Tile::builder()
