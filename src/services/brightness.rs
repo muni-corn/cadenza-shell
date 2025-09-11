@@ -1,217 +1,159 @@
-use std::fs;
+use std::{
+    fs,
+    path::Path,
+    sync::{Arc, mpsc},
+};
 
 use anyhow::Result;
-use gtk4::{glib, subclass::prelude::*};
+use notify::{RecursiveMode, Watcher};
+use tokio::sync::RwLock;
 
-mod imp {
-    use std::{
-        cell::{Cell, RefCell},
-        fs,
-        path::Path,
-        sync::mpsc,
-    };
+use crate::services::{AsyncProp, Callback, Callbacks, Service};
 
-    use anyhow::Result;
-    use gtk4::{glib, prelude::*, subclass::prelude::*};
-    use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
+#[derive(Debug)]
+pub enum BrightnessEvent {
+    /// The percentage of brightness has changed.
+    Percentage(f64),
 
-    #[derive(glib::Properties, Default)]
-    #[properties(wrapper_type = super::BrightnessService)]
-    pub struct BrightnessService {
-        #[property(get, set)]
-        available: Cell<bool>,
+    /// The service is unavailable.
+    Unavailable,
+}
 
-        #[property(get, set, minimum = 0.0, maximum = 1.0)]
-        brightness: Cell<f64>,
+#[derive(Clone, Default)]
+pub struct BrightnessService {
+    available: bool,
+    brightness: AsyncProp<f64>, // 0.0 to 1.0
+    callbacks: Callbacks<<Self as Service>::Event>,
+}
 
-        interface: RefCell<String>,
-        min: Cell<u32>,
-        max: Cell<u32>,
-        _watcher: RefCell<Option<RecommendedWatcher>>,
-    }
+impl Service for BrightnessService {
+    type Event = BrightnessEvent;
 
-    #[glib::object_subclass]
-    impl ObjectSubclass for BrightnessService {
-        type ParentType = glib::Object;
-        type Type = super::BrightnessService;
-
-        const NAME: &'static str = "MuseShellBrightnessService";
-    }
-
-    #[glib::derived_properties]
-    impl ObjectImpl for BrightnessService {
-        fn constructed(&self) {
-            self.parent_constructed();
-
-            // Initialize brightness monitoring
-            if let Ok(interface) = self.detect_interface() {
-                self.interface.replace(interface.clone());
-
-                if let Ok((min, max)) = self.read_brightness_range() {
-                    self.min.set(min);
-                    self.max.set(max);
-                    self.available.set(true);
-
-                    // Start monitoring
-                    self.start_monitoring();
-                }
+    fn launch() -> Self {
+        // read initial backlight properties. if any fail, we will not consider the
+        // service available.
+        let interface = match detect_interface() {
+            Ok(interface) => interface,
+            Err(e) => {
+                log::error!("couldn't detect brightness interface: {}", e);
+                return Default::default();
             }
-        }
-    }
-
-    impl BrightnessService {
-        pub fn min(&self) -> u32 {
-            self.min.get()
-        }
-
-        pub fn max(&self) -> u32 {
-            self.max.get()
-        }
-
-        pub fn interface(&self) -> String {
-            self.interface.borrow().clone()
-        }
-
-        fn detect_interface(&self) -> Result<String> {
-            let backlight_path = Path::new("/sys/class/backlight");
-            let mut entries = fs::read_dir(backlight_path)?;
-
-            if let Some(entry) = entries.next() {
-                let entry = entry?;
-                return Ok(entry.file_name().to_string_lossy().to_string());
+        };
+        let max_val = match read_max_brightness(&interface) {
+            Ok(max_val) => max_val,
+            Err(e) => {
+                log::error!("couldn't read max brightness value: {}", e);
+                return Default::default();
             }
+        };
+        let brightness = match read_current_brightness_percentage(&interface, max_val) {
+            Ok(brightness) => Arc::new(RwLock::new(brightness)),
+            Err(e) => {
+                log::error!("couldn't read current brightness value: {}", e);
+                return Default::default();
+            }
+        };
+        let callbacks = Arc::new(RwLock::new(Vec::new()));
 
-            anyhow::bail!("No backlight interface found")
-        }
+        // yippee!! we've successfully setup the service!
+        let service = Self {
+            available: true,
+            brightness: Arc::clone(&brightness),
+            callbacks: Arc::clone(&callbacks),
+        };
 
-        fn read_brightness_range(&self) -> Result<(u32, u32)> {
-            // read min/max brightness from sysfs directly
-            let interface = self.interface.borrow();
-            let max_path = format!("/sys/class/backlight/{}/max_brightness", interface);
-            let max_content = fs::read_to_string(max_path)?;
-            let max_val: u32 = max_content.trim().parse()?;
-            Ok((0, max_val))
-        }
-
-        fn start_monitoring(&self) {
-            let obj = self.obj().clone();
-            let interface = self.interface.borrow().clone();
-            let brightness_path = format!("/sys/class/backlight/{}/brightness", interface);
-
-            // create channel for file system events
+        tokio::spawn(async move {
+            log::debug!("creating channel for watcher");
             let (tx, rx) = mpsc::channel();
+            let brightness_path = format!("/sys/class/backlight/{}/brightness", &interface);
 
-            // create file watcher with notify v8 api
-            let watcher_result = RecommendedWatcher::new(
-                move |res: notify::Result<notify::Event>| {
-                    if let Ok(event) = res {
-                        // check if it's a modify event
-                        if matches!(event.kind, notify::EventKind::Modify(_)) {
-                            let _ = tx.send(());
-                        }
-                    }
-                },
-                Config::default(),
-            );
-
-            match watcher_result {
+            // watch the brightness file
+            match notify::recommended_watcher(tx) {
                 Ok(mut watcher) => {
-                    // watch the brightness file
-                    if let Err(e) =
-                        watcher.watch(Path::new(&brightness_path), RecursiveMode::NonRecursive)
-                    {
-                        log::warn!("failed to watch brightness file: {}", e);
-                        return;
-                    }
-
-                    // store watcher to keep it alive
-                    self._watcher.replace(Some(watcher));
-
-                    // use timeout instead of async future to avoid blocking recv()
-                    let obj_clone = obj.clone();
-                    glib::timeout_add_local(std::time::Duration::from_millis(50), move || {
-                        // non-blocking check for file system events
-                        match rx.try_recv() {
-                            Ok(_) => {
-                                // file changed, update brightness
-                                if let Ok(brightness) = obj_clone.imp().read_current_brightness() {
-                                    obj_clone.set_brightness(brightness);
+                    match watcher.watch(Path::new(&brightness_path), RecursiveMode::NonRecursive) {
+                        Ok(_) => {
+                            // main loop for file changes
+                            loop {
+                                if let Err(e) = rx.recv() {
+                                    log::error!("brightness file watcher died: {}", e);
+                                    break;
+                                } else {
+                                    match read_current_brightness_percentage(&interface, max_val) {
+                                        Ok(new_brightness) => {
+                                            let changed =
+                                                { new_brightness != *brightness.read().await };
+                                            if changed {
+                                                *brightness.write().await = new_brightness;
+                                                for callback in &mut *callbacks.write().await {
+                                                    callback(BrightnessEvent::Percentage(
+                                                        new_brightness,
+                                                    ));
+                                                }
+                                            }
+                                        }
+                                        Err(e) => {
+                                            log::error!("couldn't read current brightness: {}", e);
+                                        }
+                                    }
                                 }
                             }
-                            Err(mpsc::TryRecvError::Empty) => {
-                                // no events, continue
-                            }
-                            Err(mpsc::TryRecvError::Disconnected) => {
-                                // watcher disconnected, stop timeout
-                                return glib::ControlFlow::Break;
-                            }
                         }
-                        glib::ControlFlow::Continue
-                    });
-
-                    // schedule initial value read on next tick to avoid blocking
-                    let obj_initial = obj.clone();
-                    glib::idle_add_local_once(move || {
-                        if let Ok(brightness) = obj_initial.imp().read_current_brightness() {
-                            obj_initial.set_brightness(brightness);
+                        Err(e) => {
+                            log::error!("couldn't set up watcher for brightness: {}", e);
                         }
-                    });
+                    }
                 }
-                Err(e) => {
-                    log::warn!(
-                        "failed to create file watcher, falling back to polling: {}",
-                        e
-                    );
-                    // fallback to polling
-                    glib::timeout_add_local(std::time::Duration::from_millis(500), move || {
-                        if let Ok(brightness) = obj.imp().read_current_brightness() {
-                            obj.set_brightness(brightness);
-                        }
-                        glib::ControlFlow::Continue
-                    });
-                }
+                Err(e) => log::error!("couldn't create watcher: {}", e),
             }
-        }
+        });
 
-        fn read_current_brightness(&self) -> Result<f64> {
-            // read brightness from sysfs directly
-            let interface = self.interface.borrow();
-            let path = format!("/sys/class/backlight/{}/brightness", interface);
-            let content = fs::read_to_string(path)?;
-            let raw: u32 = content.trim().parse()?;
+        service
+    }
 
-            let min = self.min.get();
-            let max = self.max.get();
-            Ok((raw - min) as f64 / (max - min) as f64)
-        }
+    fn with(self, mut callback: impl Callback<Self::Event> + 'static) -> Self {
+        log::debug!("adding callback while available is {}", self.available);
+        let callbacks = Arc::clone(&self.callbacks);
+        let brightness = Arc::clone(&self.brightness);
+        let available = self.available;
+
+        tokio::spawn(async move {
+            if available {
+                log::debug!("calling new callback with current brightness");
+                callback(BrightnessEvent::Percentage(*brightness.read().await));
+            } else {
+                log::debug!("calling new callback with unavailability");
+                callback(BrightnessEvent::Unavailable);
+            }
+
+            callbacks.write().await.push(Box::new(callback));
+            println!("callback added to callbacks list");
+        });
+
+        self
     }
 }
 
-glib::wrapper! {
-    pub struct BrightnessService(ObjectSubclass<imp::BrightnessService>);
+fn detect_interface() -> Result<String> {
+    let backlight_path = Path::new("/sys/class/backlight");
+    let mut entries = fs::read_dir(backlight_path)?;
+
+    if let Some(entry) = entries.next() {
+        return Ok(entry?.file_name().to_string_lossy().to_string());
+    }
+
+    anyhow::bail!("no backlight interface found")
 }
 
-impl Default for BrightnessService {
-    fn default() -> Self {
-        Self::new()
-    }
+fn read_max_brightness(interface: &str) -> Result<u32> {
+    let max_path = format!("/sys/class/backlight/{}/max_brightness", interface);
+    let max_content = fs::read_to_string(max_path)?;
+    let max_val: u32 = max_content.trim().parse()?;
+    Ok(max_val)
 }
 
-impl BrightnessService {
-    pub fn new() -> Self {
-        glib::Object::builder().build()
-    }
-
-    pub fn set_brightness_value(&self, percent: f64) -> Result<()> {
-        let imp = self.imp();
-        let min = imp.min();
-        let max = imp.max();
-        let raw_value = min + ((max - min) as f64 * percent) as u32;
-        let clamped = raw_value.clamp(min, max);
-
-        // write directly to sysfs (requires appropriate permissions)
-        let interface = imp.interface();
-        let path = format!("/sys/class/backlight/{}/brightness", interface);
-        fs::write(path, clamped.to_string()).map_err(|e| e.into())
-    }
+fn read_current_brightness_percentage(interface: &str, max_val: u32) -> Result<f64> {
+    let path = format!("/sys/class/backlight/{}/brightness", interface);
+    let content = fs::read_to_string(path)?;
+    let raw: u32 = content.trim().parse()?;
+    Ok(raw as f64 / max_val as f64)
 }
