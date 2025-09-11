@@ -3,7 +3,7 @@ use std::{sync::Arc, time::Duration};
 use systemstat::{Platform, System};
 use tokio::sync::RwLock;
 
-use crate::services::Service;
+use crate::services::{Callback, Callbacks, Service};
 
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub struct BatteryState {
@@ -52,13 +52,10 @@ impl BatteryState {
     }
 }
 
-type CallbackVec = Vec<Box<dyn FnMut(Option<BatteryState>) + Send + Sync>>;
-type CallbackCollection = Arc<RwLock<CallbackVec>>;
-
 pub struct BatteryService {
     state: Arc<RwLock<Option<BatteryState>>>,
     system: Arc<RwLock<System>>,
-    callbacks: CallbackCollection,
+    callbacks: Callbacks<Option<BatteryState>>,
 }
 
 impl BatteryService {
@@ -87,7 +84,7 @@ impl BatteryService {
 }
 
 impl Service for BatteryService {
-    type State = Option<BatteryState>;
+    type Event = Option<BatteryState>;
 
     fn launch() -> Self {
         let service = Self {
@@ -118,7 +115,7 @@ impl Service for BatteryService {
         service
     }
 
-    fn with(self, callback: impl FnMut(Self::State) + Send + Sync + 'static) -> Self {
+    fn with(self, callback: impl Callback<Self::Event> + 'static) -> Self {
         let callbacks_clone = Arc::clone(&self.callbacks);
 
         // this is probably extremely grotesque, but heck it we ball
