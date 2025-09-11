@@ -1,25 +1,29 @@
+use std::time::Duration;
+
 use gtk4::prelude::*;
-use relm4::prelude::*;
+use relm4::{Worker, prelude::*};
 
 use crate::{
-    icon_names::{BATTERY_LEVEL_0_CHARGING, BATTERY_LEVEL_100_CHARGED, BATTERY_MISSING},
-    services::{
-        Service,
-        battery::{BatteryService, BatteryState},
-    },
+    icon_names::{BATTERY_LEVEL_0_CHARGING, BATTERY_LEVEL_100_CHARGED},
+    services::battery::{BatteryService, BatteryUpdate},
     utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Attention, Tile, TileInit, TileMsg},
 };
 
 pub struct BatteryTile {
-    state: Option<BatteryState>,
-    _service: BatteryService,
+    available: bool,
+
+    current_percentage: f64,
+    charging: bool,
+    time_remaining: Duration,
+
     tile: Controller<Tile>,
+    _service: Controller<BatteryService>,
 }
 
 #[derive(Debug)]
 pub enum BatteryMsg {
-    ServiceUpdate(Option<BatteryState>),
+    ServiceUpdate(<BatteryService as Worker>::Output),
 }
 
 pub struct BatteryWidgets {
@@ -38,8 +42,9 @@ impl SimpleComponent for BatteryTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let _service =
-            BatteryService::launch().with(move |b| sender.input(BatteryMsg::ServiceUpdate(b)));
+        let _service = BatteryService::builder()
+            .launch(())
+            .forward(sender.input_sender(), BatteryMsg::ServiceUpdate);
 
         // initialize the tile component
         let tile = Tile::builder().launch(Default::default()).detach();
@@ -47,7 +52,12 @@ impl SimpleComponent for BatteryTile {
         root.append(tile.widget());
 
         let model = BatteryTile {
-            state: None,
+            available: false,
+
+            current_percentage: 0.,
+            charging: false,
+            time_remaining: Duration::ZERO,
+
             _service,
             tile,
         };
@@ -60,35 +70,40 @@ impl SimpleComponent for BatteryTile {
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            BatteryMsg::ServiceUpdate(new_state) => {
-                self.state = new_state;
+            BatteryMsg::ServiceUpdate(m) => match m {
+                BatteryUpdate::Stats {
+                    percentage,
+                    charging,
+                    time_remaining,
+                } => {
+                    self.current_percentage = percentage;
+                    self.charging = charging;
+                    self.time_remaining = time_remaining;
+                    self.available = true;
 
-                // update attention state
-                let attention = self
-                    .state
-                    .as_ref()
-                    .map(|s| {
-                        if s.is_critical() {
-                            Attention::Alarm
-                        } else if s.is_low() {
-                            Attention::Warning
-                        } else {
-                            Attention::Normal
-                        }
-                    })
-                    .unwrap_or(Attention::Dim);
+                    // update attention state
+                    let attention = if self.is_critical() {
+                        Attention::Alarm
+                    } else if self.is_low() {
+                        Attention::Warning
+                    } else {
+                        Attention::Normal
+                    };
 
-                // update the tile with new data
-                self.tile.emit(TileMsg::UpdateData {
-                    icon: Some(self.get_icon().to_string()),
-                    primary: self.get_text(),
-                    secondary: self.get_secondary_text(),
-                });
+                    // update the tile with new data
+                    self.tile.emit(TileMsg::UpdateData {
+                        icon: Some(self.get_icon().to_string()),
+                        primary: Some(self.get_text()),
+                        secondary: Some(self.get_readable_time()),
+                    });
 
-                // update visibility and attention
-                self.tile.emit(TileMsg::SetVisible(self.state.is_some()));
-                self.tile.emit(TileMsg::SetAttention(attention));
-            }
+                    // update visibility and attention
+                    self.tile.emit(TileMsg::SetAttention(attention));
+                }
+                BatteryUpdate::Unavailable => {
+                    self.available = false;
+                }
+            },
         }
     }
 
@@ -103,33 +118,60 @@ impl SimpleComponent for BatteryTile {
 
 impl BatteryTile {
     fn get_icon(&self) -> &str {
-        self.state
-            .as_ref()
-            .map(|s| {
-                if s.charging {
-                    if s.percentage > 0.99 {
-                        BATTERY_LEVEL_100_CHARGED
-                    } else {
-                        BATTERY_LEVEL_0_CHARGING
-                    }
-                } else {
-                    percentage_to_icon_from_list(s.percentage, BATTERY_ICON_NAMES)
-                }
-            })
-            .unwrap_or(BATTERY_MISSING)
-    }
-
-    fn get_text(&self) -> Option<String> {
-        self.state.as_ref().map(|s| {
-            if s.charging && s.percentage > 0.99 {
-                "Full".to_string()
+        if self.charging {
+            if self.current_percentage > 0.99 {
+                BATTERY_LEVEL_100_CHARGED
             } else {
-                format!("{}%", (s.percentage * 100.0) as u32)
+                BATTERY_LEVEL_0_CHARGING
             }
-        })
+        } else {
+            percentage_to_icon_from_list(self.current_percentage, BATTERY_ICON_NAMES)
+        }
     }
 
-    fn get_secondary_text(&self) -> Option<String> {
-        self.state.as_ref().map(BatteryState::get_readable_time)
+    fn get_text(&self) -> String {
+        if self.charging && self.current_percentage > 0.99 {
+            "Full".to_string()
+        } else {
+            format!("{}%", (self.current_percentage * 100.0) as u32)
+        }
+    }
+
+    fn is_low(&self) -> bool {
+        let time_remaining_secs = self.time_remaining.as_secs();
+
+        (self.current_percentage <= 0.2 || time_remaining_secs <= 3600) && !self.charging
+    }
+
+    fn is_critical(&self) -> bool {
+        let time_remaining_secs = self.time_remaining.as_secs();
+
+        (self.current_percentage <= 0.1 || time_remaining_secs <= 1800) && !self.charging
+    }
+
+    fn get_readable_time(&self) -> String {
+        use chrono::Local;
+
+        if self.charging && self.current_percentage > 0.99 {
+            "Plugged in".to_string()
+        } else {
+            let time_remaining = self.time_remaining.as_secs();
+            if time_remaining < 30 * 60 {
+                format!("{} min left", time_remaining / 60)
+            } else {
+                // calculate actual completion time
+                let now = Local::now();
+                let completion_time = now + chrono::Duration::seconds(time_remaining as i64);
+
+                // format as "h:mm am/pm"
+                let formatted = completion_time.format("%-I:%M %P").to_string();
+
+                if self.charging {
+                    format!("Full at {}", formatted)
+                } else {
+                    format!("Until {}", formatted)
+                }
+            }
+        }
     }
 }
