@@ -1,3 +1,7 @@
+use std::sync::Arc;
+
+use tokio::sync::RwLock;
+
 pub mod audio;
 pub mod battery;
 pub mod brightness;
@@ -5,13 +9,27 @@ pub mod hyprland;
 pub mod network;
 pub mod notifications;
 
-pub trait Service {
-    /// The struct that represents the current state of this service.
-    type State;
+/// A callback function that services can call. Takes the service's state as
+/// input `I`.
+pub trait Callback<I> = FnMut(I) + Send + Sync;
 
-    /// Creates an instance of this service, spawning a thread for its logic.
+/// A service field that is guarded by an `Arc` and a `RwLock`.
+pub type AsyncProp<T> = Arc<RwLock<T>>;
+
+/// A `Vec` of `Callback`s.
+pub type CallbackVec<I> = Vec<Box<dyn Callback<I>>>;
+
+/// An `AsyncProp` of a `CallbackVec`.
+pub type Callbacks<T> = AsyncProp<CallbackVec<T>>;
+
+pub trait Service {
+    /// The type that represents an event when the service is updated.
+    type Event;
+
+    /// Creates an instance of this service, spawning threads as needed for its
+    /// logic.
     fn launch() -> Self;
 
     /// Adds a callback to this service that will be called upon updates.
-    fn with(self, callback: impl FnMut(Self::State) + Send + Sync + 'static) -> Self;
+    fn with(self, callback: impl Callback<Self::Event> + 'static) -> Self;
 }
