@@ -1,14 +1,8 @@
-use std::{
-    fs,
-    path::Path,
-    sync::{Arc, mpsc},
-};
+use std::{fs, path::Path, sync::mpsc};
 
 use anyhow::Result;
 use notify::{RecursiveMode, Watcher};
-use tokio::sync::RwLock;
-
-use crate::services::{AsyncProp, Callback, Callbacks, Service};
+use relm4::Worker;
 
 #[derive(Debug)]
 pub enum BrightnessEvent {
@@ -20,47 +14,42 @@ pub enum BrightnessEvent {
 }
 
 #[derive(Clone, Default)]
-pub struct BrightnessService {
-    available: bool,
-    brightness: AsyncProp<f64>, // 0.0 to 1.0
-    callbacks: Callbacks<<Self as Service>::Event>,
-}
+pub struct BrightnessService;
 
-impl Service for BrightnessService {
-    type Event = BrightnessEvent;
+impl Worker for BrightnessService {
+    type Init = ();
+    type Input = ();
+    type Output = BrightnessEvent;
 
-    fn launch() -> Self {
+    fn init(_init: Self::Init, sender: relm4::ComponentSender<Self>) -> Self {
         // read initial backlight properties. if any fail, we will not consider the
         // service available.
-        let interface = match detect_interface() {
-            Ok(interface) => interface,
-            Err(e) => {
-                log::error!("couldn't detect brightness interface: {}", e);
-                return Default::default();
-            }
+        let Ok((interface, max_val, mut current_brightness)) = detect_interface()
+            .map_err(|e| log::error!("couldn't detect brightness interface: {}", e))
+            .and_then(|interface| {
+                read_max_brightness(&interface)
+                    .map_err(|e| log::error!("couldn't read max brightness value: {}", e))
+                    .and_then(|max_val| {
+                        read_current_brightness_percentage(&interface, max_val)
+                            .map_err(|e| {
+                                log::error!("couldn't read current brightness value: {}", e)
+                            })
+                            .map(|brightness| (interface, max_val, brightness))
+                    })
+            })
+        else {
+            sender
+                .output(BrightnessEvent::Unavailable)
+                .unwrap_or_else(|_| log::error!("couldn't send unavailability message"));
+            return Default::default();
         };
-        let max_val = match read_max_brightness(&interface) {
-            Ok(max_val) => max_val,
-            Err(e) => {
-                log::error!("couldn't read max brightness value: {}", e);
-                return Default::default();
-            }
-        };
-        let brightness = match read_current_brightness_percentage(&interface, max_val) {
-            Ok(brightness) => Arc::new(RwLock::new(brightness)),
-            Err(e) => {
-                log::error!("couldn't read current brightness value: {}", e);
-                return Default::default();
-            }
-        };
-        let callbacks = Arc::new(RwLock::new(Vec::new()));
 
-        // yippee!! we've successfully setup the service!
-        let service = Self {
-            available: true,
-            brightness: Arc::clone(&brightness),
-            callbacks: Arc::clone(&callbacks),
-        };
+        // send initial update
+        sender
+            .output(BrightnessEvent::Percentage(current_brightness))
+            .unwrap_or_else(|_| {
+                log::error!("couldn't send initial state");
+            });
 
         tokio::spawn(async move {
             log::debug!("creating channel for watcher");
@@ -80,15 +69,17 @@ impl Service for BrightnessService {
                                 } else {
                                     match read_current_brightness_percentage(&interface, max_val) {
                                         Ok(new_brightness) => {
-                                            let changed =
-                                                { new_brightness != *brightness.read().await };
-                                            if changed {
-                                                *brightness.write().await = new_brightness;
-                                                for callback in &mut *callbacks.write().await {
-                                                    callback(BrightnessEvent::Percentage(
+                                            if new_brightness != current_brightness {
+                                                current_brightness = new_brightness;
+                                                sender
+                                                    .output(BrightnessEvent::Percentage(
                                                         new_brightness,
-                                                    ));
-                                                }
+                                                    ))
+                                                    .unwrap_or_else(|_| {
+                                                        log::error!(
+                                                            "couldn't send brightness update",
+                                                        );
+                                                    });
                                             }
                                         }
                                         Err(e) => {
@@ -107,30 +98,11 @@ impl Service for BrightnessService {
             }
         });
 
-        service
+        BrightnessService
     }
 
-    fn with(self, mut callback: impl Callback<Self::Event> + 'static) -> Self {
-        log::debug!("adding callback while available is {}", self.available);
-        let callbacks = Arc::clone(&self.callbacks);
-        let brightness = Arc::clone(&self.brightness);
-        let available = self.available;
-
-        tokio::spawn(async move {
-            if available {
-                log::debug!("calling new callback with current brightness");
-                callback(BrightnessEvent::Percentage(*brightness.read().await));
-            } else {
-                log::debug!("calling new callback with unavailability");
-                callback(BrightnessEvent::Unavailable);
-            }
-
-            callbacks.write().await.push(Box::new(callback));
-            println!("callback added to callbacks list");
-        });
-
-        self
-    }
+    // inputs are ignored
+    fn update(&mut self, _message: Self::Input, _sender: relm4::ComponentSender<Self>) {}
 }
 
 fn detect_interface() -> Result<String> {
