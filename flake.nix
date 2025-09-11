@@ -61,6 +61,7 @@
       perSystem =
         {
           config,
+          lib,
           pkgs,
           system,
           ...
@@ -186,7 +187,7 @@
           treefmt.programs = {
             biome = {
               enable = true;
-              settings = pkgs.lib.importJSON ./biome.json;
+              settings = lib.importJSON ./biome.json;
             };
             nixfmt.enable = true;
             rustfmt.enable = true;
