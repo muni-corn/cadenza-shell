@@ -101,6 +101,7 @@
 
             packages = [
               config.treefmt.build.wrapper
+              pkgs.bacon
               pkgs.cargo-outdated
             ]
             ++ buildInputs
