@@ -6,8 +6,8 @@ pub const BRIGHTNESS_ICON_NAMES: &[&str] = &[
     DISPLAY_BRIGHTNESS_MEDIUM,
     DISPLAY_BRIGHTNESS_HIGH,
 ];
-pub const VOLUME_ICONS: &[&str] = &["󰕿", "󰖀", "󰕾"];
-pub const MUTE_ICON: &str = "󰖁";
+pub const VOLUME_ICONS: &[&str] = &[SPEAKER_1, SPEAKER_2, SPEAKER_3];
+pub const MUTE_ICON: &str = SPEAKER_0;
 pub const BATTERY_ICON_NAMES: &[&str] = &[
     BATTERY_LEVEL_30,
     BATTERY_LEVEL_30,

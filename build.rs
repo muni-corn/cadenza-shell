@@ -10,6 +10,11 @@ fn main() {
         None::<&str>,
         // list of icons to include
         [
+            // audio
+            "speaker-0",
+            "speaker-1",
+            "speaker-2",
+            "speaker-3",
             // battery
             "battery-level-30",
             "battery-level-40",
