@@ -2,12 +2,12 @@ use std::sync::Arc;
 
 use tokio::sync::RwLock;
 
-pub mod audio;
 pub mod battery;
 pub mod brightness;
 pub mod hyprland;
 pub mod network;
 pub mod notifications;
+pub mod pulseaudio;
 
 /// A callback function that services can call. Takes the service's state as
 /// input `I`.
