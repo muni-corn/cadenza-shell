@@ -76,6 +76,7 @@
             glib
             pango
             gdk-pixbuf
+            libpulseaudio.dev
             pipewire
             wireplumber
             networkmanager
