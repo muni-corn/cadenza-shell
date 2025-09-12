@@ -6,18 +6,18 @@ description = "muni's desktop shell - A modern desktop shell built with Rust and
 
 [dependencies]
 # GTK and UI
-gtk4 = { version = "0.9", features = ["v4_14"] }
-gtk4-layer-shell = "0.5"
-glib = "0.20"
-gio = "0.20"
-gdk4 = { version = "0.9", features = ["v4_14"] }
-pango = "0.20"
+gtk4 = { version = "0.10", features = ["v4_14"] }
+gtk4-layer-shell = "0.6"
+glib = "0.21"
+gio = "0.21"
+gdk4 = { version = "0.10", features = ["v4_14"] }
+pango = "0.21"
 rsass = "0.29"
 
 # Relm4 - Modern GTK4 framework
-relm4 = { version = "0.9", features = ["macros"] }
-relm4-components = "0.9"
-relm4-icons = "0.10.0-beta.1"
+relm4 = { version = "0.10", features = ["macros"] }
+relm4-components = "0.10"
+relm4-icons = "0.10"
 
 # Async and concurrency
 tokio = { version = "1", features = ["full"] }
@@ -52,7 +52,7 @@ pulse = { version = "2.30", package = "libpulse-binding" }
 
 [build-dependencies]
 glib-build-tools = "0.21"
-relm4-icons-build = "0.10.0-beta.1"
+relm4-icons-build = "0.10"
 
 [features]
 default = []
