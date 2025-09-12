@@ -30,12 +30,6 @@ pub const BLUETOOTH_ICONS: &[&str] = &["󰂯", "󰂱"];
 
 /// Get an icon from a list based on a percentage value from 0.0 to 1.0.
 pub fn percentage_to_icon_from_list<'a>(percentage: f64, icons: &'a [&'a str]) -> &'a str {
-    let index = if percentage <= 0.0 {
-        0
-    } else if percentage >= 1.0 {
-        icons.len() - 1
-    } else {
-        ((percentage * (icons.len() - 1) as f64).round() as usize).min(icons.len() - 1)
-    };
+    let index = ((percentage * icons.len() as f64) as usize).clamp(0, icons.len() - 1);
     icons[index]
 }
