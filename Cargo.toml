@@ -48,7 +48,7 @@ systemstat = "0.2"
 # nm-rs = { version = "0.1", optional = true }
 
 # Audio
-libpulse-binding = "2.30"
+pulse = { version = "2.30", package = "libpulse-binding" }
 
 [build-dependencies]
 glib-build-tools = "0.21"
