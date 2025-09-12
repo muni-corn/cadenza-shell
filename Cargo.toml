@@ -12,6 +12,7 @@ glib = "0.20"
 gio = "0.20"
 gdk4 = { version = "0.9", features = ["v4_14"] }
 pango = "0.20"
+rsass = "0.29"
 
 # Relm4 - Modern GTK4 framework
 relm4 = { version = "0.9", features = ["macros"] }
@@ -39,19 +40,15 @@ reqwest = { version = "0.12", default-features = false, features = [
 ] }
 
 # System monitoring
-sysinfo = "0.37"
-procfs = "0.17"
 futures-lite = { version = "2", default-features = false }
 notify = "8"
-rsass = "0.29"
 systemstat = "0.2"
 
 # Network management (placeholder - will implement later)
 # nm-rs = { version = "0.1", optional = true }
 
-# Audio (placeholder - will implement later)
-# pipewire = { version = "0.8", optional = true }
-# wireplumber = { version = "0.2", optional = true }
+# Audio
+libpulse-binding = "2.30"
 
 [build-dependencies]
 glib-build-tools = "0.21"
