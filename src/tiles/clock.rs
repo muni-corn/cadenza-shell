@@ -31,8 +31,7 @@ impl SimpleComponent for ClockTile {
         // initialize the Tile component
         let tile = Tile::builder()
             .launch(TileInit {
-                name: "clock".to_string(),
-                icon_name: Some(icon_names::CLOCK_ALT.to_string()),
+                icon_name: Some(icon_names::CLOCK_REGULAR.to_string()),
                 primary: Some(format_time(&current_time)),
                 secondary: Some(format_date(&current_time)),
                 ..Default::default()
@@ -48,7 +47,7 @@ impl SimpleComponent for ClockTile {
                 thread::sleep(Duration::from_secs(1));
                 let now = Local::now();
                 tile_sender_clone.emit(TileMsg::UpdateData {
-                    icon: Some(icon_names::CLOCK_ALT.to_string()),
+                    icon: Some(icon_names::CLOCK_REGULAR.to_string()),
                     primary: Some(format_time(&now)),
                     secondary: Some(format_date(&now)),
                 });
