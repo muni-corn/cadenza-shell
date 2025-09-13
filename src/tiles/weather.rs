@@ -13,7 +13,7 @@ use crate::{
         WEATHER_RAIN_REGULAR, WEATHER_RAIN_SHOWERS_DAY_REGULAR, WEATHER_SNOW_REGULAR,
         WEATHER_SNOW_SHOWER_DAY_REGULAR, WEATHER_SUNNY_REGULAR, WEATHER_THUNDERSTORM_REGULAR,
     },
-    widgets::tile::{Tile, TileMsg},
+    widgets::tile::{Attention, Tile, TileInit, TileMsg},
 };
 
 #[derive(Debug, Clone)]
@@ -169,41 +169,40 @@ fn parse_time_12h(s: &str) -> Option<(u32, u32)> {
 }
 
 fn map_icon(code: &str, dark: bool) -> &'static str {
-    use crate::icon_names::*;
     match code {
         "113" => {
             if dark {
-                MOON_OUTLINE
+                WEATHER_MOON_REGULAR
             } else {
-                SUN_OUTLINE
+                WEATHER_SUNNY_REGULAR
             }
         }
         "116" => {
             if dark {
-                MOON_CLOUDS_OUTLINE
+                WEATHER_PARTLY_CLOUDY_NIGHT_REGULAR
             } else {
-                FEW_CLOUDS_OUTLINE
+                WEATHER_PARTLY_CLOUDY_DAY_REGULAR
             }
         }
         "119" | "122" => {
             if dark {
-                MOON_CLOUDS_OUTLINE
+                WEATHER_PARTLY_CLOUDY_NIGHT_REGULAR
             } else {
-                CLOUDS_OUTLINE
+                WEATHER_CLOUDY_REGULAR
             }
         }
-        "143" | "248" | "260" => FOG,
-        "176" | "263" | "266" | "293" | "296" | "353" => RAIN_SCATTERED_OUTLINE,
-        "299" | "302" | "305" | "308" | "311" | "314" | "356" | "359" => RAIN_OUTLINE,
-        "200" | "386" | "389" | "392" | "395" => STORM_OUTLINE,
-        "182" | "185" | "317" | "320" | "350" | "362" | "365" => SNOW_OUTLINE,
+        "143" | "248" | "260" => WEATHER_FOG_REGULAR,
+        "176" | "263" | "266" | "293" | "296" | "353" => WEATHER_RAIN_SHOWERS_DAY_REGULAR,
+        "299" | "302" | "305" | "308" | "311" | "314" | "356" | "359" => WEATHER_RAIN_REGULAR,
+        "200" | "386" | "389" | "392" | "395" => WEATHER_THUNDERSTORM_REGULAR,
+        "182" | "185" | "317" | "320" | "350" | "362" | "365" => WEATHER_SNOW_SHOWER_DAY_REGULAR,
         "179" | "223" | "227" | "230" | "323" | "326" | "329" | "332" | "335" | "338" | "368"
-        | "371" => SNOW,
+        | "371" => WEATHER_SNOW_REGULAR,
         _ => {
             if dark {
-                MOON_OUTLINE
+                WEATHER_MOON_REGULAR
             } else {
-                CLOUDS_OUTLINE
+                WEATHER_CLOUDY_REGULAR
             }
         }
     }

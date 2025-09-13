@@ -4,7 +4,7 @@ use gtk4::prelude::*;
 use relm4::{Worker, prelude::*};
 
 use crate::{
-    icon_names::{BATTERY_LEVEL_0_CHARGING, BATTERY_LEVEL_100_CHARGED},
+    icon_names::{BATTERY_CHARGE_REGULAR, BATTERY_CHECKMARK_REGULAR},
     services::battery::{BatteryService, BatteryUpdate},
     utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Attention, Tile, TileInit, TileMsg},
@@ -120,9 +120,9 @@ impl BatteryTile {
     fn get_icon(&self) -> &str {
         if self.charging {
             if self.current_percentage > 0.99 {
-                BATTERY_LEVEL_100_CHARGED
+                BATTERY_CHECKMARK_REGULAR
             } else {
-                BATTERY_LEVEL_0_CHARGING
+                BATTERY_CHARGE_REGULAR
             }
         } else {
             percentage_to_icon_from_list(self.current_percentage, BATTERY_ICON_NAMES)

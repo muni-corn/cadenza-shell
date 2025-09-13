@@ -5,7 +5,7 @@ use crate::{
     services::pulseaudio::{
         PulseAudioData, PulseAudioService, PulseAudioServiceEvent, PulseAudioServiceMsg,
     },
-    utils::icons::{MUTE_ICON, VOLUME_ICONS, percentage_to_icon_from_list},
+    utils::icons::{VOLUME_ICONS, VOLUME_MUTED, VOLUME_ZERO, percentage_to_icon_from_list},
     widgets::tile::TileOutput,
 };
 
@@ -103,7 +103,9 @@ impl SimpleComponent for PulseAudioTile {
 impl PulseAudioTile {
     fn get_icon(&self) -> &str {
         if self.volume_data.default_sink_name.is_none() || self.volume_data.muted {
-            MUTE_ICON
+            VOLUME_MUTED
+        } else if self.volume_data.volume == 0.0 {
+            VOLUME_ZERO
         } else {
             percentage_to_icon_from_list(self.volume_data.volume / 100.0, VOLUME_ICONS)
         }
