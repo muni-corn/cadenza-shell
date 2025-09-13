@@ -2053,8 +2053,7 @@ checksum = "37dbe7a114855a22618f0e13595ce6b3f165478c13c2dfc4f4f99614da105797"
 [[package]]
 name = "relm4-icons"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "28869f8322ed72bed568cbb704403037ff62a66c966ded7a862ad5732f108530"
+source = "git+https://github.com/muni-corn/relm4-icons?branch=more-fluent-icons#f128b67d670677d5629aaaa301b998caa6bf460e"
 dependencies = [
  "gtk4",
 ]
@@ -2062,8 +2061,7 @@ dependencies = [
 [[package]]
 name = "relm4-icons-build"
 version = "0.10.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75f2de558afdd570680a69c96dc9f812b241922c6355dae351f7ffbb5fac675d"
+source = "git+https://github.com/muni-corn/relm4-icons?branch=more-fluent-icons#f128b67d670677d5629aaaa301b998caa6bf460e"
 dependencies = [
  "gvdb",
  "serde",
