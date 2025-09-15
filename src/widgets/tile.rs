@@ -123,7 +123,8 @@ impl SimpleComponent for Tile {
         // create widgets
         let icon = gtk::Image::builder()
             .css_classes(vec!["icon", model.attention.css_class()])
-            .width_request(24)
+            .pixel_size(20)
+            .width_request(20)
             .build();
 
         let primary_label = gtk::Label::builder()
