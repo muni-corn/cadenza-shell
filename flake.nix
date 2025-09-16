@@ -71,6 +71,7 @@
 
           # GTK/Rust dependencies
           buildInputs = with pkgs; [
+            dbus.dev
             gtk4
             gtk4-layer-shell
             glib

@@ -1,127 +1,92 @@
 use gtk4::prelude::*;
-use relm4::prelude::*;
+use relm4::{WorkerController, prelude::*};
 
-use crate::widgets::tile::TileOutput;
+use crate::{
+    services::bluetooth::{BluetoothInfo, BluetoothService, BluetoothWorkerOutput},
+    widgets::tile::{Tile, TileMsg, TileOutput},
+};
 
-#[derive(Debug)]
 pub struct BluetoothTile {
-    enabled: bool,
-    connected_devices: u32,
-    available: bool,
+    bluetooth_info: BluetoothInfo,
+    _worker: WorkerController<BluetoothService>,
 }
 
-#[derive(Debug)]
-pub enum BluetoothMsg {
-    Click,
-    Toggle,
-    ServiceUpdate {
-        enabled: bool,
-        connected_devices: u32,
-        available: bool,
-    },
+pub struct BluetoothWidgets {
+    root: gtk::Box,
+    tile: Controller<Tile>,
 }
 
-#[relm4::component(pub)]
 impl SimpleComponent for BluetoothTile {
     type Init = ();
-    type Input = BluetoothMsg;
+    type Input = BluetoothInfo;
     type Output = TileOutput;
-
-    view! {
-        #[root]
-        tile_button = gtk::Button {
-            add_css_class: "tile",
-            add_css_class: "bluetooth",
-            #[watch]
-            set_visible: model.available,
-
-            connect_clicked[sender] => move |_| {
-                sender.input(BluetoothMsg::Click);
-            },
-
-            gtk::Box {
-                set_orientation: gtk::Orientation::Horizontal,
-                set_spacing: 8,
-                set_halign: gtk::Align::Center,
-
-                gtk::Image {
-                    #[watch]
-                    set_icon_name: Some(&model.get_icon()),
-                    add_css_class: "tile-icon",
-                },
-
-                gtk::Label {
-                    #[watch]
-                    set_text: &model.get_text(),
-                    add_css_class: "tile-text",
-                },
-            }
-        }
-    }
+    type Root = gtk::Box;
+    type Widgets = BluetoothWidgets;
 
     fn init(
         _init: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // Initialize the Tile component
+        let tile = Tile::builder().launch(Default::default()).detach();
+
+        root.append(tile.widget());
+
+        // Start Bluetooth service worker
+        let bluetooth_worker = BluetoothService::builder().detach_worker(()).forward(
+            sender.input_sender(),
+            |output| match output {
+                BluetoothWorkerOutput::StateChanged(info) => info,
+            },
+        );
+
         let model = BluetoothTile {
-            enabled: false,
-            connected_devices: 0,
-            available: true, // TODO: detect bluetooth availability
+            bluetooth_info: BluetoothInfo::default(),
+            _worker: bluetooth_worker,
         };
 
-        let widgets = view_output!();
-
-        ComponentParts { model, widgets }
+        ComponentParts {
+            model,
+            widgets: BluetoothWidgets { root, tile },
+        }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            BluetoothMsg::Click => {
-                sender.output(TileOutput::Clicked).ok();
-            }
-            BluetoothMsg::Toggle => {
-                self.enabled = !self.enabled;
-            }
-            BluetoothMsg::ServiceUpdate {
-                enabled,
-                connected_devices,
-                available,
-            } => {
-                self.enabled = enabled;
-                self.connected_devices = connected_devices;
-                self.available = available;
-            }
-        }
+            BluetoothTileMsg::BluetoothUpdate(info) => {
+                self.bluetooth_info = info.clone();
+
+                let icon = self.get_icon();
+
+                self.tile.emit(TileMsg::UpdateData {
+                    icon: Some(icon.to_string()),
+                    primary: text.map(String::from),
+                    secondary: None,
+                });
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        widgets.root.set_visible(self.bluetooth_info.available);
+        widgets.tile.emit(TileMsg::SetIcon(Some(self.get_icon())));
+    }
+
+    fn init_root() -> Self::Root {
+        gtk::Box::new(gtk::Orientation::Horizontal, 0)
     }
 }
 
 impl BluetoothTile {
     fn get_icon(&self) -> String {
-        if !self.available {
-            return "bluetooth-disabled-symbolic".to_string();
-        }
-
-        if self.enabled {
-            if self.connected_devices > 0 {
-                "bluetooth-active-symbolic".to_string()
+        if !self.bluetooth_info.available {
+            "bluetooth-disabled-regular"
+        } else if self.bluetooth_info.enabled {
+            if self.bluetooth_info.connected_devices > 0 {
+                "bluetooth-connected-regular"
             } else {
-                "bluetooth-symbolic".to_string()
+                "bluetooth-regular"
             }
         } else {
-            "bluetooth-disabled-symbolic".to_string()
-        }
-    }
-
-    fn get_text(&self) -> String {
-        if !self.available {
-            return "N/A".to_string();
-        }
-
-        if self.enabled && self.connected_devices > 0 {
-            self.connected_devices.to_string()
-        } else {
-            "".to_string()
+            "bluetooth-disabled-regular"
         }
         .to_string()
     }
