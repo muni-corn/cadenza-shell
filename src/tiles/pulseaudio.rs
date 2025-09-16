@@ -6,58 +6,28 @@ use crate::{
         PulseAudioData, PulseAudioService, PulseAudioServiceEvent, PulseAudioServiceMsg,
     },
     utils::icons::{VOLUME_ICONS, VOLUME_MUTED, VOLUME_ZERO, percentage_to_icon_from_list},
-    widgets::tile::TileOutput,
+    widgets::tile::{Attention, Tile, TileInit, TileMsg, TileOutput},
 };
 
 #[derive(Debug)]
 pub struct PulseAudioTile {
     volume_data: PulseAudioData,
     worker: WorkerController<PulseAudioService>,
+    tile: Controller<Tile>,
 }
 
 #[derive(Debug)]
 pub enum PulseAudioTileMsg {
-    Click,
     ServiceUpdate(PulseAudioServiceEvent),
+    TileClicked,
 }
 
-#[relm4::component(pub)]
 impl SimpleComponent for PulseAudioTile {
     type Init = ();
     type Input = PulseAudioTileMsg;
     type Output = TileOutput;
-
-    view! {
-        #[root]
-        tile_button = gtk::Button {
-            add_css_class: "tile",
-            add_css_class: "volume",
-            #[watch]
-            set_visible: model.volume_data.default_sink_name.is_some(),
-
-            connect_clicked[sender] => move |_| {
-                sender.input(PulseAudioTileMsg::Click);
-            },
-
-            gtk::Box {
-                set_orientation: gtk::Orientation::Horizontal,
-                set_spacing: 8,
-                set_halign: gtk::Align::Center,
-
-                gtk::Image {
-                    #[watch]
-                    set_icon_name: Some(model.get_icon()),
-                    add_css_class: "tile-icon",
-                },
-
-                gtk::Label {
-                    #[watch]
-                    set_text: &model.get_text(),
-                    add_css_class: "tile-text",
-                },
-            }
-        }
-    }
+    type Root = gtk::Box;
+    type Widgets = ();
 
     fn init(
         _init: Self::Init,
@@ -68,20 +38,36 @@ impl SimpleComponent for PulseAudioTile {
             .detach_worker(())
             .forward(sender.input_sender(), PulseAudioTileMsg::ServiceUpdate);
 
+        let volume_data = PulseAudioData::default();
+
+        let tile = Tile::builder()
+            .launch(TileInit {
+                name: "pulseaudio".to_string(),
+                icon_name: None,
+                primary: None,
+                secondary: None,
+                visible: volume_data.default_sink_name.is_some(),
+                attention: Attention::Normal,
+                extra_classes: vec!["volume".to_string()],
+            })
+            .forward(sender.input_sender(), |output| match output {
+                TileOutput::Clicked => PulseAudioTileMsg::TileClicked,
+                _ => PulseAudioTileMsg::TileClicked,
+            });
+        root.append(tile.widget());
+
         let model = PulseAudioTile {
-            volume_data: PulseAudioData::default(),
+            volume_data,
             worker,
+            tile,
         };
 
-        let widgets = view_output!();
-
-        ComponentParts { model, widgets }
+        ComponentParts { model, widgets: () }
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            PulseAudioTileMsg::Click => {
-                // toggle mute
+            PulseAudioTileMsg::TileClicked => {
                 self.worker
                     .sender()
                     .send(PulseAudioServiceMsg::ToggleMute)
@@ -91,12 +77,17 @@ impl SimpleComponent for PulseAudioTile {
             PulseAudioTileMsg::ServiceUpdate(output) => match output {
                 PulseAudioServiceEvent::VolumeChanged(data) => {
                     self.volume_data = data;
+                    self.update_tile_display();
                 }
                 PulseAudioServiceEvent::Error(error) => {
                     log::error!("volume worker error: {}", error);
                 }
             },
         }
+    }
+
+    fn init_root() -> Self::Root {
+        gtk::Box::builder().build()
     }
 }
 
@@ -121,5 +112,23 @@ impl PulseAudioTile {
         } else {
             format!("{}%", self.volume_data.volume as u32)
         }
+    }
+
+    fn update_tile_display(&mut self) {
+        self.tile
+            .sender()
+            .send(TileMsg::UpdateData {
+                icon: Some(self.get_icon().to_string()),
+                primary: Some(self.get_text()),
+                secondary: None,
+            })
+            .ok();
+
+        self.tile
+            .sender()
+            .send(TileMsg::SetVisible(
+                self.volume_data.default_sink_name.is_some(),
+            ))
+            .ok();
     }
 }
