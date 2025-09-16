@@ -44,8 +44,8 @@ futures-lite = { version = "2", default-features = false }
 notify = "8"
 systemstat = "0.2"
 
-# Network management (placeholder - will implement later)
-# nm-rs = { version = "0.1", optional = true }
+# Bluetooth
+bluer = { version = "0.17", features = ["full"] }
 
 # Audio
 pulse = { version = "2.30", package = "libpulse-binding" }
