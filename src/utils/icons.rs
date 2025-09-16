@@ -26,9 +26,6 @@ pub const NETWORK_WIFI_ICON_NAMES: &[&str] = &[
     WIFI_2_REGULAR,
     WIFI_1_REGULAR,
 ];
-pub const NETWORK_WIRED_ICONS: &[&str] = &["󰈀"];
-
-pub const BLUETOOTH_ICONS: &[&str] = &[BLUETOOTH_REGULAR, BLUETOOTH_DISABLED_REGULAR];
 
 /// Get an icon from a list based on a percentage value from 0.0 to 1.0.
 pub fn percentage_to_icon_from_list<'a>(percentage: f64, icons: &'a [&'a str]) -> &'a str {
