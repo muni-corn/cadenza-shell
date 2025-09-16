@@ -2,18 +2,26 @@
 
 ## Migration Complete! 🎉
 
-The muse-shell codebase has been successfully migrated from raw GTK4 to Relm4. This document summarizes what was accomplished and the current architecture.
+The muse-shell codebase has been successfully migrated from raw GTK4 to Relm4.
+This document summarizes what was accomplished and the current architecture.
 
 ## Completed Tasks ✅
 
 ### Phase 1: Core Infrastructure
-- ✅ **Relm4 Dependencies**: Added relm4 and relm4-components with proper features
-- ✅ **Main Application**: Created unified `src/app.rs` with multi-monitor support
-- ✅ **Bar Component**: Implemented `src/widgets/minimal_bar.rs` as Relm4 component
-- ✅ **Layer Shell Integration**: Full layer shell support with proper positioning
+
+- ✅ **Relm4 Dependencies**: Added relm4 and relm4-components with proper
+  features
+- ✅ **Main Application**: Created unified `src/app.rs` with multi-monitor
+  support
+- ✅ **Bar Component**: Implemented `src/widgets/minimal_bar.rs` as Relm4
+  component
+- ✅ **Layer Shell Integration**: Full layer shell support with proper
+  positioning
 
 ### Phase 2: Tile System
-- ✅ **Battery Tile**: Relm4 component with worker integration (`src/tiles/battery_relm4.rs`)
+
+- ✅ **Battery Tile**: Relm4 component with worker integration
+  (`src/tiles/battery_relm4.rs`)
 - ✅ **Clock Tile**: Digital time display component (`src/tiles/clock_relm4.rs`)
 - ✅ **Notifications Tile**: Counter with notification service integration
 - ✅ **MPRIS Tile**: Media player controls with metadata display
@@ -24,12 +32,16 @@ The muse-shell codebase has been successfully migrated from raw GTK4 to Relm4. T
 - ✅ **Hyprland Tile**: Workspace management for Hyprland compositor
 
 ### Phase 3: Notification System
+
 - ✅ **Notification Popup**: Relm4 component for temporary notifications
-- ✅ **Notification Center**: Persistent notification history with factory pattern
-- ✅ **Notification Cards**: Individual notification display using factory pattern
+- ✅ **Notification Center**: Persistent notification history with factory
+  pattern
+- ✅ **Notification Cards**: Individual notification display using factory
+  pattern
 - ✅ **D-Bus Integration**: Full notifications daemon implementation
 
 ### Phase 4: Advanced Features
+
 - ✅ **Analog Clock**: Custom drawing component with smooth updates
 - ✅ **Settings System**: JSON-based configuration with XDG compliance
 - ✅ **Command Pattern**: Infrastructure for undo/redo operations
@@ -38,6 +50,7 @@ The muse-shell codebase has been successfully migrated from raw GTK4 to Relm4. T
 ## Current Architecture
 
 ### Application Structure
+
 ```
 src/
 ├── app.rs              # Main Relm4 application with multi-monitor support
@@ -64,6 +77,7 @@ src/
 ```
 
 ### Key Features
+
 - **Component-Based**: All UI components use Relm4 patterns
 - **Message Passing**: Clean separation with typed messages
 - **Factory Pattern**: Dynamic lists (notifications, tray items)
@@ -75,10 +89,12 @@ src/
 ## Build System
 
 ### Features
+
 - `default`: Core functionality
 - `docs`: Generate component documentation
 
 ### Build Script (`build.rs`)
+
 - GLib resource compilation support
 - Automatic recompilation triggers
 - Development metadata injection
@@ -87,10 +103,12 @@ src/
 ## Configuration
 
 Settings are stored in JSON format at:
+
 - `$XDG_CONFIG_HOME/muse-shell/config.json`
 - `~/.config/muse-shell/config.json` (fallback)
 
 ### Configuration Sections
+
 - **UI**: Colors, scaling, theme settings
 - **Bar**: Height, position, spacing, margins
 - **Notifications**: Timeout, popup/center dimensions
@@ -99,6 +117,7 @@ Settings are stored in JSON format at:
 ## Development Notes
 
 ### Code Patterns
+
 - Use Relm4 `SimpleComponent` for single-instance components
 - Use `FactoryComponent` for dynamic lists
 - Implement proper error handling with `anyhow`
@@ -106,6 +125,7 @@ Settings are stored in JSON format at:
 - Use `view!` macro for declarative UI definitions
 
 ### Service Integration
+
 - Services implement GObject patterns for property binding
 - Use `glib::spawn_future_local` for GTK integration
 - Workers communicate via async channels
@@ -121,14 +141,15 @@ Settings are stored in JSON format at:
 ## Migration Benefits Achieved
 
 1. **Code Maintainability**: Cleaner, more idiomatic Rust code
-2. **Type Safety**: Compile-time guarantees for UI updates
-3. **Performance**: Efficient incremental updates
-4. **Scalability**: Easy to add new components and features
-5. **Debugging**: Better error messages and development tools
+1. **Type Safety**: Compile-time guarantees for UI updates
+1. **Performance**: Efficient incremental updates
+1. **Scalability**: Easy to add new components and features
+1. **Debugging**: Better error messages and development tools
 
 ## Future Enhancements
 
 The codebase is now ready for:
+
 - Hot-reloading configuration changes
 - Plugin system for custom tiles
 - Theme system integration

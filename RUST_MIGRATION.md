@@ -23,11 +23,11 @@ a more maintainable codebase.
 ### Core Components
 
 1. **Bar** (`src/bar.tsx`): Top panel with workspaces, clock, system tiles
-2. **Tiles**: Modular status indicators (battery, network, volume, brightness,
+1. **Tiles**: Modular status indicators (battery, network, volume, brightness,
    etc.)
-3. **Notifications**: Notification popups and panel
-4. **Services**: Custom brightness service, integration with system services
-5. **Utilities**: Reactive state management, icon mapping, UI helpers
+1. **Notifications**: Notification popups and panel
+1. **Services**: Custom brightness service, integration with system services
+1. **Utilities**: Reactive state management, icon mapping, UI helpers
 
 ## Target Architecture
 
@@ -1033,51 +1033,51 @@ https://flake.parts/options/rust-flake.html.
 ### Step 1: Initial Setup
 
 1. Create new Rust project structure
-2. Set up Cargo.toml with dependencies
-3. Implement basic GTK4 application with layer shell
-4. Create simple bar window on all monitors
+1. Set up Cargo.toml with dependencies
+1. Implement basic GTK4 application with layer shell
+1. Create simple bar window on all monitors
 
 ### Step 2: Core Infrastructure
 
 1. Implement reactive state management system
-2. Create service abstraction layer
-3. Set up D-Bus connection infrastructure
-4. Implement CSS theming system
+1. Create service abstraction layer
+1. Set up D-Bus connection infrastructure
+1. Implement CSS theming system
 
 ### Step 3: Service Migration
 
 1. Migrate brightness service
-2. Implement NetworkManager integration
-3. Add WirePlumber/PipeWire audio service
-4. Create Hyprland IPC client
-5. Implement notification daemon client
-6. Add system tray support
+1. Implement NetworkManager integration
+1. Add WirePlumber/PipeWire audio service
+1. Create Hyprland IPC client
+1. Implement notification daemon client
+1. Add system tray support
 
 ### Step 4: Widget Implementation
 
 1. Create tile widget base class
-2. Implement all tile widgets (battery, bluetooth, etc.)
-3. Create notification popup windows
-4. Implement notification center
-5. Add weather widget with API integration
-6. Create MPRIS media player widget
+1. Implement all tile widgets (battery, bluetooth, etc.)
+1. Create notification popup windows
+1. Implement notification center
+1. Add weather widget with API integration
+1. Create MPRIS media player widget
 
 ### Step 5: Polish and Testing
 
 1. Implement all animations and transitions
-2. Add configuration file support
-3. Create comprehensive error handling
-4. Performance optimization
-5. Memory leak testing
-6. Multi-monitor testing
+1. Add configuration file support
+1. Create comprehensive error handling
+1. Performance optimization
+1. Memory leak testing
+1. Multi-monitor testing
 
 ### Step 6: Deployment
 
 1. Create installation scripts
-2. Write user documentation
-3. Set up CI/CD pipeline
-4. Create Nix package
-5. Final testing and bug fixes
+1. Write user documentation
+1. Set up CI/CD pipeline
+1. Create Nix package
+1. Final testing and bug fixes
 
 ## Key Considerations
 
@@ -1126,14 +1126,14 @@ https://flake.parts/options/rust-flake.html.
 
 1. **Better Integration**: Native GObject properties integrate seamlessly with
    GTK Inspector for debugging
-2. **Automatic Memory Management**: GTK's reference counting handles memory
+1. **Automatic Memory Management**: GTK's reference counting handles memory
    automatically
-3. **Built-in Animations**: Property transitions can use GTK's animation
+1. **Built-in Animations**: Property transitions can use GTK's animation
    framework
-4. **Standardized Patterns**: Following GTK conventions makes the code more
+1. **Standardized Patterns**: Following GTK conventions makes the code more
    maintainable
-5. **Performance**: Native bindings avoid overhead of custom reactive systems
-6. **Ecosystem Compatibility**: Works naturally with other GTK/GNOME libraries
+1. **Performance**: Native bindings avoid overhead of custom reactive systems
+1. **Ecosystem Compatibility**: Works naturally with other GTK/GNOME libraries
 
 ### Example: Reactive Updates with Native Bindings
 
