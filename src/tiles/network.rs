@@ -1,209 +1,107 @@
 use gtk4::prelude::*;
-use relm4::prelude::*;
+use relm4::{WorkerController, prelude::*};
 
 use crate::{
-    services::network::{DeviceType, NetworkService},
+    icon_names::*,
+    services::network::{
+        DeviceType, NetworkInfo, NetworkService, NetworkState, NetworkWorkerOutput,
+    },
     utils::icons::{NETWORK_WIFI_ICON_NAMES, percentage_to_icon_from_list},
-    widgets::tile::TileOutput,
+    widgets::tile::{Tile, TileInit, TileMsg, TileOutput},
 };
 
 #[derive(Debug)]
-pub enum NetworkType {
-    Ethernet,
-    Mobile,
-    Vpn,
-    Wifi,
-    None,
-}
-
-#[derive(Debug)]
 pub struct NetworkTile {
-    connected: bool,
-    connection_type: NetworkType,
-    signal_strength: Option<f64>,
-    ssid: Option<String>,
-    service: NetworkService,
+    _network_info: NetworkInfo,
+    tile: Controller<Tile>,
+    _worker: WorkerController<NetworkService>,
 }
 
 #[derive(Debug)]
-pub enum NetworkMsg {
-    Click,
-    RightClick,
-    ServiceUpdate {
-        connected: bool,
-        connection_type: NetworkType,
-        signal_strength: Option<f64>,
-        ssid: Option<String>,
-    },
+pub enum NetworkTileMsg {
+    NetworkUpdate(NetworkInfo),
 }
 
-#[relm4::component(pub)]
 impl SimpleComponent for NetworkTile {
     type Init = ();
-    type Input = NetworkMsg;
+    type Input = NetworkTileMsg;
     type Output = TileOutput;
-
-    view! {
-        #[root]
-        tile_button = gtk::Button {
-            add_css_class: "tile",
-            add_css_class: "network",
-
-            connect_clicked[sender] => move |_| {
-                sender.input(NetworkMsg::Click);
-            },
-
-            gtk::Box {
-                set_orientation: gtk::Orientation::Horizontal,
-                set_spacing: 8,
-                set_halign: gtk::Align::Center,
-
-                gtk::Image {
-                    #[watch]
-                    set_icon_name: Some(&model.get_icon()),
-                    add_css_class: "tile-icon",
-                },
-
-                gtk::Label {
-                    #[watch]
-                    set_text: &model.get_text(),
-                    add_css_class: "tile-text",
-                },
-            }
-        }
-    }
+    type Root = gtk::Box;
+    type Widgets = ();
 
     fn init(
         _init: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let service = NetworkService::new();
+        // initialize the Tile component
+        let tile = Tile::builder().launch(Default::default()).detach();
+
+        root.append(tile.widget());
+
+        // start network service worker
+        let network_worker =
+            NetworkService::builder()
+                .detach_worker(())
+                .forward(sender.input_sender(), |output| match output {
+                    NetworkWorkerOutput::StateChanged(info) => NetworkTileMsg::NetworkUpdate(info),
+                });
 
         let model = NetworkTile {
-            connected: false,
-            connection_type: NetworkType::None,
-            signal_strength: None,
-            ssid: None,
-            service: service.clone(),
+            _network_info: NetworkInfo::default(),
+            tile,
+            _worker: network_worker,
         };
 
-        let widgets = view_output!();
-
-        // Connect to network service updates
-        service.connect_connected_notify(glib::clone!(
-            #[strong]
-            sender,
-            move |service| {
-                let connection_type = match service.primary_device_type() {
-                    DeviceType::Wifi => NetworkType::Wifi,
-                    DeviceType::Ethernet => NetworkType::Ethernet,
-                    DeviceType::Bluetooth => NetworkType::Mobile,
-                    DeviceType::Generic => NetworkType::None,
-                    DeviceType::Unknown => NetworkType::None,
-                };
-
-                let signal_strength = if service.wifi_enabled() {
-                    Some(service.wifi_strength() as f64)
-                } else {
-                    None
-                };
-
-                let ssid = if service.wifi_enabled() && !service.wifi_ssid().is_empty() {
-                    Some(service.wifi_ssid())
-                } else {
-                    None
-                };
-
-                sender.input(NetworkMsg::ServiceUpdate {
-                    connected: service.connected(),
-                    connection_type,
-                    signal_strength,
-                    ssid,
-                });
-            }
-        ));
-
-        ComponentParts { model, widgets }
+        ComponentParts { model, widgets: () }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            NetworkMsg::Click => {
-                sender.output(TileOutput::Clicked).ok();
-            }
-            NetworkMsg::RightClick => {
-                // Could show network menu
-            }
-            NetworkMsg::ServiceUpdate {
-                connected,
-                connection_type,
-                signal_strength,
-                ssid,
-            } => {
-                self.connected = connected;
-                self.connection_type = connection_type;
-                self.signal_strength = signal_strength;
-                self.ssid = ssid;
+            NetworkTileMsg::NetworkUpdate(info) => {
+                let icon = get_icon(&info);
+
+                self.tile.emit(TileMsg::UpdateData {
+                    icon: Some(icon.to_string()),
+                    primary: text.map(String::from),
+                    secondary: None,
+                });
             }
         }
+    }
+
+    fn init_root() -> Self::Root {
+        gtk::Box::new(gtk::Orientation::Horizontal, 0)
     }
 }
 
-impl NetworkTile {
-    fn get_icon(&self) -> String {
-        if !self.connected {
-            return "network-offline-symbolic".to_string();
-        }
-
-        match self.connection_type {
-            NetworkType::Wifi => {
-                if let Some(strength) = self.signal_strength {
-                    percentage_to_icon_from_list(strength, NETWORK_WIFI_ICON_NAMES).to_string()
-                } else {
-                    "network-wireless-symbolic".to_string()
-                }
-            }
-            NetworkType::Ethernet => "network-wired-symbolic".to_string(),
-            NetworkType::Mobile => "network-cellular-symbolic".to_string(),
-            NetworkType::Vpn => "network-vpn-symbolic".to_string(),
-            NetworkType::None => "network-offline-symbolic".to_string(),
-        }
+fn get_icon(info: &NetworkInfo) -> &str {
+    if !info.connected {
+        return "network-offline-symbolic";
     }
 
-    fn get_text(&self) -> String {
-        match &self.connection_type {
-            NetworkType::Wifi => {
-                if let Some(ssid) = &self.ssid {
-                    ssid.clone()
-                } else if self.connected {
-                    "WiFi".to_string()
-                } else {
-                    "".to_string()
-                }
-            }
-            NetworkType::Ethernet => {
-                if self.connected {
-                    "Ethernet".to_string()
-                } else {
-                    "".to_string()
-                }
-            }
-            NetworkType::Mobile => {
-                if self.connected {
-                    "Mobile".to_string()
-                } else {
-                    "".to_string()
-                }
-            }
-            NetworkType::Vpn => {
-                if self.connected {
-                    "VPN".to_string()
-                } else {
-                    "".to_string()
-                }
-            }
-            NetworkType::None => "Disconnected".to_string(),
+    match info.device_type {
+        DeviceType::Wifi => {
+            let strength = info.wifi_strength as f64;
+            percentage_to_icon_from_list(strength, NETWORK_WIFI_ICON_NAMES)
         }
+        _ => EARTH_REGULAR,
     }
+}
+
+fn get_secondary_text(info: &NetworkInfo) -> Option<&str> {
+    if !info.connected {
+        return Some("Disconnected");
+    }
+
+    Some(match info.state {
+        NetworkState::ConnectedLocal
+        | NetworkState::ConnectedGlobal
+        | NetworkState::ConnectedSite => return None,
+        NetworkState::Unknown => "State unknown",
+        NetworkState::Asleep => "Asleep",
+        NetworkState::Disconnected => "Disconnected",
+        NetworkState::Disconnecting => "Disconnecting",
+        NetworkState::Connecting => "Connecting",
+    })
 }
