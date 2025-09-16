@@ -36,11 +36,16 @@
   - Utilities in `src/utils/`
   - Styling in `src/style/`
 - **Icons**: Use const arrays in `src/utils/icons.rs`
-- **Components**: Prefer manual relm4 implementation over `view!` macro for cleaner, more maintainable code. Follow the pattern in `src/tiles/clock.rs` and `src/tiles/weather.rs`
-- **Comments**: Stylize all line comments in all lowercase. Doc comments should use sentence case.
+- **Components**: Prefer manual relm4 implementation over `view!` macro for
+  cleaner, more maintainable code. Follow the pattern in `src/tiles/clock.rs`
+  and `src/tiles/weather.rs`
+- **Comments**: Stylize all line comments in all lowercase. Doc comments should
+  use sentence case.
 
 ## Development Tips
 
 - Use the context7 MCP server to look up documentation for any library
 - For GObject subclassing, use the `glib::Properties` derive macro
-- Always make small, atomic, incremental, granular git commits while you work; do not add co-author footers, and follow conventional commit spec (see `git log` for examples)
+- Always make small, atomic, incremental, granular git commits while you work;
+  do not add co-author footers, and follow conventional commit spec (see
+  `git log` for examples)

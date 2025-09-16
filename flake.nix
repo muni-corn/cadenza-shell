@@ -191,6 +191,16 @@
               enable = true;
               settings = lib.importJSON ./biome.json;
             };
+            mdformat = {
+              enable = true;
+              package = pkgs.mdformat.withPlugins (
+                p: with p; [
+                  mdformat-frontmatter
+                  mdformat-tables
+                ]
+              );
+              settings.wrap = 80;
+            };
             nixfmt.enable = true;
             rustfmt.enable = true;
             taplo.enable = true;
