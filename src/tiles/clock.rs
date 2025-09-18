@@ -1,8 +1,9 @@
-use std::{thread, time::Duration};
+use std::time::Duration;
 
 use chrono::{DateTime, Local};
 use gtk4::prelude::*;
 use relm4::prelude::*;
+use tokio::time::interval;
 
 use crate::{
     icon_names,
@@ -42,9 +43,10 @@ impl SimpleComponent for ClockTile {
 
         // start time updates
         let tile_sender_clone = tile.sender().clone();
-        thread::spawn(move || {
+        relm4::spawn(async move {
+            let mut interval = interval(Duration::from_secs(1));
             loop {
-                thread::sleep(Duration::from_secs(1));
+                interval.tick().await;
                 let now = Local::now();
                 tile_sender_clone.emit(TileMsg::UpdateData {
                     icon: Some(icon_names::CLOCK_REGULAR.to_string()),
