@@ -19,13 +19,15 @@ mod icon_names {
 
 pub mod tests;
 
-use relm4::RelmApp;
+use relm4::{RELM_THREADS, RelmApp};
 
 use crate::{app::MuseShellModel, style::compile_styles};
 
 #[tokio::main]
 async fn main() -> glib::ExitCode {
     env_logger::init();
+
+    RELM_THREADS.set(16).unwrap();
 
     relm4_icons::initialize_icons(icon_names::GRESOURCE_BYTES, icon_names::RESOURCE_PREFIX);
 
