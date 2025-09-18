@@ -41,6 +41,7 @@ reqwest = { version = "0.12", default-features = false, features = [
 
 # System monitoring
 futures-lite = { version = "2", default-features = false }
+inotify = "0.11"
 notify = "8"
 systemstat = "0.2"
 
