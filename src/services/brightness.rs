@@ -1,7 +1,7 @@
-use std::{fs, path::Path, time::Duration};
+use std::{fs, path::Path};
 
 use anyhow::Result;
-use notify::{PollWatcher, RecursiveMode, Watcher};
+use inotify::{Inotify, WatchMask};
 use relm4::Worker;
 
 #[derive(Debug)]
@@ -14,10 +14,7 @@ pub enum BrightnessEvent {
 }
 
 #[derive(Default)]
-pub struct BrightnessService {
-    // watcher stored in struct to prevent drop
-    _watcher: Option<PollWatcher>,
-}
+pub struct BrightnessService;
 
 impl Worker for BrightnessService {
     type Init = ();
@@ -55,40 +52,53 @@ impl Worker for BrightnessService {
             });
 
         let brightness_path = format!("/sys/class/backlight/{}/brightness", &interface);
+        let interface_clone = interface.clone();
+        let sender_clone = sender.clone();
 
-        let brightness_event_handler = move |result| {
-            if let Err(e) = result {
-                log::error!("error while watching backlight: {}", e);
-            } else {
-                match read_current_brightness_percentage(&interface, max_val) {
-                    Ok(percentage) => sender
-                        .output(BrightnessEvent::Percentage(percentage))
-                        .unwrap_or_else(|_| log::error!("error sending brightness update")),
-                    Err(e) => log::error!("couldn't update brightness info: {}", e),
+        // spawn a thread to handle inotify events
+        relm4::spawn(async move {
+            let mut inotify = match Inotify::init() {
+                Ok(inotify) => inotify,
+                Err(e) => {
+                    log::error!("failed to init inotify: {}", e);
+                    return;
+                }
+            };
+
+            // watch for CLOSE_WRITE events on the brightness file
+            let Ok(_wd) = inotify
+                .watches()
+                .add(&brightness_path, WatchMask::CLOSE_WRITE)
+                .map_err(|e| log::error!("couldn't set up inotify watch for brightness: {}", e))
+            else {
+                return;
+            };
+
+            let mut buffer = [0; 1024];
+            loop {
+                match inotify.read_events_blocking(&mut buffer) {
+                    Ok(events) => {
+                        for _ in events {
+                            // when the brightness file is closed after writing, read the new value
+                            match read_current_brightness_percentage(&interface_clone, max_val) {
+                                Ok(percentage) => sender_clone
+                                    .output(BrightnessEvent::Percentage(percentage))
+                                    .unwrap_or_else(|_| {
+                                        log::error!("error sending brightness update");
+                                    }),
+                                Err(e) => log::error!("couldn't update brightness info: {}", e),
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        log::error!("error while reading inotify events: {}", e);
+                        break;
+                    }
                 }
             }
-        };
+        });
 
-        // create a debounced watcher with our handler
-        let watcher = notify::PollWatcher::new(
-            brightness_event_handler,
-            notify::Config::default()
-                .with_poll_interval(Duration::from_millis(1000))
-                .with_compare_contents(true),
-        )
-        .map(|mut watcher| {
-            // watch the brightness file
-            if let Err(e) = watcher.watch(Path::new(&brightness_path), RecursiveMode::NonRecursive)
-            {
-                log::error!("couldn't set up watcher for brightness: {}", e);
-            }
-
-            watcher
-        })
-        .map_err(|e| log::error!("couldn't create debouncer: {}", e))
-        .ok();
-
-        Self { _watcher: watcher }
+        Self
     }
 
     // inputs are ignored
