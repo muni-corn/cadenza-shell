@@ -1,7 +1,4 @@
-use std::{
-    sync::{Arc, Mutex},
-    thread,
-};
+use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use pulse::{
@@ -82,7 +79,7 @@ impl Worker for PulseAudioService {
         let sender_clone = sender.clone();
         let tx_clone = worker.tx.clone();
 
-        thread::spawn(move || {
+        relm4::spawn(async move {
             if let Err(e) = Self::run_pulse_loop(sender_clone, tx_clone, pulse_rx) {
                 log::error!("pulse loop error: {}", e);
             }
@@ -154,23 +151,20 @@ impl PulseAudioService {
         }
 
         // handle incoming commands
-        thread::spawn({
-            let context = context.clone();
-            let data = data.clone();
-            let pending_commands = pending_commands.clone();
-
-            move || {
-                while let Some(command) = pulse_rx.blocking_recv() {
-                    // either execute immediately if connected, or queue for later
-                    if let Ok(ctx) = context.try_lock() {
-                        if ctx.get_state() == State::Ready {
-                            Self::execute_command(&ctx, &data, command);
-                        } else {
-                            pending_commands.lock().unwrap().push(command);
-                        }
+        let context_clone = context.clone();
+        let data_clone = data.clone();
+        let pending_commands_clone = pending_commands.clone();
+        relm4::spawn(async move {
+            while let Some(command) = pulse_rx.blocking_recv() {
+                // either execute immediately if connected, or queue for later
+                if let Ok(ctx) = context_clone.try_lock() {
+                    if ctx.get_state() == State::Ready {
+                        Self::execute_command(&ctx, &data_clone, command);
                     } else {
-                        pending_commands.lock().unwrap().push(command);
+                        pending_commands_clone.lock().unwrap().push(command);
                     }
+                } else {
+                    pending_commands_clone.lock().unwrap().push(command);
                 }
             }
         });
