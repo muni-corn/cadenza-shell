@@ -13,7 +13,7 @@ use crate::{
 pub struct BatteryTile {
     available: bool,
 
-    current_percentage: f64,
+    current_percentage: f32,
     charging: bool,
     time_remaining: Duration,
 
@@ -125,7 +125,7 @@ impl BatteryTile {
                 BATTERY_CHARGE_REGULAR
             }
         } else {
-            percentage_to_icon_from_list(self.current_percentage, BATTERY_ICON_NAMES)
+            percentage_to_icon_from_list(self.current_percentage.into(), BATTERY_ICON_NAMES)
         }
     }
 
