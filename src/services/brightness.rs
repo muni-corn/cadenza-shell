@@ -1,7 +1,7 @@
-use std::{fs, path::Path, sync::mpsc, thread};
+use std::{fs, path::Path, time::Duration};
 
 use anyhow::Result;
-use notify::{RecursiveMode, Watcher};
+use notify::{PollWatcher, RecursiveMode, Watcher};
 use relm4::Worker;
 
 #[derive(Debug)]
@@ -13,8 +13,11 @@ pub enum BrightnessEvent {
     Unavailable,
 }
 
-#[derive(Clone, Default)]
-pub struct BrightnessService;
+#[derive(Default)]
+pub struct BrightnessService {
+    // watcher stored in struct to prevent drop
+    _watcher: Option<PollWatcher>,
+}
 
 impl Worker for BrightnessService {
     type Init = ();
@@ -24,7 +27,7 @@ impl Worker for BrightnessService {
     fn init(_init: Self::Init, sender: relm4::ComponentSender<Self>) -> Self {
         // read initial backlight properties. if any fail, we will not consider the
         // service available.
-        let Ok((interface, max_val, mut current_brightness)) = detect_interface()
+        let Ok((interface, max_val, current_brightness)) = detect_interface()
             .map_err(|e| log::error!("couldn't detect brightness interface: {}", e))
             .and_then(|interface| {
                 read_max_brightness(&interface)
@@ -51,53 +54,41 @@ impl Worker for BrightnessService {
                 log::error!("couldn't send initial state");
             });
 
-        thread::spawn(move || {
-            let (tx, rx) = mpsc::channel();
-            let brightness_path = format!("/sys/class/backlight/{}/brightness", &interface);
+        let brightness_path = format!("/sys/class/backlight/{}/brightness", &interface);
 
-            // watch the brightness file
-            match notify::recommended_watcher(tx) {
-                Ok(mut watcher) => {
-                    match watcher.watch(Path::new(&brightness_path), RecursiveMode::NonRecursive) {
-                        Ok(_) => {
-                            // main loop for file changes
-                            loop {
-                                if let Err(e) = rx.recv() {
-                                    log::error!("brightness file watcher died: {}", e);
-                                    break;
-                                } else {
-                                    match read_current_brightness_percentage(&interface, max_val) {
-                                        Ok(new_brightness) => {
-                                            if new_brightness != current_brightness {
-                                                current_brightness = new_brightness;
-                                                sender
-                                                    .output(BrightnessEvent::Percentage(
-                                                        new_brightness,
-                                                    ))
-                                                    .unwrap_or_else(|_| {
-                                                        log::error!(
-                                                            "couldn't send brightness update",
-                                                        );
-                                                    });
-                                            }
-                                        }
-                                        Err(e) => {
-                                            log::error!("couldn't read current brightness: {}", e);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            log::error!("couldn't set up watcher for brightness: {}", e);
-                        }
-                    }
+        let brightness_event_handler = move |result| {
+            if let Err(e) = result {
+                log::error!("error while watching backlight: {}", e);
+            } else {
+                match read_current_brightness_percentage(&interface, max_val) {
+                    Ok(percentage) => sender
+                        .output(BrightnessEvent::Percentage(percentage))
+                        .unwrap_or_else(|_| log::error!("error sending brightness update")),
+                    Err(e) => log::error!("couldn't update brightness info: {}", e),
                 }
-                Err(e) => log::error!("couldn't create watcher: {}", e),
             }
-        });
+        };
 
-        BrightnessService
+        // create a debounced watcher with our handler
+        let watcher = notify::PollWatcher::new(
+            brightness_event_handler,
+            notify::Config::default()
+                .with_poll_interval(Duration::from_millis(1000))
+                .with_compare_contents(true),
+        )
+        .map(|mut watcher| {
+            // watch the brightness file
+            if let Err(e) = watcher.watch(Path::new(&brightness_path), RecursiveMode::NonRecursive)
+            {
+                log::error!("couldn't set up watcher for brightness: {}", e);
+            }
+
+            watcher
+        })
+        .map_err(|e| log::error!("couldn't create debouncer: {}", e))
+        .ok();
+
+        Self { _watcher: watcher }
     }
 
     // inputs are ignored
