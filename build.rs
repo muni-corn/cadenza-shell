@@ -68,6 +68,11 @@ fn main() {
             "bluetooth-disabled-regular",
             "bluetooth-regular",
             "bluetooth-searching-regular",
+            // media/mpris
+            "music-note-1-regular",
+            "play-regular",
+            "pause-regular",
+            "stop-regular",
         ],
     );
 }
