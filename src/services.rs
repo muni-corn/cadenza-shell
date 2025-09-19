@@ -7,6 +7,7 @@ pub mod bluetooth;
 pub mod brightness;
 pub mod hyprland;
 pub mod network;
+pub mod niri;
 pub mod notifications;
 pub mod pulseaudio;
 
