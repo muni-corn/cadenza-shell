@@ -331,3 +331,16 @@ calendar.view {
 .access-point-frequency {
   font-weight: normal;
 }
+.workspace {
+  border-radius: 4px;
+  transition: all 0.25s cubic-bezier(0.5, 0, 0, 1);
+
+  background-color: rgba(255, 255, 255, 0.3);
+  min-width: 8px;
+
+  // niri workspace indicators
+  &.active {
+    background-color: rgba(255, 255, 255, 0.8);
+    min-width: 20px;
+  }
+}
