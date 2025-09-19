@@ -3,7 +3,7 @@ use relm4::prelude::*;
 
 use crate::{
     settings::BarConfig,
-    tiles::{clock::ClockTile, weather::WeatherTile},
+    tiles::{clock::ClockTile, mpris::MprisTile, weather::WeatherTile},
 };
 
 #[derive(Debug)]
@@ -13,7 +13,7 @@ pub struct CenterGroup;
 pub struct CenterWidgets {
     _clock: Controller<ClockTile>,
     _weather: Controller<WeatherTile>,
-    // _media: Controller<MprisTile>,
+    _media: Controller<MprisTile>,
 }
 
 impl SimpleComponent for CenterGroup {
@@ -37,15 +37,18 @@ impl SimpleComponent for CenterGroup {
 
         let clock = ClockTile::builder().launch(()).detach();
         let weather = WeatherTile::builder().launch(()).detach();
+        let media = MprisTile::builder().launch(()).detach();
 
         root.append(clock.widget());
         root.append(weather.widget());
+        root.append(media.widget());
 
         ComponentParts {
             model: CenterGroup,
             widgets: CenterWidgets {
                 _clock: clock,
                 _weather: weather,
+                _media: media,
             },
         }
     }
