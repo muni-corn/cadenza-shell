@@ -52,18 +52,9 @@ impl SimpleComponent for BluetoothTile {
         }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
-        match msg {
-            BluetoothTileMsg::BluetoothUpdate(info) => {
-                self.bluetooth_info = info.clone();
-
-                let icon = self.get_icon();
-
-                self.tile.emit(TileMsg::UpdateData {
-                    icon: Some(icon.to_string()),
-                    primary: text.map(String::from),
-                    secondary: None,
-                });
+    fn update(&mut self, info: Self::Input, _sender: ComponentSender<Self>) {
+        self.bluetooth_info = info;
+    }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         widgets.root.set_visible(self.bluetooth_info.available);
