@@ -6,6 +6,7 @@ pub mod battery;
 pub mod bluetooth;
 pub mod brightness;
 pub mod hyprland;
+pub mod mpris;
 pub mod network;
 pub mod niri;
 pub mod notifications;
