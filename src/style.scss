@@ -44,13 +44,14 @@ window {
 }
 
 .bright,
+.active,
 .primary {
   color: rgba(255, 255, 255, 1.0);
 }
 
 .dim,
 .secondary {
-  color: rgba(255, 255, 255, 0.5);
+  color: $dim-color;
 }
 
 progressbar {
@@ -87,7 +88,7 @@ progressbar {
     }
   }
 
-  &.bright {
+  &.active {
     trough {
       min-width: 128px;
       background-color: rgba(255, 255, 255, 0.25);
@@ -108,10 +109,12 @@ progressbar {
   margin-right: 4px;
 
   &.dim {
+    color: $dim-color;
     transition: all 1s cubic-bezier(0.5, 0, 0, 1);
   }
 
-  &.bright {
+  &.active {
+    color: white;
     transition: all 250ms cubic-bezier(0.5, 0, 0, 1);
   }
 }
