@@ -4,5 +4,7 @@ pub mod bluetooth;
 pub mod brightness;
 pub mod clock;
 pub mod network;
+pub mod niri;
+pub mod notifications;
 pub mod pulseaudio;
 pub mod weather;
