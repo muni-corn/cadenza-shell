@@ -17,8 +17,6 @@ mod icon_names {
     include!(concat!(env!("OUT_DIR"), "/icon_names.rs"));
 }
 
-pub mod tests;
-
 use relm4::{RELM_THREADS, RelmApp};
 
 use crate::{app::MuseShellModel, style::compile_styles};

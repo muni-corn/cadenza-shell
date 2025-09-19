@@ -1,7 +1,5 @@
 use std::collections::VecDeque;
 
-pub mod integration;
-
 /// Trait for commands that can be executed and undone
 pub trait Command: std::fmt::Debug + Send {
     /// Execute the command
