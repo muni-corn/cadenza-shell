@@ -4,13 +4,13 @@ use relm4::{Worker, prelude::*};
 use crate::{
     services::brightness::{BrightnessEvent, BrightnessService},
     utils::icons::{BRIGHTNESS_ICON_NAMES, percentage_to_icon_from_list},
-    widgets::tile::{Tile, TileInit, TileMsg},
+    widgets::progress_tile::{ProgressTile, ProgressTileInit, ProgressTileMsg},
 };
 
 pub struct BrightnessTile {
     brightness_percentage: Option<f64>,
     _service: Controller<BrightnessService>,
-    tile: Controller<Tile>,
+    progress_tile: Controller<ProgressTile>,
 }
 
 #[derive(Debug)]
@@ -36,21 +36,21 @@ impl SimpleComponent for BrightnessTile {
                 BrightnessMsg::ServiceUpdate(state)
             });
 
-        // initialize the tile component
-        let tile = Tile::builder()
-            .launch(TileInit {
-                name: "brightness".to_string(),
+        // initialize the progress tile component
+        let progress_tile = ProgressTile::builder()
+            .launch(ProgressTileInit {
+                attention: super::Attention::Dim,
                 visible: false,
                 ..Default::default()
             })
             .detach();
 
-        root.append(tile.widget());
+        root.append(progress_tile.widget());
 
         let model = BrightnessTile {
             brightness_percentage: None,
             _service,
-            tile,
+            progress_tile,
         };
 
         ComponentParts { model, widgets: () }
@@ -62,21 +62,20 @@ impl SimpleComponent for BrightnessTile {
                 BrightnessEvent::Percentage(p) => {
                     self.brightness_percentage = Some(p);
 
-                    // update the tile with new data
-                    self.tile.emit(TileMsg::UpdateData {
-                        icon: Some(self.get_icon().to_string()),
-                        primary: Some(self.get_text()),
-                        secondary: None,
-                    });
+                    // update the progress tile with new data
+                    self.progress_tile
+                        .emit(ProgressTileMsg::SetIcon(Some(self.get_icon().to_string())));
+                    self.progress_tile
+                        .emit(ProgressTileMsg::SetProgress(to_logarithmic(p)));
 
                     // update visibility
-                    self.tile.emit(TileMsg::SetVisible(true));
+                    self.progress_tile.emit(ProgressTileMsg::SetVisible(true));
                 }
                 BrightnessEvent::Unavailable => {
                     self.brightness_percentage = None;
 
                     // hide the tile when brightness is unavailable
-                    self.tile.emit(TileMsg::SetVisible(false));
+                    self.progress_tile.emit(ProgressTileMsg::SetVisible(false));
                 }
             },
         }
@@ -96,15 +95,6 @@ impl BrightnessTile {
                 let log_brightness = to_logarithmic(*p);
                 percentage_to_icon_from_list(log_brightness, BRIGHTNESS_ICON_NAMES)
             })
-            .unwrap_or_default()
-    }
-
-    /// Gets the percentage text for this tile, using a logarithmic curve for
-    /// brightness.
-    fn get_text(&self) -> String {
-        self.brightness_percentage
-            .as_ref()
-            .map(|p| format!("{}%", (to_logarithmic(*p) * 100.0).round() as u32))
             .unwrap_or_default()
     }
 }
