@@ -5,53 +5,38 @@ edition = "2024"
 description = "muni's desktop shell - A modern desktop shell built with Rust and GTK4"
 
 [dependencies]
-# GTK and UI
+anyhow = "1"
+async-channel = "2.3"
+bluer = { version = "0.17", features = ["full"] }
+chrono = "0.4"
+env_logger = "0.11"
+futures-lite = { version = "2", default-features = false }
+gdk4 = { version = "0.10", features = ["v4_14"] }
+gio = "0.21"
+glib = "0.21"
 gtk4 = { version = "0.10", features = ["v4_14"] }
 gtk4-layer-shell = "0.6"
-glib = "0.21"
-gio = "0.21"
-gdk4 = { version = "0.10", features = ["v4_14"] }
+inotify = "0.11"
+log = "0.4"
+mpris = "2.0.1"
+niri-ipc = "25.8.0"
+notify = "8"
 pango = "0.21"
-rsass = "0.29"
-
-# Relm4 - Modern GTK4 framework
+pulse = { version = "2.30", package = "libpulse-binding" }
 relm4 = { version = "0.10", features = ["macros"] }
 relm4-components = "0.10"
 relm4-icons = { git = "https://github.com/muni-corn/relm4-icons", branch = "more-fluent-icons" }
-
-# Async and concurrency
-tokio = { version = "1", features = ["full"] }
-async-channel = "2.3"
-
-# System integration
-zbus = { version = "5", features = ["tokio"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-
-# Utilities
-anyhow = "1"
-thiserror = "2"
-log = "0.4"
-env_logger = "0.11"
-chrono = "0.4"
 reqwest = { version = "0.12", default-features = false, features = [
   "rustls-tls",
   "json",
 ] }
-
-# System monitoring
-futures-lite = { version = "2", default-features = false }
-inotify = "0.11"
-notify = "8"
+rsass = "0.29"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
 systemstat = "0.2"
-
-# Bluetooth
-bluer = { version = "0.17", features = ["full"] }
-
-# Audio
-pulse = { version = "2.30", package = "libpulse-binding" }
-niri-ipc = "25.8.0"
-mpris = "2.0.1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+zbus = { version = "5", features = ["tokio"] }
 
 [build-dependencies]
 glib-build-tools = "0.21"
