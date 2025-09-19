@@ -51,6 +51,7 @@ bluer = { version = "0.17", features = ["full"] }
 # Audio
 pulse = { version = "2.30", package = "libpulse-binding" }
 niri-ipc = "25.8.0"
+mpris = "2.0.1"
 
 [build-dependencies]
 glib-build-tools = "0.21"
