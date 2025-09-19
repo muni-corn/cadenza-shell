@@ -7,7 +7,7 @@
 - **Build**: `cargo build` or `cargo build --release` (builds the Rust shell)
 - **Run**: `cargo run` (runs the shell directly)
 - **Check**: `cargo check` (fast compilation check without building)
-- **Test**: `cargo test` (runs unit tests)
+- **Test**: `cargo test` (runs all unit tests)
 - **Lint**: `cargo clippy` (Rust linter)
 - **Format**: `nix fmt` (treefmt with rustfmt, biome, taplo, etc)
 - **Nix build**: `nix build` (builds using Nix flake)
@@ -27,25 +27,43 @@
 
 ### Rust Implementation
 
-- **Language**: Rust with GTK4-rs bindings
-- **Imports**: Use `use` statements, group by std/external/local
-- **File structure**:
-  - Services in `src/services/`
+- **Language**: Rust with GTK4-rs bindings and relm4 framework
+- **Imports**: Use `use` statements, group by std/external/local with blank
+  lines between groups
+- **Error Handling**: Use `anyhow::Result` for fallible functions, `thiserror`
+  for custom error types
+- **Naming**: snake_case for functions/variables, PascalCase for types/structs,
+  SCREAMING_SNAKE_CASE for constants
+- **File Structure**:
+  - Services in `src/services/` (background workers for system monitoring)
   - Widgets in `src/widgets/`
   - Status bar tiles in `src/tiles/`
   - Utilities in `src/utils/`
-  - Styling in `src/style/`
-- **Icons**: Use const arrays in `src/utils/icons.rs`
+  - Tests in `src/tests/`
+- **Services Pattern**: All services implement `relm4::Worker` trait with
+  `Init`, `Input`, and `Output` types. Use enum variants for output messages
+  (e.g., `BatteryUpdate`, `BluetoothWorkerOutput`). Services handle system
+  monitoring via D-Bus (`zbus`), file watching (`inotify`), or direct system
+  APIs
+- **Icons**: Use const arrays in `src/utils/icons.rs`, add new icon names in
+  `build.rs`
 - **Components**: Prefer manual relm4 implementation over `view!` macro for
   cleaner, more maintainable code. Follow the pattern in `src/tiles/clock.rs`
-  and `src/tiles/weather.rs`
-- **Comments**: Stylize all line comments in all lowercase. Doc comments should
-  use sentence case.
+- **Comments**: All line comments in lowercase. Doc comments use sentence case
+  with proper punctuation.
+- **Async**: Use `relm4::spawn` to spawn worker threads, use channels for
+  communication
+
+### TypeScript Implementation
+
+- **Formatting**: Biome with 2-space indentation, double quotes for strings and
+  JSX
+- **Types**: Explicit typing preferred, avoid `any`
+- **Imports**: Group and sort imports, prefer named imports
 
 ## Development Tips
 
 - Use the context7 MCP server to look up documentation for any library
-- For GObject subclassing, use the `glib::Properties` derive macro
 - Always make small, atomic, incremental, granular git commits while you work;
   do not add co-author footers, and follow conventional commit spec (see
   `git log` for examples)
