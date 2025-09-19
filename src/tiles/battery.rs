@@ -91,11 +91,11 @@ impl SimpleComponent for BatteryTile {
                     };
 
                     // update the tile with new data
-                    self.tile.emit(TileMsg::UpdateData {
-                        icon: Some(self.get_icon().to_string()),
-                        primary: Some(self.get_text()),
-                        secondary: Some(self.get_readable_time()),
-                    });
+                    self.tile
+                        .emit(TileMsg::SetIcon(Some(self.get_icon().to_string())));
+                    self.tile.emit(TileMsg::SetPrimary(Some(self.get_text())));
+                    self.tile
+                        .emit(TileMsg::SetSecondary(Some(self.get_readable_time())));
 
                     // update visibility and attention
                     self.tile.emit(TileMsg::SetAttention(attention));

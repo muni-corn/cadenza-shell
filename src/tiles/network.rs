@@ -61,11 +61,11 @@ impl SimpleComponent for NetworkTile {
             NetworkTileMsg::NetworkUpdate(info) => {
                 let icon = get_icon(&info);
 
-                self.tile.emit(TileMsg::UpdateData {
-                    icon: Some(icon.to_string()),
-                    primary: text.map(String::from),
-                    secondary: None,
-                });
+                self.tile.emit(TileMsg::SetIcon(Some(icon.to_string())));
+                self.tile.emit(TileMsg::SetPrimary(None));
+                self.tile.emit(TileMsg::SetSecondary(
+                    get_secondary_text(&info).map(String::from),
+                ));
             }
         }
     }

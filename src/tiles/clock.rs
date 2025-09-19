@@ -48,11 +48,11 @@ impl SimpleComponent for ClockTile {
             loop {
                 interval.tick().await;
                 let now = Local::now();
-                tile_sender_clone.emit(TileMsg::UpdateData {
-                    icon: Some(icon_names::CLOCK_REGULAR.to_string()),
-                    primary: Some(format_time(&now)),
-                    secondary: Some(format_date(&now)),
-                });
+                tile_sender_clone.emit(TileMsg::SetIcon(Some(
+                    icon_names::CLOCK_REGULAR.to_string(),
+                )));
+                tile_sender_clone.emit(TileMsg::SetPrimary(Some(format_time(&now))));
+                tile_sender_clone.emit(TileMsg::SetSecondary(Some(format_date(&now))));
             }
         });
 

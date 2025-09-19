@@ -31,12 +31,9 @@ pub struct Tile {
 #[derive(Debug)]
 pub enum TileMsg {
     Click,
-    UpdateData {
-        icon: Option<String>,
-        primary: Option<String>,
-        secondary: Option<String>,
-    },
-    SetVisible(bool),
+    SetIcon(Option<String>),
+    SetPrimary(Option<String>),
+    SetSecondary(Option<String>),
     SetAttention(Attention),
 }
 
@@ -165,20 +162,14 @@ impl SimpleComponent for Tile {
             TileMsg::Click => {
                 let _ = sender.output(TileOutput::Clicked);
             }
-            TileMsg::UpdateData {
-                icon,
-                primary,
-                secondary,
-            } => {
-                if icon.is_some() {
-                    self.icon = icon;
-                }
-                if primary.is_some() {
-                    self.primary = primary;
-                }
-                if secondary.is_some() {
-                    self.secondary = secondary;
-                }
+            TileMsg::SetIcon(icon) => {
+                self.icon = icon;
+            }
+            TileMsg::SetPrimary(primary) => {
+                self.primary = primary;
+            }
+            TileMsg::SetSecondary(secondary) => {
+                self.secondary = secondary;
             }
             TileMsg::SetAttention(attention) => {
                 self.attention = attention;
