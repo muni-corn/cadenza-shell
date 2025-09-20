@@ -13,7 +13,7 @@ use crate::{
         WEATHER_RAIN_REGULAR, WEATHER_RAIN_SHOWERS_DAY_REGULAR, WEATHER_SNOW_REGULAR,
         WEATHER_SNOW_SHOWER_DAY_REGULAR, WEATHER_SUNNY_REGULAR, WEATHER_THUNDERSTORM_REGULAR,
     },
-    widgets::tile::{Attention, Tile, TileInit, TileMsg},
+    widgets::tile::{Tile, TileMsg},
 };
 
 #[derive(Debug, Clone)]

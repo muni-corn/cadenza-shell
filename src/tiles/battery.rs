@@ -6,8 +6,9 @@ use relm4::{Worker, prelude::*};
 use crate::{
     icon_names::{BATTERY_CHARGE_REGULAR, BATTERY_CHECKMARK_REGULAR},
     services::battery::{BatteryService, BatteryUpdate},
+    tiles::Attention,
     utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
-    widgets::tile::{Attention, Tile, TileInit, TileMsg},
+    widgets::tile::{Tile, TileMsg},
 };
 
 pub struct BatteryTile {
