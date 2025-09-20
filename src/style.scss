@@ -6,8 +6,6 @@ $dim-color: rgba(255, 255, 255, 0.5);
 .tile {
   font-weight: normal;
   background-color: transparent;
-  padding-left: 10px;
-  padding-right: 10px;
   border-radius: 0;
   box-shadow: none;
   min-width: 0;
@@ -27,7 +25,6 @@ window {
   .bar-button,
   menubutton.bar-button>button {
     min-width: 0;
-    padding: 0;
     background-color: transparent;
     border-radius: 0;
     box-shadow: none;
