@@ -1,24 +1,7 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Attention {
-    Alarm,
-    Warning,
-    Normal,
-    Dim,
-}
-
-impl Attention {
-    pub fn css_class(&self) -> &'static str {
-        match self {
-            Attention::Alarm => "alarm",
-            Attention::Warning => "warning",
-            Attention::Normal => "",
-            Attention::Dim => "dim",
-        }
-    }
-}
+use crate::tiles::Attention;
 
 #[derive(Clone, Debug)]
 pub struct Tile {
