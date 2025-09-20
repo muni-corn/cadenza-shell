@@ -3,11 +3,13 @@ use mpris::{Event, PlaybackStatus, Player, PlayerFinder};
 use relm4::Worker;
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct MprisState {
-    pub title: Option<String>,
-    pub artist: Option<String>,
-    pub status: PlaybackStatus,
-    pub has_player: bool,
+pub enum MprisState {
+    Unavailable,
+    Info {
+        title: Option<String>,
+        artist: Option<String>,
+        status: PlaybackStatus,
+    },
 }
 
 #[derive(Debug)]
@@ -24,12 +26,7 @@ impl Worker for MprisService {
         // spawn blocking thread for event-driven mpris monitoring
         // we need to use std::thread because MPRIS Player is not Send + Sync
         std::thread::spawn(move || {
-            let mut last_state = MprisState {
-                title: None,
-                artist: None,
-                status: PlaybackStatus::Stopped,
-                has_player: false,
-            };
+            let mut last_state = MprisState::Unavailable;
 
             loop {
                 // find an active player
@@ -52,6 +49,7 @@ impl Worker for MprisService {
                                             // update state based on event
                                             let new_state =
                                                 handle_player_event(&event, last_state.clone());
+
                                             if new_state != last_state {
                                                 let _ = sender_clone.output(new_state.clone());
                                                 last_state = new_state;
@@ -85,12 +83,7 @@ impl Worker for MprisService {
                     }
                     Err(_) => {
                         // no players found - silently emit no-player state and wait before retrying
-                        let no_player_state = MprisState {
-                            title: None,
-                            artist: None,
-                            status: PlaybackStatus::Stopped,
-                            has_player: false,
-                        };
+                        let no_player_state = MprisState::Unavailable;
                         if no_player_state != last_state {
                             let _ = sender_clone.output(no_player_state.clone());
                             last_state = no_player_state;
@@ -125,48 +118,62 @@ fn get_player_state(player: &Player) -> MprisState {
         .get_playback_status()
         .unwrap_or(PlaybackStatus::Stopped);
 
-    MprisState {
+    MprisState::Info {
         title,
         artist,
         status,
-        has_player: true,
     }
 }
 
-fn handle_player_event(event: &Event, current_state: MprisState) -> MprisState {
-    match event {
-        Event::Playing => MprisState {
-            status: PlaybackStatus::Playing,
-            ..current_state
-        },
-        Event::Paused => MprisState {
-            status: PlaybackStatus::Paused,
-            ..current_state
-        },
-        Event::Stopped => MprisState {
-            status: PlaybackStatus::Stopped,
-            ..current_state
-        },
-        Event::TrackChanged(metadata) => {
-            let title = metadata.title().map(String::from);
-            let artist = metadata
-                .artists()
-                .and_then(|artists| artists.first().map(|s| s.to_string()));
+fn handle_player_event(event: &Event, mut current_state: MprisState) -> MprisState {
+    match &mut current_state {
+        MprisState::Info {
+            title,
+            artist,
+            status,
+        } => {
+            match event {
+                Event::Playing => *status = PlaybackStatus::Playing,
+                Event::Paused => *status = PlaybackStatus::Paused,
+                Event::Stopped => *status = PlaybackStatus::Stopped,
+                Event::TrackChanged(metadata) => {
+                    *title = metadata.title().map(String::from);
+                    *artist = metadata
+                        .album_artists()
+                        .and_then(|artists| artists.first().map(|s| s.to_string()));
+                }
+                Event::PlayerShutDown => return MprisState::Unavailable,
 
-            MprisState {
-                title,
-                artist,
-                status: current_state.status,
-                has_player: true,
+                // for other events that don't affect our displayed state, return current state
+                _ => (),
             }
+
+            current_state
         }
-        Event::PlayerShutDown => MprisState {
-            title: None,
-            artist: None,
-            status: PlaybackStatus::Stopped,
-            has_player: false,
+        MprisState::Unavailable => match event {
+            Event::Paused => MprisState::Info {
+                title: None,
+                artist: None,
+                status: PlaybackStatus::Paused,
+            },
+            Event::Stopped => MprisState::Info {
+                title: None,
+                artist: None,
+                status: PlaybackStatus::Stopped,
+            },
+            Event::Playing => MprisState::Info {
+                title: None,
+                artist: None,
+                status: PlaybackStatus::Playing,
+            },
+            Event::TrackChanged(metadata) => MprisState::Info {
+                title: metadata.title().map(String::from),
+                artist: metadata
+                    .album_artists()
+                    .and_then(|a| a.first().map(|s| s.to_string())),
+                status: PlaybackStatus::Paused,
+            },
+            _ => current_state,
         },
-        // for other events that don't affect our displayed state, return current state
-        _ => current_state,
     }
 }
