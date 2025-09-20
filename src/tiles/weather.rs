@@ -38,6 +38,12 @@ pub struct WeatherWidgets {
     cond_label: gtk::Label,
 }
 
+#[derive(Debug)]
+pub struct WeatherWidgets {
+    root: <WeatherTile as Component>::Root,
+    tile: Controller<Tile>,
+}
+
 impl SimpleComponent for WeatherTile {
     type Init = ();
     type Input = WeatherMsg;
@@ -123,6 +129,22 @@ impl SimpleComponent for WeatherTile {
                 .temp_label
                 .set_label(&format!("{}°", data.temperature));
             widgets.cond_label.set_label(&data.condition);
+        } else {
+            widgets.root.set_visible(false);
+        }
+    }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if let Some(data) = self.weather_data.clone() {
+            // Update the tile with new data
+            widgets.tile.emit(TileMsg::SetIcon(Some(data.icon)));
+            widgets
+                .tile
+                .emit(TileMsg::SetPrimary(Some(format!("{}°", data.temperature))));
+            widgets
+                .tile
+                .emit(TileMsg::SetSecondary(Some(data.condition)));
+            widgets.root.set_visible(true);
         } else {
             widgets.root.set_visible(false);
         }
