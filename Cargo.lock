@@ -1819,6 +1819,7 @@ dependencies = [
  "rsass",
  "serde",
  "serde_json",
+ "serde_repr",
  "systemstat",
  "thiserror 2.0.16",
  "tokio",
