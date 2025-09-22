@@ -5,7 +5,7 @@ use crate::{
     settings::BarConfig,
     tiles::{
         battery::BatteryTile, bluetooth::BluetoothTile, brightness::BrightnessTile,
-        network::NetworkTile, pulseaudio::PulseAudioTile,
+        network::NetworkTile, notifications::NotificationsTile, pulseaudio::PulseAudioTile,
     },
 };
 
@@ -18,6 +18,7 @@ pub struct RightWidgets {
     _bluetooth: Controller<BluetoothTile>,
     _network: Controller<NetworkTile>,
     _battery: Controller<BatteryTile>,
+    _notifications: Controller<NotificationsTile>,
 }
 
 impl SimpleComponent for RightGroup {
@@ -44,12 +45,14 @@ impl SimpleComponent for RightGroup {
         let bluetooth = BluetoothTile::builder().launch(()).detach();
         let network = NetworkTile::builder().launch(()).detach();
         let battery = BatteryTile::builder().launch(()).detach();
+        let notifications = NotificationsTile::builder().launch(()).detach();
 
         root.append(brightness.widget());
         root.append(volume.widget());
         root.append(bluetooth.widget());
         root.append(network.widget());
         root.append(battery.widget());
+        root.append(notifications.widget());
 
         ComponentParts {
             model: RightGroup,
@@ -59,6 +62,7 @@ impl SimpleComponent for RightGroup {
                 _bluetooth: bluetooth,
                 _network: network,
                 _battery: battery,
+                _notifications: notifications,
             },
         }
     }
