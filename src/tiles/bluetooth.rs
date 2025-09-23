@@ -2,6 +2,7 @@ use gtk4::prelude::*;
 use relm4::{WorkerController, prelude::*};
 
 use crate::{
+    icon_names::{BLUETOOTH_CONNECTED_REGULAR, BLUETOOTH_DISABLED_REGULAR, BLUETOOTH_REGULAR},
     services::bluetooth::{BluetoothInfo, BluetoothService, BluetoothWorkerOutput},
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
@@ -69,15 +70,15 @@ impl SimpleComponent for BluetoothTile {
 impl BluetoothTile {
     fn get_icon(&self) -> String {
         if !self.bluetooth_info.available {
-            "bluetooth-disabled-regular"
+            BLUETOOTH_DISABLED_REGULAR
         } else if self.bluetooth_info.enabled {
             if self.bluetooth_info.connected_devices > 0 {
-                "bluetooth-connected-regular"
+                BLUETOOTH_CONNECTED_REGULAR
             } else {
-                "bluetooth-regular"
+                BLUETOOTH_REGULAR
             }
         } else {
-            "bluetooth-disabled-regular"
+            BLUETOOTH_DISABLED_REGULAR
         }
         .to_string()
     }
