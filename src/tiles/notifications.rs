@@ -6,7 +6,7 @@ use relm4::{WorkerController, prelude::*};
 
 use crate::{
     notifications::fresh_notifications::{
-        FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput as FreshNotificationsOutput,
+        FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput,
     },
     services::notifications::{
         Notification, NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
@@ -31,7 +31,6 @@ pub struct NotificationsTile {
 pub enum NotificationsTileMsg {
     TileClicked,
     ServiceUpdate(NotificationWorkerOutput),
-    TogglePopup,
     PopupOutput(FreshNotificationsOutput),
     MonitorAdded(Monitor),
     Nothing,
@@ -170,14 +169,11 @@ impl SimpleComponent for NotificationsTile {
             }
             NotificationsTileMsg::Nothing => (),
             NotificationsTileMsg::PopupOutput(output) => {
-                match output {
-                    FreshNotificationsOutput::NotificationDismissed(id) => {
-                        log::debug!("notification {} dismissed from popup", id);
-                        // Tell the service to close this notification
-                        self.notification_worker
-                            .emit(NotificationServiceMsg::CloseNotification(id));
-                    }
-                    _ => {}
+                if let FreshNotificationsOutput::NotificationDismissed(id) = output {
+                    log::debug!("notification {} dismissed from popup", id);
+                    // Tell the service to close this notification
+                    self.notification_worker
+                        .emit(NotificationServiceMsg::CloseNotification(id));
                 }
             }
             NotificationsTileMsg::MonitorAdded(monitor) => {
