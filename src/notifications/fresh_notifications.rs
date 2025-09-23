@@ -12,13 +12,13 @@ use crate::services::notifications::Notification;
 pub struct FreshNotifications {
     visible: bool,
     notifications: FactoryVecDeque<NotificationCard>,
-    _monitor: Monitor,
+    monitor: Monitor,
     auto_dismiss_timeouts: HashMap<u32, glib::SourceId>,
 }
 
 #[derive(Debug)]
-pub enum NotificationPopupMsg {
-    AddNotification(Notification),
+pub enum FreshNotificationsMsg {
+    NewNotification(Notification),
     RemoveNotification(u32),
     AutoDismiss(u32),                // auto-dismiss a notification by ID
     NotificationAction(u32, String), // notification_id, action_id
@@ -26,17 +26,16 @@ pub enum NotificationPopupMsg {
 }
 
 #[derive(Debug)]
-pub enum NotificationPopupOutput {
+pub enum FreshNotificationsOutput {
     NotificationDismissed(u32),
     NotificationActionTriggered(u32, String),
-    DefaultActionTriggered(u32),
 }
 
 #[relm4::component(pub)]
 impl SimpleComponent for FreshNotifications {
     type Init = Monitor;
-    type Input = NotificationPopupMsg;
-    type Output = NotificationPopupOutput;
+    type Input = FreshNotificationsMsg;
+    type Output = FreshNotificationsOutput;
 
     view! {
         #[root]
@@ -54,27 +53,25 @@ impl SimpleComponent for FreshNotifications {
     }
 
     fn init(
-        init: Self::Init,
+        monitor: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let monitor = init;
-
         let notifications = FactoryVecDeque::builder()
             .launch(gtk4::Box::default())
             .forward(sender.input_sender(), |output| match output {
                 NotificationCardOutput::Dismiss(id) => {
-                    NotificationPopupMsg::DismissNotification(id)
+                    FreshNotificationsMsg::DismissNotification(id)
                 }
                 NotificationCardOutput::Action(id, action) => {
-                    NotificationPopupMsg::NotificationAction(id, action)
+                    FreshNotificationsMsg::NotificationAction(id, action)
                 }
             });
 
         let model = FreshNotifications {
             visible: true,
             notifications,
-            _monitor: monitor.clone(),
+            monitor,
             auto_dismiss_timeouts: HashMap::new(),
         };
 
@@ -87,7 +84,7 @@ impl SimpleComponent for FreshNotifications {
         widgets.window.set_exclusive_zone(-1); // don't reserve space
         widgets.window.set_anchor(Edge::Top, true);
         widgets.window.set_anchor(Edge::Right, true);
-        widgets.window.set_monitor(Some(&monitor));
+        widgets.window.set_monitor(Some(&model.monitor));
         widgets.window.set_margin(Edge::Top, 8);
         widgets.window.set_margin(Edge::Right, 8);
 
@@ -96,7 +93,7 @@ impl SimpleComponent for FreshNotifications {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            NotificationPopupMsg::AddNotification(notification) => {
+            FreshNotificationsMsg::NewNotification(notification) => {
                 // add to the beginning (top) of the list
                 let notification_id = notification.id;
                 let urgency = notification.urgency;
@@ -115,14 +112,14 @@ impl SimpleComponent for FreshNotifications {
                         std::time::Duration::from_secs(10),
                         move || {
                             dismiss_sender
-                                .input(NotificationPopupMsg::AutoDismiss(notification_id));
+                                .input(FreshNotificationsMsg::AutoDismiss(notification_id));
                         },
                     );
                     self.auto_dismiss_timeouts
                         .insert(notification_id, timeout_id);
                 }
             }
-            NotificationPopupMsg::RemoveNotification(id) => {
+            FreshNotificationsMsg::RemoveNotification(id) => {
                 // remove auto-dismiss timeout if it exists
                 if let Some(timeout_id) = self.auto_dismiss_timeouts.remove(&id) {
                     timeout_id.remove();
@@ -143,28 +140,28 @@ impl SimpleComponent for FreshNotifications {
                     guard.remove(index);
                 }
             }
-            NotificationPopupMsg::AutoDismiss(id) => {
+            FreshNotificationsMsg::AutoDismiss(id) => {
                 // remove the timeout tracking since it fired
                 self.auto_dismiss_timeouts.remove(&id);
 
                 // remove the notification and notify service
-                sender.input(NotificationPopupMsg::RemoveNotification(id));
-                sender.input(NotificationPopupMsg::DismissNotification(id));
+                sender.input(FreshNotificationsMsg::RemoveNotification(id));
+                sender.input(FreshNotificationsMsg::DismissNotification(id));
             }
-            NotificationPopupMsg::DismissNotification(id) => {
+            FreshNotificationsMsg::DismissNotification(id) => {
                 // remove from our display
-                sender.input(NotificationPopupMsg::RemoveNotification(id));
+                sender.input(FreshNotificationsMsg::RemoveNotification(id));
 
                 // forward to output
                 sender
-                    .output(NotificationPopupOutput::NotificationDismissed(id))
+                    .output(FreshNotificationsOutput::NotificationDismissed(id))
                     .unwrap_or_else(|_| {
                         log::error!("couldn't output action trigger event from popup")
                     });
             }
-            NotificationPopupMsg::NotificationAction(id, action) => {
+            FreshNotificationsMsg::NotificationAction(id, action) => {
                 sender
-                    .output(NotificationPopupOutput::NotificationActionTriggered(
+                    .output(FreshNotificationsOutput::NotificationActionTriggered(
                         id, action,
                     ))
                     .unwrap_or_else(|_| {
