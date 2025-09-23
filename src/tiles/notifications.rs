@@ -5,10 +5,12 @@ use gtk4::prelude::*;
 use relm4::{WorkerController, prelude::*};
 
 use crate::{
-    services::notifications::{
-        NotificationService, NotificationServiceMsg, NotificationWorkerOutput, Notification,
+    notifications::fresh_notifications::{
+        FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput as FreshNotificationsOutput,
     },
-    notifications::notification_popup::{FreshNotifications, NotificationPopupMsg, NotificationPopupOutput},
+    services::notifications::{
+        Notification, NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
+    },
     tiles::Attention,
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
@@ -30,7 +32,7 @@ pub enum NotificationsTileMsg {
     TileClicked,
     ServiceUpdate(NotificationWorkerOutput),
     TogglePopup,
-    PopupOutput(NotificationPopupOutput),
+    PopupOutput(FreshNotificationsOutput),
     MonitorAdded(Monitor),
     Nothing,
 }
@@ -137,7 +139,8 @@ impl SimpleComponent for NotificationsTile {
 
                         // show in all existing popups
                         for popup in self.popups.values() {
-                            popup.emit(NotificationPopupMsg::AddNotification(notification.clone()));
+                            popup
+                                .emit(FreshNotificationsMsg::NewNotification(notification.clone()));
                         }
 
                         // refresh notifications count
@@ -152,7 +155,7 @@ impl SimpleComponent for NotificationsTile {
 
                         // remove from all popups
                         for popup in self.popups.values() {
-                            popup.emit(NotificationPopupMsg::RemoveNotification(id));
+                            popup.emit(FreshNotificationsMsg::RemoveNotification(id));
                         }
 
                         // refresh notifications count
@@ -168,7 +171,7 @@ impl SimpleComponent for NotificationsTile {
             NotificationsTileMsg::Nothing => (),
             NotificationsTileMsg::PopupOutput(output) => {
                 match output {
-                    NotificationPopupOutput::NotificationDismissed(id) => {
+                    FreshNotificationsOutput::NotificationDismissed(id) => {
                         log::debug!("notification {} dismissed from popup", id);
                         // Tell the service to close this notification
                         self.notification_worker
@@ -191,7 +194,8 @@ impl SimpleComponent for NotificationsTile {
 
                         // Send existing notifications to the new popup
                         for notification in self.active_notifications.values() {
-                            popup.emit(NotificationPopupMsg::AddNotification(notification.clone()));
+                            popup
+                                .emit(FreshNotificationsMsg::NewNotification(notification.clone()));
                         }
 
                         self.popups.insert(connector_str, popup);
