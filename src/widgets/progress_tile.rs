@@ -7,10 +7,8 @@ use crate::tiles::Attention;
 pub struct ProgressTile {
     icon: Option<String>,
     progress: f64,
-    visible: bool,
     attention: Attention,
     active: bool,
-    extra_classes: Vec<String>,
     fade_timeout_source: Option<glib::SourceId>,
 }
 
@@ -22,15 +20,6 @@ pub enum ProgressTileMsg {
     /// Sets the fraction of the ProgressTile, expanding it with an animation to
     /// show its fraction.
     SetProgress(f64),
-
-    /// Sets the fraction of the ProgressTile without activating its animation.
-    SetProgressSilently(f64),
-
-    SetVisible(bool),
-
-    SetAttention(Attention),
-
-    Click,
 
     FadeTimeout,
 }
@@ -49,7 +38,6 @@ pub struct ProgressTileWidgets {
 pub struct ProgressTileInit {
     pub icon_name: Option<String>,
     pub progress: f64,
-    pub visible: bool,
     pub attention: Attention,
     pub extra_classes: Vec<String>,
 }
@@ -59,7 +47,6 @@ impl Default for ProgressTileInit {
         Self {
             icon_name: None,
             progress: 0.0,
-            visible: true,
             attention: Attention::Normal,
             extra_classes: Vec::new(),
         }
@@ -76,14 +63,12 @@ impl SimpleComponent for ProgressTile {
     fn init(
         init: Self::Init,
         root: Self::Root,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         let model = ProgressTile {
             icon: init.icon_name,
             progress: init.progress,
-            visible: init.visible,
             attention: init.attention,
-            extra_classes: init.extra_classes,
             fade_timeout_source: None,
             active: false,
         };
@@ -126,10 +111,6 @@ impl SimpleComponent for ProgressTile {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
-            ProgressTileMsg::Click => {
-                // propagate click event to parent
-                let _ = sender.output(ProgressTileOutput::Clicked);
-            }
             ProgressTileMsg::SetIcon(icon) => {
                 self.icon = icon;
             }
@@ -138,15 +119,6 @@ impl SimpleComponent for ProgressTile {
 
                 // trigger fade effect
                 self.activate(&sender);
-            }
-            ProgressTileMsg::SetProgressSilently(progress) => {
-                self.progress = progress;
-            }
-            ProgressTileMsg::SetVisible(visible) => {
-                self.visible = visible;
-            }
-            ProgressTileMsg::SetAttention(attention) => {
-                self.attention = attention;
             }
             ProgressTileMsg::FadeTimeout => {
                 self.active = false;

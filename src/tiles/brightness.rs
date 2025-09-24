@@ -23,7 +23,7 @@ impl SimpleComponent for BrightnessTile {
     type Input = BrightnessMsg;
     type Output = ();
     type Root = gtk::Box;
-    type Widgets = ();
+    type Widgets = Self::Root;
 
     fn init(
         _init: Self::Init,
@@ -40,7 +40,6 @@ impl SimpleComponent for BrightnessTile {
         let progress_tile = ProgressTile::builder()
             .launch(ProgressTileInit {
                 attention: super::Attention::Dim,
-                visible: false,
                 ..Default::default()
             })
             .detach();
@@ -53,7 +52,10 @@ impl SimpleComponent for BrightnessTile {
             progress_tile,
         };
 
-        ComponentParts { model, widgets: () }
+        ComponentParts {
+            model,
+            widgets: root,
+        }
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
@@ -61,28 +63,31 @@ impl SimpleComponent for BrightnessTile {
             BrightnessMsg::ServiceUpdate(state) => match state {
                 BrightnessEvent::Percentage(p) => {
                     self.brightness_percentage = Some(p);
-
-                    // update the progress tile with new data
-                    self.progress_tile
-                        .emit(ProgressTileMsg::SetIcon(Some(self.get_icon().to_string())));
-                    self.progress_tile
-                        .emit(ProgressTileMsg::SetProgress(to_logarithmic(p)));
-
-                    // update visibility
-                    self.progress_tile.emit(ProgressTileMsg::SetVisible(true));
                 }
                 BrightnessEvent::Unavailable => {
                     self.brightness_percentage = None;
-
-                    // hide the tile when brightness is unavailable
-                    self.progress_tile.emit(ProgressTileMsg::SetVisible(false));
                 }
             },
         }
     }
 
+    fn update_view(&self, root: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        if let Some(p) = self.brightness_percentage {
+            // update the progress tile with new data
+            self.progress_tile
+                .emit(ProgressTileMsg::SetIcon(Some(self.get_icon().to_string())));
+            self.progress_tile
+                .emit(ProgressTileMsg::SetProgress(to_logarithmic(p)));
+
+            root.set_visible(true);
+        } else {
+            // hide the tile when brightness is unavailable
+            root.set_visible(false);
+        }
+    }
+
     fn init_root() -> Self::Root {
-        gtk::Box::new(gtk::Orientation::Horizontal, 0)
+        gtk::Box::builder().visible(false).build()
     }
 }
 
