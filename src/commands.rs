@@ -123,7 +123,7 @@ impl CommandManager {
     }
 }
 
-/// Application-specific commands for muse-shell
+/// Application-specific commands for cadenza-shell
 #[derive(Debug)]
 pub enum AppCommand {
     /// Toggle notification center visibility

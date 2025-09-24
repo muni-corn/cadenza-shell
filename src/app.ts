@@ -6,7 +6,7 @@ import style from "./style.scss";
 
 app.start({
   css: style,
-  instanceName: "muse-shell",
+  instanceName: "cadenza-shell",
   main() {
     const monitors = app.get_monitors();
 

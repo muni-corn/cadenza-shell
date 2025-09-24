@@ -1,10 +1,10 @@
-# Relm4 Migration Plan for muse-shell
+# Relm4 Migration Plan for cadenza-shell
 
 ## Overview
 
 This document provides a comprehensive step-by-step plan to refactor the
-muse-shell codebase from raw GTK4 to Relm4, a more idiomatic Rust GUI framework
-that simplifies development with the Model-View-Update pattern.
+cadenza-shell codebase from raw GTK4 to Relm4, a more idiomatic Rust GUI
+framework that simplifies development with the Model-View-Update pattern.
 
 ## Phase 1: Setup and Core Infrastructure (Priority: HIGH)
 

@@ -148,8 +148,9 @@ impl NotificationsDaemon {
         dbg!("new notification received: {}", &notification);
 
         // store notification in worker
-        self.sender
-            .input(NotificationServiceMsg::StoreNotification(notification.clone()));
+        self.sender.input(NotificationServiceMsg::StoreNotification(
+            notification.clone(),
+        ));
 
         // notify worker about new notification
         if let Err(e) = self
@@ -226,7 +227,7 @@ impl NotificationsDaemon {
 
     async fn get_server_information(&self) -> (String, String, String, String) {
         (
-            "muse-shell".to_string(),
+            "cadenza-shell".to_string(),
             "municorn".to_string(),
             "1.0.0".to_string(),
             "1.3".to_string(),

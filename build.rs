@@ -3,7 +3,7 @@ fn main() {
         // name of th6 file that will be generated at `OUT_DIR`
         "icon_names.rs",
         // optional app id
-        Some("com.musicaloft.muse-shell"),
+        Some("com.musicaloft.cadenza-shell"),
         // custom base resource path
         None::<&str>,
         // directory with custom icons (if any)

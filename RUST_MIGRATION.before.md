@@ -1,8 +1,8 @@
-# Muse Shell Migration Plan: TypeScript/AGS to Rust/gtk-rs
+# Cadenza Shell Migration Plan: TypeScript/AGS to Rust/gtk-rs
 
 ## Executive Summary
 
-This document outlines a comprehensive plan to migrate the Muse Shell desktop
+This document outlines a comprehensive plan to migrate the Cadenza Shell desktop
 environment from its current TypeScript/AGS/Astal implementation to a Rust-based
 solution using gtk-rs, GTK4, and gtk4-layer-shell. The migration will maintain
 all existing functionality while providing better type safety, performance, and
@@ -49,7 +49,7 @@ a more maintainable codebase.
 #### 1.1 Initialize Rust Project Structure
 
 ```
-muse-shell/
+cadenza-shell/
 ├── Cargo.toml
 ├── src/
 │   ├── main.rs
@@ -98,7 +98,7 @@ muse-shell/
 
 ```toml
 [package]
-name = "muse-shell"
+name = "cadenza-shell"
 version = "0.1.0"
 edition = "2021"
 
@@ -223,15 +223,15 @@ use gtk4::{prelude::*, Application, ApplicationWindow};
 use gtk4_layer_shell::{LayerShell, Layer, Edge};
 use gdk4::Display;
 
-pub struct MuseShell {
+pub struct CadenzaShell {
     app: Application,
     bars: Vec<ApplicationWindow>,
 }
 
-impl MuseShell {
+impl CadenzaShell {
     pub fn new() -> Self {
         let app = Application::builder()
-            .application_id("com.muse.shell")
+            .application_id("com.cadenza.shell")
             .build();
 
         Self {
@@ -263,7 +263,7 @@ impl MuseShell {
     fn create_bar(&mut self, app: &Application, monitor: &gdk4::Monitor) {
         let window = ApplicationWindow::builder()
             .application(app)
-            .title("Muse Shell Bar")
+            .title("Cadenza Shell Bar")
             .build();
 
         // Configure layer shell
@@ -858,8 +858,8 @@ https://flake.parts/options/rust-flake.html.
 
 ## Conclusion
 
-This migration plan provides a structured approach to converting the Muse Shell
-from TypeScript/AGS to Rust/gtk-rs. The new implementation will maintain feature
-parity while providing improved performance, type safety, and maintainability.
-The modular architecture allows for incremental migration and testing, reducing
-risk and ensuring a smooth transition.
+This migration plan provides a structured approach to converting the Cadenza
+Shell from TypeScript/AGS to Rust/gtk-rs. The new implementation will maintain
+feature parity while providing improved performance, type safety, and
+maintainability. The modular architecture allows for incremental migration and
+testing, reducing risk and ensuring a smooth transition.
