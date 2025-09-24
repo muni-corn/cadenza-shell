@@ -27,7 +27,7 @@ impl SimpleComponent for PulseAudioTile {
     type Input = PulseAudioTileMsg;
     type Output = ();
     type Root = gtk::Box;
-    type Widgets = ();
+    type Widgets = Self::Root;
 
     fn init(
         _init: Self::Init,
@@ -45,7 +45,6 @@ impl SimpleComponent for PulseAudioTile {
                 icon_name: None,
                 progress: 0.0,
                 attention: super::Attention::Dim,
-                visible: false,
                 ..Default::default()
             })
             .forward(sender.input_sender(), |output| match output {
@@ -59,21 +58,21 @@ impl SimpleComponent for PulseAudioTile {
             progress_tile,
         };
 
-        ComponentParts { model, widgets: () }
+        ComponentParts {
+            model,
+            widgets: root,
+        }
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
             PulseAudioTileMsg::TileClicked => {
-                self.worker
-                    .sender()
-                    .send(PulseAudioServiceMsg::ToggleMute)
-                    .ok();
+                self.worker.emit(PulseAudioServiceMsg::ToggleMute);
             }
             PulseAudioTileMsg::ServiceUpdate(output) => match output {
                 PulseAudioServiceEvent::VolumeChanged(data) => {
                     self.volume_data = data;
-                    self.update_tile_display();
+                    self.update_tile_data();
                 }
                 PulseAudioServiceEvent::Error(error) => {
                     log::error!("volume worker error: {}", error);
@@ -82,8 +81,12 @@ impl SimpleComponent for PulseAudioTile {
         }
     }
 
+    fn update_view(&self, root: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        root.set_visible(self.volume_data.default_sink_name.is_some());
+    }
+
     fn init_root() -> Self::Root {
-        gtk::Box::builder().build()
+        gtk::Box::builder().visible(false).build()
     }
 }
 
@@ -98,26 +101,15 @@ impl PulseAudioTile {
         }
     }
 
-    fn update_tile_display(&mut self) {
+    fn update_tile_data(&mut self) {
         self.progress_tile
-            .sender()
-            .send(ProgressTileMsg::SetIcon(Some(self.get_icon().to_string())))
-            .ok();
+            .emit(ProgressTileMsg::SetIcon(Some(self.get_icon().to_string())));
 
         self.progress_tile
-            .sender()
-            .send(ProgressTileMsg::SetProgress(if self.volume_data.muted {
+            .emit(ProgressTileMsg::SetProgress(if self.volume_data.muted {
                 0.0
             } else {
                 (self.volume_data.volume / 100.0).clamp(0.0, 1.0)
-            }))
-            .ok();
-
-        self.progress_tile
-            .sender()
-            .send(ProgressTileMsg::SetVisible(
-                self.volume_data.default_sink_name.is_some(),
-            ))
-            .ok();
+            }));
     }
 }
