@@ -19,7 +19,7 @@ mod icon_names {
 
 use relm4::{RELM_THREADS, RelmApp};
 
-use crate::{app::MuseShellModel, style::compile_styles};
+use crate::{app::CadenzaShellModel, style::compile_styles};
 
 #[tokio::main]
 async fn main() -> glib::ExitCode {
@@ -39,9 +39,9 @@ async fn main() -> glib::ExitCode {
         Err(e) => log::error!("couldn't load scss: {e}"),
     }
 
-    RelmApp::new("com.musicaloft.muse-shell")
+    RelmApp::new("com.musicaloft.cadenza-shell")
         .visible_on_activate(cfg!(debug_assertions))
-        .run::<MuseShellModel>(());
+        .run::<CadenzaShellModel>(());
 
     gtk4::glib::ExitCode::FAILURE
 }

@@ -334,6 +334,44 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2e93abca9e28e0a1b9877922aacb20576e05d4679ffa78c3d6dc22a26a216659"
 
 [[package]]
+name = "cadenza-shell"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-channel",
+ "bluer",
+ "chrono",
+ "env_logger",
+ "futures-lite",
+ "gdk4",
+ "gio",
+ "glib",
+ "glib-build-tools",
+ "gtk4",
+ "gtk4-layer-shell",
+ "inotify",
+ "libpulse-binding",
+ "log",
+ "mpris",
+ "niri-ipc",
+ "notify",
+ "pango",
+ "relm4",
+ "relm4-components",
+ "relm4-icons",
+ "relm4-icons-build",
+ "reqwest",
+ "rsass",
+ "serde",
+ "serde_json",
+ "serde_repr",
+ "systemstat",
+ "thiserror 2.0.16",
+ "tokio",
+ "zbus",
+]
+
+[[package]]
 name = "cairo-rs"
 version = "0.21.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1786,44 +1824,6 @@ dependencies = [
  "enum-kinds",
  "from_variants",
  "thiserror 1.0.69",
-]
-
-[[package]]
-name = "muse-shell"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "async-channel",
- "bluer",
- "chrono",
- "env_logger",
- "futures-lite",
- "gdk4",
- "gio",
- "glib",
- "glib-build-tools",
- "gtk4",
- "gtk4-layer-shell",
- "inotify",
- "libpulse-binding",
- "log",
- "mpris",
- "niri-ipc",
- "notify",
- "pango",
- "relm4",
- "relm4-components",
- "relm4-icons",
- "relm4-icons-build",
- "reqwest",
- "rsass",
- "serde",
- "serde_json",
- "serde_repr",
- "systemstat",
- "thiserror 2.0.16",
- "tokio",
- "zbus",
 ]
 
 [[package]]

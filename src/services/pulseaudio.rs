@@ -112,7 +112,10 @@ impl PulseAudioService {
             anyhow::bail!("failed to create pa proplist");
         };
 
-        if proplist.set_str("APPLICATION_NAME", "muse-shell").is_err() {
+        if proplist
+            .set_str("APPLICATION_NAME", "cadenza-shell")
+            .is_err()
+        {
             anyhow::bail!("failed to update pa proplist");
         }
 
@@ -120,7 +123,8 @@ impl PulseAudioService {
             anyhow::bail!("failed to create pa mainloop");
         };
 
-        let Some(context) = Context::new_with_proplist(&mainloop, "muse-shell", &proplist) else {
+        let Some(context) = Context::new_with_proplist(&mainloop, "cadenza-shell", &proplist)
+        else {
             anyhow::bail!("failed to create pa context");
         };
 

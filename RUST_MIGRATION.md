@@ -1,8 +1,8 @@
-# Muse Shell Migration Plan: TypeScript/AGS to Rust/gtk-rs
+# Cadenza Shell Migration Plan: TypeScript/AGS to Rust/gtk-rs
 
 ## Executive Summary
 
-This document outlines a comprehensive plan to migrate the Muse Shell desktop
+This document outlines a comprehensive plan to migrate the Cadenza Shell desktop
 environment from its current TypeScript/AGS/Astal implementation to a Rust-based
 solution using gtk-rs, GTK4, and gtk4-layer-shell. The migration will maintain
 all existing functionality while providing better type safety, performance, and
@@ -53,7 +53,7 @@ developing GTK GUIs in Rust.
 #### 1.1 Initialize Rust Project Structure
 
 ```
-muse-shell/
+cadenza-shell/
 ├── Cargo.toml
 ├── src/
 │   ├── main.rs
@@ -102,7 +102,7 @@ muse-shell/
 
 ```toml
 [package]
-name = "muse-shell"
+name = "cadenza-shell"
 version = "0.1.0"
 edition = "2021"
 
@@ -184,7 +184,7 @@ mod imp {
     
     #[glib::object_subclass]
     impl ObjectSubclass for BrightnessModel {
-        const NAME: &'static str = "MuseShellBrightnessModel";
+        const NAME: &'static str = "CadenzaShellBrightnessModel";
         type Type = super::BrightnessModel;
         type ParentType = glib::Object;
     }
@@ -279,15 +279,15 @@ use gtk4::{prelude::*, Application, ApplicationWindow};
 use gtk4_layer_shell::{LayerShell, Layer, Edge};
 use gdk4::Display;
 
-pub struct MuseShell {
+pub struct CadenzaShell {
     app: Application,
     bars: Vec<ApplicationWindow>,
 }
 
-impl MuseShell {
+impl CadenzaShell {
     pub fn new() -> Self {
         let app = Application::builder()
-            .application_id("com.muse.shell")
+            .application_id("com.musicaloft.cadenza-shell")
             .build();
 
         Self {
@@ -319,7 +319,7 @@ impl MuseShell {
     fn create_bar(&mut self, app: &Application, monitor: &gdk4::Monitor) {
         let window = ApplicationWindow::builder()
             .application(app)
-            .title("Muse Shell Bar")
+            .title("Cadenza Shell Bar")
             .build();
 
         // Configure layer shell
@@ -377,7 +377,7 @@ mod imp {
     
     #[glib::object_subclass]
     impl ObjectSubclass for BrightnessService {
-        const NAME: &'static str = "MuseShellBrightnessService";
+        const NAME: &'static str = "CadenzaShellBrightnessService";
         type Type = super::BrightnessService;
         type ParentType = glib::Object;
     }
@@ -529,7 +529,7 @@ mod audio_service {
         
         #[glib::object_subclass]
         impl ObjectSubclass for AudioService {
-            const NAME: &'static str = "MuseShellAudioService";
+            const NAME: &'static str = "CadenzaShellAudioService";
             type Type = super::AudioService;
             type ParentType = glib::Object;
         }
@@ -1161,8 +1161,8 @@ expr.bind(&label, "label", None::<&glib::Object>);
 
 ## Conclusion
 
-This migration plan provides a structured approach to converting the Muse Shell
-from TypeScript/AGS to Rust/gtk-rs using native GTK patterns. The new
+This migration plan provides a structured approach to converting the Cadenza
+Shell from TypeScript/AGS to Rust/gtk-rs using native GTK patterns. The new
 implementation will maintain feature parity while providing improved
 performance, type safety, and maintainability through idiomatic Rust and GTK4
 practices. The use of native GObject properties and signals ensures better

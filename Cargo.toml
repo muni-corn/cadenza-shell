@@ -1,8 +1,8 @@
 [package]
-name = "muse-shell"
+name = "cadenza-shell"
 version = "0.1.0"
 edition = "2024"
-description = "muni's desktop shell - A modern desktop shell built with Rust and GTK4"
+description = "muni's desktop shell - a modern desktop shell built with Rust and GTK4"
 
 [dependencies]
 anyhow = "1"

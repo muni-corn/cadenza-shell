@@ -92,7 +92,7 @@
         {
           # rust setup
           devenv.shells.default = {
-            env.RUST_LOG = "info,muse_shell=debug";
+            env.RUST_LOG = "info,cadenza_shell=debug";
 
             languages.rust = {
               enable = true;

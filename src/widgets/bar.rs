@@ -36,7 +36,7 @@ impl SimpleComponent for Bar {
 
     fn init_root() -> Self::Root {
         gtk::Window::builder()
-            .title("muse-shell")
+            .title("cadenza-shell")
             .default_height(32)
             .visible(true)
             .build()

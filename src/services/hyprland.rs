@@ -85,7 +85,7 @@ mod imp {
         type ParentType = glib::Object;
         type Type = super::HyprlandService;
 
-        const NAME: &'static str = "MuseShellHyprlandService";
+        const NAME: &'static str = "CadenzaShellHyprlandService";
     }
 
     #[glib::derived_properties]

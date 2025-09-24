@@ -1,9 +1,10 @@
-# Relm4 Migration Status - muse-shell
+# Relm4 Migration Status - cadenza-shell
 
 ## Migration Complete! 🎉
 
-The muse-shell codebase has been successfully migrated from raw GTK4 to Relm4.
-This document summarizes what was accomplished and the current architecture.
+The cadenza-shell codebase has been successfully migrated from raw GTK4 to
+Relm4. This document summarizes what was accomplished and the current
+architecture.
 
 ## Completed Tasks ✅
 
@@ -104,8 +105,8 @@ src/
 
 Settings are stored in JSON format at:
 
-- `$XDG_CONFIG_HOME/muse-shell/config.json`
-- `~/.config/muse-shell/config.json` (fallback)
+- `$XDG_CONFIG_HOME/cadenza-shell/config.json`
+- `~/.config/cadenza-shell/config.json` (fallback)
 
 ### Configuration Sections
 

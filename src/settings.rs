@@ -4,7 +4,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
-pub struct MuseShellConfig {
+pub struct CadenzaShellConfig {
     pub ui: UiConfig,
     pub bar: BarConfig,
     pub notifications: NotificationConfig,
@@ -101,7 +101,7 @@ impl Default for TileConfig {
 
 #[derive(Debug)]
 pub struct ConfigManager {
-    config: MuseShellConfig,
+    config: CadenzaShellConfig,
     config_path: PathBuf,
 }
 
@@ -117,15 +117,15 @@ impl ConfigManager {
         })
     }
 
-    /// load configuration from file, create default if doesn't exist
-    pub fn load_config(path: &PathBuf) -> Result<MuseShellConfig> {
+    /// Load configuration from file, creating default if it doesn't exist.
+    pub fn load_config(path: &PathBuf) -> Result<CadenzaShellConfig> {
         if path.exists() {
             let content = fs::read_to_string(path)?;
-            let config: MuseShellConfig = serde_json::from_str(&content)?;
+            let config: CadenzaShellConfig = serde_json::from_str(&content)?;
             log::info!("loaded configuration from: {}", path.display());
             Ok(config)
         } else {
-            let default_config = MuseShellConfig::default();
+            let default_config = CadenzaShellConfig::default();
 
             // create config directory if it doesn't exist
             if let Some(parent) = path.parent() {
@@ -152,16 +152,16 @@ impl ConfigManager {
             PathBuf::from("./config") // fallback for testing
         };
 
-        config_dir.join("muse-shell").join("config.json")
+        config_dir.join("cadenza-shell").join("config.json")
     }
 
     /// Get the current configuration
-    pub fn config(&self) -> &MuseShellConfig {
+    pub fn config(&self) -> &CadenzaShellConfig {
         &self.config
     }
 
     /// Update configuration and save to file
-    pub fn update_config(&mut self, config: MuseShellConfig) -> Result<()> {
+    pub fn update_config(&mut self, config: CadenzaShellConfig) -> Result<()> {
         self.config = config;
         self.save()?;
         Ok(())
@@ -184,7 +184,7 @@ impl ConfigManager {
 
     /// Reset configuration to defaults
     pub fn reset_to_defaults(&mut self) -> Result<()> {
-        self.config = MuseShellConfig::default();
+        self.config = CadenzaShellConfig::default();
         self.save()?;
         log::info!("reset configuration to defaults");
         Ok(())
@@ -194,7 +194,7 @@ impl ConfigManager {
 use std::sync::{Mutex, OnceLock};
 
 /// Global configuration instance
-static CONFIG: OnceLock<Mutex<MuseShellConfig>> = OnceLock::new();
+static CONFIG: OnceLock<Mutex<CadenzaShellConfig>> = OnceLock::new();
 
 /// Initialize the global configuration manager
 pub fn init() -> Result<()> {
@@ -203,7 +203,7 @@ pub fn init() -> Result<()> {
         Err(e) => {
             log::error!("failed to load configuration: {}", e);
             log::info!("using default configuration");
-            MuseShellConfig::default()
+            CadenzaShellConfig::default()
         }
     };
 
@@ -215,7 +215,7 @@ pub fn init() -> Result<()> {
 }
 
 /// Get a copy of the current configuration
-pub fn get_config() -> MuseShellConfig {
+pub fn get_config() -> CadenzaShellConfig {
     CONFIG
         .get()
         .and_then(|config| config.lock().ok())
@@ -224,7 +224,7 @@ pub fn get_config() -> MuseShellConfig {
 }
 
 /// Update the global configuration
-pub fn update_config(new_config: MuseShellConfig) -> Result<()> {
+pub fn update_config(new_config: CadenzaShellConfig) -> Result<()> {
     if let Some(config_mutex) = CONFIG.get()
         && let Ok(mut config) = config_mutex.lock()
     {

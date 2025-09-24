@@ -6,20 +6,20 @@ use relm4::prelude::*;
 
 use crate::widgets::bar::Bar;
 
-pub(crate) struct MuseShellModel {
+pub(crate) struct CadenzaShellModel {
     bars: HashMap<String, Controller<Bar>>,
     display: Display,
 }
 
 #[derive(Debug)]
-pub enum MuseShellMsg {
+pub enum CadenzaShellMsg {
     MonitorAdded(gdk4::Monitor),
     MonitorRemoved(String), // monitor connector name
 }
 
-impl SimpleComponent for MuseShellModel {
+impl SimpleComponent for CadenzaShellModel {
     type Init = ();
-    type Input = MuseShellMsg;
+    type Input = CadenzaShellMsg;
     type Output = ();
     type Root = gtk::Window;
     type Widgets = ();
@@ -38,7 +38,7 @@ impl SimpleComponent for MuseShellModel {
 
         let display = Display::default().expect("could not get default display");
 
-        let model = MuseShellModel {
+        let model = CadenzaShellModel {
             bars: HashMap::new(),
             display: display.clone(),
         };
@@ -49,7 +49,7 @@ impl SimpleComponent for MuseShellModel {
         // create bars for existing monitors
         for monitor in monitors.iter::<gdk4::Monitor>() {
             let monitor = monitor.unwrap();
-            sender.input(MuseShellMsg::MonitorAdded(monitor));
+            sender.input(CadenzaShellMsg::MonitorAdded(monitor));
         }
 
         // monitor for display changes (hotplug support)
@@ -60,14 +60,14 @@ impl SimpleComponent for MuseShellModel {
                 if let Some(monitor) = monitors.item(i).and_downcast::<gdk4::Monitor>()
                     && let Some(connector) = monitor.connector()
                 {
-                    sender_clone.input(MuseShellMsg::MonitorRemoved(connector.to_string()));
+                    sender_clone.input(CadenzaShellMsg::MonitorRemoved(connector.to_string()));
                 }
             }
 
             // handle added monitors
             for i in position..position + added {
                 if let Some(monitor) = monitors.item(i).and_downcast::<gdk4::Monitor>() {
-                    sender_clone.input(MuseShellMsg::MonitorAdded(monitor));
+                    sender_clone.input(CadenzaShellMsg::MonitorAdded(monitor));
                 }
             }
         });
@@ -77,7 +77,7 @@ impl SimpleComponent for MuseShellModel {
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            MuseShellMsg::MonitorAdded(monitor) => {
+            CadenzaShellMsg::MonitorAdded(monitor) => {
                 let connector = monitor.connector();
                 if let Some(connector) = connector {
                     let connector_str = connector.to_string();
@@ -92,7 +92,7 @@ impl SimpleComponent for MuseShellModel {
                         });
                 }
             }
-            MuseShellMsg::MonitorRemoved(connector) => {
+            CadenzaShellMsg::MonitorRemoved(connector) => {
                 log::info!("removing bar for monitor: {}", connector);
                 self.bars.remove(&connector);
             }
