@@ -150,10 +150,19 @@ box.notification-card {
     box-shadow: none;
   }
 
+  &:first-child>box {
+    margin-top: 16px;
+  }
+
+  &:last-child>box {
+    margin-bottom: 16px;
+  }
+
   >box {
     min-width: 400px;
     border-radius: 12px;
     background-color: rgba(0, 0, 0, 0.5);
+    margin: 8px 16px;
     box-shadow: 0px 4px 8px gtkalpha(black, 0.5);
     border: 2px solid gtkalpha(white, 0.25);
   }
@@ -176,12 +185,26 @@ box.notification-card {
     padding-top: 4px;
     color: gtkalpha(white, 0.5);
 
+    .app-icon {
+      margin: 0 16px;
+    }
+
     .app-name {
       font-weight: bold;
+
+      &:first-child {
+        margin-left: 16px;
+      }
+    }
+
+    .time {
+      margin-left: 16px;
+      margin-right: 4px;
     }
 
     button {
       padding: 8px;
+      margin-right: 4px;
       min-width: 0;
       min-height: 0;
       border-radius: 99px;
@@ -208,6 +231,7 @@ box.notification-card {
     }
 
     .image {
+      margin-right: 16px;
       border-radius: 12px;
       min-width: 48px;
       min-height: 48px;
@@ -217,10 +241,22 @@ box.notification-card {
   }
 
   .actions {
+    margin: 16px;
+    margin-top: 0;
+
     button {
+      margin: 0 8px;
       padding: 6px;
       border-radius: 8px;
       background-color: gtkalpha(white, 0.05);
+
+      &:first-child {
+        margin-left: 0;
+      }
+
+      &:last-child {
+        margin-right: 0;
+      }
     }
   }
 }
@@ -244,6 +280,7 @@ window.notification-center {
   padding: 16px 16px 0px 16px;
 
   .empty-state {
+    margin-top: 20px;
     opacity: 50%;
   }
 }
@@ -256,6 +293,7 @@ window.notification-center {
 
 .section-title {
   font-weight: 600;
+  margin-top: 16px;
   font-size: 1.25em;
 }
 
