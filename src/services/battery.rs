@@ -1,4 +1,4 @@
-use std::{fs, path::Path, sync::mpsc, thread, time::Duration};
+use std::{fs, path::Path, sync::mpsc, time::Duration};
 
 use anyhow::Result;
 use notify::{RecursiveMode, Watcher};
@@ -77,15 +77,19 @@ impl Worker for BatteryService {
                 return;
             }
 
+            let mut has_watcher = true;
             loop {
-                // poll every 30 seconds
-                thread::sleep(Duration::from_secs(30));
-
-                // waits on file changes
-                if let Err(e) = rx.recv() {
-                    log::error!("battery status watcher died: {}", e);
-                    break;
-                };
+                // waits on file changes, or polls every 30 seconds
+                if has_watcher
+                    && let Err(mpsc::RecvTimeoutError::Disconnected) =
+                        rx.recv_timeout(Duration::from_secs(30))
+                {
+                    log::error!("battery status watcher has died");
+                    has_watcher = false;
+                } else {
+                    // just poll every 30 seconds without a watcher
+                    tokio::time::sleep(Duration::from_secs(30)).await
+                }
 
                 match read_battery_state(&system) {
                     Ok((percentage, charging, time_remaining)) => {
