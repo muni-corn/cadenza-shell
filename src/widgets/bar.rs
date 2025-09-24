@@ -70,6 +70,7 @@ impl SimpleComponent for Bar {
             window.init_layer_shell();
         }
 
+        window.set_monitor(Some(&model.monitor));
         window.set_namespace(Some("bar"));
         window.set_layer(Layer::Top);
         window.set_exclusive_zone(config.bar.height);
