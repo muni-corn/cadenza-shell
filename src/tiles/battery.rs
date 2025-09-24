@@ -43,15 +43,6 @@ impl SimpleComponent for BatteryTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let _service = BatteryService::builder()
-            .launch(())
-            .forward(sender.input_sender(), BatteryMsg::ServiceUpdate);
-
-        // initialize the tile component
-        let tile = Tile::builder().launch(Default::default()).detach();
-
-        root.append(tile.widget());
-
         let model = BatteryTile {
             available: false,
 
@@ -59,9 +50,14 @@ impl SimpleComponent for BatteryTile {
             charging: false,
             time_remaining: Duration::ZERO,
 
-            _service,
-            tile,
+            _service: BatteryService::builder()
+                .launch(())
+                .forward(sender.input_sender(), BatteryMsg::ServiceUpdate),
+
+            tile: Tile::builder().launch(Default::default()).detach(),
         };
+
+        root.append(model.tile.widget());
 
         ComponentParts {
             model,
