@@ -10,6 +10,9 @@ fn main() {
         None::<&str>,
         // list of icons to include
         [
+            // notifications
+            "alert-regular",
+            "alert-badge-regular",
             // volume
             "speaker-mute-regular",
             "speaker-off-regular",
