@@ -5,6 +5,7 @@ use gtk4::prelude::*;
 use relm4::{WorkerController, prelude::*};
 
 use crate::{
+    icon_names::{ALERT_BADGE_REGULAR, ALERT_REGULAR},
     notifications::fresh_notifications::{
         FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput,
     },
@@ -14,9 +15,6 @@ use crate::{
     tiles::Attention,
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
-
-const NOTIFICATION_ICON: &str = "󰂚";
-const NOTIFICATION_NEW_ICON: &str = "󰂛";
 
 #[derive(Debug)]
 pub struct NotificationsTile {
@@ -109,9 +107,9 @@ impl SimpleComponent for NotificationsTile {
 
                             // update tile appearance based on notification count
                             let icon = if count > 0 {
-                                NOTIFICATION_NEW_ICON
+                                ALERT_BADGE_REGULAR
                             } else {
-                                NOTIFICATION_ICON
+                                ALERT_REGULAR
                             };
                             let primary_text = if count > 0 {
                                 Some(count.to_string())
