@@ -18,7 +18,6 @@ pub struct BatteryTile {
     charging: bool,
     time_remaining: Duration,
 
-    tile: Controller<Tile>,
     _service: Controller<BatteryService>,
 }
 
@@ -29,6 +28,7 @@ pub enum BatteryMsg {
 
 pub struct BatteryWidgets {
     root: <BatteryTile as Component>::Root,
+    tile: Controller<Tile>,
 }
 
 impl SimpleComponent for BatteryTile {
@@ -53,15 +53,14 @@ impl SimpleComponent for BatteryTile {
             _service: BatteryService::builder()
                 .launch(())
                 .forward(sender.input_sender(), BatteryMsg::ServiceUpdate),
-
-            tile: Tile::builder().launch(Default::default()).detach(),
         };
 
-        root.append(model.tile.widget());
+        let tile = Tile::builder().launch(Default::default()).detach();
+        root.append(tile.widget());
 
         ComponentParts {
             model,
-            widgets: BatteryWidgets { root },
+            widgets: BatteryWidgets { root, tile },
         }
     }
 
@@ -77,25 +76,6 @@ impl SimpleComponent for BatteryTile {
                     self.charging = charging;
                     self.time_remaining = time_remaining;
                     self.available = true;
-
-                    // update attention state
-                    let attention = if self.is_critical() {
-                        Attention::Alarm
-                    } else if self.is_low() {
-                        Attention::Warning
-                    } else {
-                        Attention::Normal
-                    };
-
-                    // update the tile with new data
-                    self.tile
-                        .emit(TileMsg::SetIcon(Some(self.get_icon().to_string())));
-                    self.tile.emit(TileMsg::SetPrimary(Some(self.get_text())));
-                    self.tile
-                        .emit(TileMsg::SetSecondary(Some(self.get_readable_time())));
-
-                    // update visibility and attention
-                    self.tile.emit(TileMsg::SetAttention(attention));
                 }
                 BatteryUpdate::Unavailable => {
                     self.available = false;
@@ -106,6 +86,31 @@ impl SimpleComponent for BatteryTile {
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         widgets.root.set_visible(self.available);
+
+        if self.available {
+            // update the tile with new data
+            widgets
+                .tile
+                .emit(TileMsg::SetIcon(Some(self.get_icon().to_string())));
+            widgets
+                .tile
+                .emit(TileMsg::SetPrimary(Some(self.get_text())));
+            widgets
+                .tile
+                .emit(TileMsg::SetSecondary(Some(self.get_readable_time())));
+
+            // update attention state
+            let attention = if self.is_critical() {
+                Attention::Alarm
+            } else if self.is_low() {
+                Attention::Warning
+            } else {
+                Attention::Normal
+            };
+
+            // update visibility and attention
+            widgets.tile.emit(TileMsg::SetAttention(attention));
+        }
     }
 
     fn init_root() -> Self::Root {
