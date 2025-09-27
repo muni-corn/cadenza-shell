@@ -5,9 +5,12 @@ use relm4::{WorkerController, prelude::*};
 
 use crate::{
     icon_names::{ALERT_BADGE_REGULAR, ALERT_REGULAR},
-    notifications::fresh_notifications::{FreshNotifications, FreshNotificationsMsg},
+    notifications::{
+        fresh::{FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput},
+        types::Notification,
+    },
     services::notifications::{
-        Notification, NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
+        NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
     },
     tiles::Attention,
     widgets::tile::{Tile, TileMsg, TileOutput},
