@@ -1,14 +1,11 @@
 use std::collections::HashMap;
 
-use gdk4::Monitor;
 use gtk4::prelude::*;
 use relm4::{WorkerController, prelude::*};
 
 use crate::{
     icon_names::{ALERT_BADGE_REGULAR, ALERT_REGULAR},
-    notifications::fresh_notifications::{
-        FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput,
-    },
+    notifications::fresh_notifications::{FreshNotifications, FreshNotificationsMsg},
     services::notifications::{
         Notification, NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
     },
@@ -20,16 +17,14 @@ use crate::{
 pub struct NotificationsTile {
     notification_worker: WorkerController<NotificationService>,
     notification_count: u32,
-    popups: HashMap<String, Controller<FreshNotifications>>, // monitor_name -> popup
     active_notifications: HashMap<u32, Notification>,
+    fresh_panel: Controller<FreshNotifications>,
 }
 
 #[derive(Debug)]
 pub enum NotificationsTileMsg {
     TileClicked,
     ServiceUpdate(NotificationWorkerOutput),
-    PopupOutput(FreshNotificationsOutput),
-    MonitorAdded(Monitor),
     Nothing,
 }
 
@@ -64,21 +59,22 @@ impl SimpleComponent for NotificationsTile {
                     _ => NotificationsTileMsg::Nothing,
                 });
 
-        // create popups for all existing monitors
+        // create popups for first monitor only
         let display = gdk4::Display::default().expect("could not get default display");
-        let monitors = display.monitors();
-
-        for monitor in monitors.iter::<gdk4::Monitor>().flatten() {
-            sender.input(NotificationsTileMsg::MonitorAdded(monitor));
-        }
+        let monitor = display
+            .monitors()
+            .iter()
+            .next()
+            .expect("no monitor available for notifications")
+            .expect("couldn't get available monitor for notifications");
 
         root.append(tile.widget());
 
         let model = NotificationsTile {
             notification_worker,
             notification_count: 0,
-            popups: HashMap::new(),
             active_notifications: HashMap::new(),
+            fresh_panel: FreshNotifications::builder().launch(monitor).detach(),
         };
 
         ComponentParts {
@@ -87,7 +83,7 @@ impl SimpleComponent for NotificationsTile {
         }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
             NotificationsTileMsg::TileClicked => {
                 log::debug!("notifications tile clicked");
@@ -112,11 +108,9 @@ impl SimpleComponent for NotificationsTile {
                         self.active_notifications
                             .insert(notification.id, notification.clone());
 
-                        // show in all existing popups
-                        for popup in self.popups.values() {
-                            popup
-                                .emit(FreshNotificationsMsg::NewNotification(notification.clone()));
-                        }
+                        // show in fresh notifications panel
+                        self.fresh_panel
+                            .emit(FreshNotificationsMsg::NewNotification(notification.clone()));
 
                         // refresh notifications count
                         self.notification_worker
@@ -128,10 +122,9 @@ impl SimpleComponent for NotificationsTile {
                         // remove from active notifications
                         self.active_notifications.remove(&id);
 
-                        // remove from all popups
-                        for popup in self.popups.values() {
-                            popup.emit(FreshNotificationsMsg::RemoveNotification(id));
-                        }
+                        // remove from panel
+                        self.fresh_panel
+                            .emit(FreshNotificationsMsg::RemoveNotification(id));
 
                         // refresh notifications count
                         self.notification_worker
@@ -144,36 +137,6 @@ impl SimpleComponent for NotificationsTile {
                 }
             }
             NotificationsTileMsg::Nothing => (),
-            NotificationsTileMsg::PopupOutput(output) => {
-                if let FreshNotificationsOutput::NotificationDismissed(id) = output {
-                    log::debug!("notification {} dismissed from popup", id);
-                    // Tell the service to close this notification
-                    self.notification_worker
-                        .emit(NotificationServiceMsg::CloseNotification(id));
-                }
-            }
-            NotificationsTileMsg::MonitorAdded(monitor) => {
-                // create popup for this monitor
-                if let Some(connector) = monitor.connector() {
-                    let connector_str = connector.to_string();
-
-                    if !self.popups.contains_key(&connector_str) {
-                        log::debug!("creating notification popup for monitor: {}", connector_str);
-
-                        let popup = FreshNotifications::builder()
-                            .launch(monitor)
-                            .forward(sender.input_sender(), NotificationsTileMsg::PopupOutput);
-
-                        // Send existing notifications to the new popup
-                        for notification in self.active_notifications.values() {
-                            popup
-                                .emit(FreshNotificationsMsg::NewNotification(notification.clone()));
-                        }
-
-                        self.popups.insert(connector_str, popup);
-                    }
-                }
-            }
         }
     }
 
