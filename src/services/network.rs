@@ -443,7 +443,7 @@ impl NetworkService {
 
         // check if access point path is valid (not "/" which means no connection)
         if ap_path.as_str() == "/" {
-            return Err(anyhow::anyhow!("no active access point"));
+            anyhow::bail!("no active access point");
         }
 
         let ap_proxy = AccessPointProxy::builder(conn)
@@ -456,14 +456,14 @@ impl NetworkService {
 
         // filter out empty SSID
         if ssid_bytes.is_empty() {
-            return Err(anyhow::anyhow!("empty SSID"));
+            anyhow::bail!("empty SSID");
         }
 
         let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();
 
         // filter out SSIDs that are just whitespace
         if ssid.trim().is_empty() {
-            return Err(anyhow::anyhow!("ssid is whitespace only"));
+            anyhow::bail!("ssid is whitespace only");
         }
 
         Ok((ssid, strength))
