@@ -28,6 +28,8 @@ pub struct NotificationsTile {
 pub enum NotificationsTileMsg {
     TileClicked,
     ServiceUpdate(NotificationWorkerOutput),
+    NotificationDismissed(u32),
+    ActionTriggered(u32, String),
     Nothing,
 }
 
@@ -77,7 +79,17 @@ impl SimpleComponent for NotificationsTile {
             notification_worker,
             notification_count: 0,
             active_notifications: HashMap::new(),
-            fresh_panel: FreshNotifications::builder().launch(monitor).detach(),
+            fresh_panel: FreshNotifications::builder().launch(monitor).forward(
+                sender.input_sender(),
+                |msg| match msg {
+                    FreshNotificationsOutput::NotificationDismissed(id) => {
+                        NotificationsTileMsg::NotificationDismissed(id)
+                    }
+                    FreshNotificationsOutput::NotificationActionTriggered(id, action) => {
+                        NotificationsTileMsg::ActionTriggered(id, action)
+                    }
+                },
+            ),
         };
 
         ComponentParts {
@@ -139,6 +151,12 @@ impl SimpleComponent for NotificationsTile {
                     _ => {}
                 }
             }
+            NotificationsTileMsg::NotificationDismissed(id) => self
+                .notification_worker
+                .emit(NotificationServiceMsg::CloseNotification(id)),
+            NotificationsTileMsg::ActionTriggered(id, action) => self
+                .notification_worker
+                .emit(NotificationServiceMsg::ActionInvoked(id, action)),
             NotificationsTileMsg::Nothing => (),
         }
     }

@@ -24,6 +24,7 @@ pub enum NotificationServiceMsg {
     ClearAll,
     CloseNotification(u32),
     StoreNotification(Notification),
+    ActionInvoked(u32, String),
 }
 
 #[derive(Debug, Clone)]
@@ -71,10 +72,19 @@ pub struct NotificationHints {
     others: HashMap<String, OwnedValue>,
 }
 
-#[derive(Debug)]
 pub struct NotificationService {
     connection: Arc<RwLock<Option<Connection>>>,
+    interface: Arc<RwLock<Option<InterfaceRef<NotificationsDaemon>>>>,
     notifications: HashMap<u32, Notification>,
+}
+
+impl std::fmt::Debug for NotificationService {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NotificationService")
+            .field("connection", &self.connection)
+            .field("notifications", &self.notifications)
+            .finish()
+    }
 }
 
 impl Worker for NotificationService {
@@ -88,10 +98,20 @@ impl Worker for NotificationService {
         let connection = Arc::new(RwLock::new(None));
         let connection_clone = Arc::clone(&connection);
 
+        let interface = Arc::new(RwLock::new(None));
+        let interface_clone = Arc::clone(&interface);
+
         relm4::spawn(async move {
             match initialize_notifications_daemon(sender_clone.clone()).await {
                 Ok(connection) => {
                     log::info!("notifications daemon initialized successfully");
+                    *interface_clone.write().await = Some(
+                        connection
+                            .object_server()
+                            .interface::<_, NotificationsDaemon>("/org/freedesktop/Notifications")
+                            .await
+                            .unwrap(),
+                    );
                     *connection_clone.write().await = Some(connection);
                 }
                 Err(e) => {
@@ -105,6 +125,7 @@ impl Worker for NotificationService {
 
         Self {
             connection,
+            interface,
             notifications: HashMap::new(),
         }
     }
@@ -129,6 +150,21 @@ impl Worker for NotificationService {
             }
             NotificationServiceMsg::StoreNotification(notification) => {
                 self.notifications.insert(notification.id, notification);
+            }
+            NotificationServiceMsg::ActionInvoked(id, action) => {
+                let interface_clone = Arc::clone(&self.interface);
+                relm4::spawn(async move {
+                    interface_clone
+                        .read()
+                        .await
+                        .as_ref()
+                        .unwrap()
+                        .action_invoked(id, action)
+                        .await
+                        .unwrap_or_else(|e| {
+                            log::error!("couldn't send action_invoked signal: {}", e)
+                        });
+                });
             }
         }
     }
