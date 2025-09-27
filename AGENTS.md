@@ -1,4 +1,4 @@
-# AGENTS.md - Development Guide for muse-shell
+# AGENTS.md - Development Guide for cadenza-shell
 
 ## Build/Test Commands
 

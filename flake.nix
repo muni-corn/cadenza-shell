@@ -18,7 +18,7 @@
     let
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
-      pname = "muse-shell";
+      pname = "cadenza-shell";
       entry = "src/app.ts";
 
       astalPackages = with ags.packages.${system}; [
