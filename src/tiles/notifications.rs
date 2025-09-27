@@ -20,7 +20,6 @@ use crate::{
 pub struct NotificationsTile {
     notification_worker: WorkerController<NotificationService>,
     notification_count: u32,
-    tile: Controller<Tile>,
     popups: HashMap<String, Controller<FreshNotifications>>, // monitor_name -> popup
     active_notifications: HashMap<u32, Notification>,
 }
@@ -36,6 +35,7 @@ pub enum NotificationsTileMsg {
 
 pub struct NotificationsTileWidgets {
     _root: <NotificationsTile as Component>::Root,
+    tile: Controller<Tile>,
 }
 
 impl SimpleComponent for NotificationsTile {
@@ -77,14 +77,13 @@ impl SimpleComponent for NotificationsTile {
         let model = NotificationsTile {
             notification_worker,
             notification_count: 0,
-            tile,
             popups: HashMap::new(),
             active_notifications: HashMap::new(),
         };
 
         ComponentParts {
             model,
-            widgets: NotificationsTileWidgets { _root: root },
+            widgets: NotificationsTileWidgets { _root: root, tile },
         }
     }
 
@@ -104,27 +103,6 @@ impl SimpleComponent for NotificationsTile {
 
                         if count != self.notification_count {
                             self.notification_count = count;
-
-                            // update tile appearance based on notification count
-                            let icon = if count > 0 {
-                                ALERT_BADGE_REGULAR
-                            } else {
-                                ALERT_REGULAR
-                            };
-                            let primary_text = if count > 0 {
-                                Some(count.to_string())
-                            } else {
-                                None
-                            };
-                            let attention = if count > 0 {
-                                Attention::Warning
-                            } else {
-                                Attention::Normal
-                            };
-
-                            self.tile.emit(TileMsg::SetIcon(Some(icon.to_string())));
-                            self.tile.emit(TileMsg::SetPrimary(primary_text));
-                            self.tile.emit(TileMsg::SetAttention(attention));
                         }
                     }
                     NotificationWorkerOutput::NotificationReceived(notification) => {
@@ -197,6 +175,29 @@ impl SimpleComponent for NotificationsTile {
                 }
             }
         }
+    }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        // update tile appearance based on notification count
+        let icon = if self.notification_count > 0 {
+            ALERT_BADGE_REGULAR
+        } else {
+            ALERT_REGULAR
+        };
+        let primary_text = if self.notification_count > 0 {
+            Some(self.notification_count.to_string())
+        } else {
+            None
+        };
+        let attention = if self.notification_count > 0 {
+            Attention::Normal
+        } else {
+            Attention::Dim
+        };
+
+        widgets.tile.emit(TileMsg::SetIcon(Some(icon.to_string())));
+        widgets.tile.emit(TileMsg::SetPrimary(primary_text));
+        widgets.tile.emit(TileMsg::SetAttention(attention));
     }
 
     fn init_root() -> Self::Root {
