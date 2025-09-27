@@ -4,7 +4,7 @@ use glib::clone;
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::services::notifications::{Notification, NotificationUrgency};
+use crate::notifications::types::{Notification, NotificationUrgency};
 
 fn is_icon(icon: &str) -> bool {
     if let Some(display) = gtk4::gdk::Display::default() {

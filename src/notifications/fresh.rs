@@ -5,8 +5,10 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::{factory::FactoryVecDeque, prelude::*};
 
-use super::notification_card::{NotificationCard, NotificationCardOutput};
-use crate::services::notifications::Notification;
+use crate::notifications::{
+    card::{NotificationCard, NotificationCardOutput},
+    types::{Notification, NotificationUrgency},
+};
 
 #[derive(Debug)]
 pub struct FreshNotifications {
@@ -85,8 +87,7 @@ impl SimpleComponent for FreshNotifications {
         widgets.window.set_anchor(Edge::Top, true);
         widgets.window.set_anchor(Edge::Right, true);
         widgets.window.set_monitor(Some(&model.monitor));
-        widgets.window.set_margin(Edge::Top, 8);
-        widgets.window.set_margin(Edge::Right, 8);
+        widgets.window.set_margin(Edge::Top, 32);
 
         ComponentParts { model, widgets }
     }
@@ -103,10 +104,7 @@ impl SimpleComponent for FreshNotifications {
                 drop(guard);
 
                 // set up auto-dismiss for non-critical notifications
-                if !matches!(
-                    urgency,
-                    crate::services::notifications::NotificationUrgency::Critical
-                ) {
+                if !matches!(urgency, NotificationUrgency::Critical) {
                     let dismiss_sender = sender.clone();
                     let timeout_id = glib::timeout_add_local_once(
                         std::time::Duration::from_secs(10),
