@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use glib::clone;
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
@@ -100,7 +99,7 @@ impl FactoryComponent for NotificationCard {
 
                 // Content section
                 #[name = "content_container"]
-                gtk4::Box {
+                gtk4::Button {
                     add_css_class: "content",
                     set_hexpand: true,
 
@@ -188,56 +187,40 @@ impl FactoryComponent for NotificationCard {
     ) -> Self::Widgets {
         let widgets = view_output!();
 
-        // If exactly one action, wrap content in clickable button
-        if self.notification.actions.len() == 1 {
-            let action_id = self.notification.actions[0].clone();
-            let button = gtk4::Button::builder()
-                .child(&widgets.content_container)
-                .build();
+        // execute the first action when the notification is clicked
+        if let Some(first_action) = self.notification.actions.first() {
+            let action_id = first_action.0.as_str();
 
             let sender_clone = sender.clone();
-            button.connect_clicked(move |_| {
+            let action_id = action_id.to_string();
+            widgets.content_container.connect_clicked(move |_| {
                 sender_clone.input(NotificationCardMsg::Action(action_id.clone()));
             });
-
-            // Replace content_container with the button
-            if let Some(parent) = widgets.content_container.parent() {
-                let parent_box = parent.downcast::<gtk4::Box>().unwrap();
-                parent_box.remove(&widgets.content_container);
-                parent_box.append(&button);
-            }
         }
 
-        // If multiple actions, create action buttons
+        // if multiple actions, create action buttons
         if self.notification.actions.len() > 1 {
-            // Actions come in pairs: [action_id, label, action_id, label, ...]
-            for chunk in self.notification.actions.chunks(2) {
-                if chunk.len() == 2 {
-                    let action_id = chunk[0].clone();
-                    let label = chunk[1].clone();
+            for chunk in &self.notification.actions {
+                let action_id = chunk.0.as_str();
+                let label = chunk.1.as_str();
 
-                    let action_button = gtk4::Button::builder().hexpand(true).build();
+                let action_button = gtk4::Button::builder().hexpand(true).build();
 
-                    let button_label = gtk4::Label::builder()
-                        .label(&label)
-                        .halign(gtk4::Align::Center)
-                        .hexpand(true)
-                        .build();
+                let button_label = gtk4::Label::builder()
+                    .label(label)
+                    .halign(gtk4::Align::Center)
+                    .hexpand(true)
+                    .build();
 
-                    action_button.set_child(Some(&button_label));
+                action_button.set_child(Some(&button_label));
 
-                    action_button.connect_clicked(clone!(
-                        #[strong]
-                        sender,
-                        #[strong]
-                        action_id,
-                        move |_| {
-                            sender.input(NotificationCardMsg::Action(action_id.clone()));
-                        }
-                    ));
+                let sender_clone = sender.clone();
+                let action_id = action_id.to_string();
+                action_button.connect_clicked(move |_| {
+                    sender_clone.input(NotificationCardMsg::Action(action_id.clone()));
+                });
 
-                    widgets.actions_box.append(&action_button);
-                }
+                widgets.actions_box.append(&action_button);
             }
         }
 

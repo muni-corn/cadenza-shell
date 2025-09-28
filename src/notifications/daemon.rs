@@ -54,6 +54,12 @@ impl NotificationsDaemon {
             .unwrap()
             .as_secs() as i64;
 
+        let actions = {
+            let evens = actions.iter().step_by(2).cloned();
+            let odds = actions.iter().skip(1).step_by(2).cloned();
+            evens.zip(odds).collect()
+        };
+
         let notification = Notification {
             id,
             app_name: app_name.clone(),
@@ -65,7 +71,7 @@ impl NotificationsDaemon {
             urgency,
             timeout: expire_timeout,
             timestamp,
-            actions: actions.clone(),
+            actions,
         };
 
         dbg!("new notification received: {}", &notification);
