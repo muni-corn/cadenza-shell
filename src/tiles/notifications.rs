@@ -35,7 +35,7 @@ pub enum NotificationsTileMsg {
 
 #[derive(Debug)]
 pub enum NotificationsTileOutput {
-    OpenNotificationCenter,
+    ToggleNotificationCenter,
 }
 
 pub struct NotificationsTileWidgets {
@@ -108,7 +108,7 @@ impl SimpleComponent for NotificationsTile {
             NotificationsTileMsg::TileClicked => {
                 log::debug!("notifications tile clicked");
                 sender
-                    .output(NotificationsTileOutput::OpenNotificationCenter)
+                    .output(NotificationsTileOutput::ToggleNotificationCenter)
                     .unwrap_or_else(|_| {
                         log::error!("couldn't send output to open notification center")
                     });

@@ -8,8 +8,13 @@ use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::prelude::*;
 
 use crate::{
+    notifications::center::{NotificationCenter, NotificationCenterMsg},
     settings,
-    widgets::bar::{center::CenterGroup, left::LeftGroup, right::RightGroup},
+    widgets::bar::{
+        center::CenterGroup,
+        left::LeftGroup,
+        right::{RightGroup, RightGroupOutput},
+    },
 };
 
 #[derive(Debug)]
@@ -25,6 +30,7 @@ pub struct BarWidgets {
     _left: Controller<LeftGroup>,
     _center: Controller<CenterGroup>,
     _right: Controller<RightGroup>,
+    _notification_center: Controller<NotificationCenter>,
 }
 
 impl SimpleComponent for Bar {
@@ -47,13 +53,23 @@ impl SimpleComponent for Bar {
         window: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        let config = settings::get_config();
+
+        // create notification center for this bar/monitor
         let model = Bar { monitor };
 
-        let config = settings::get_config();
+        let notification_center = NotificationCenter::builder()
+            .launch(model.monitor.clone())
+            .detach();
 
         let left = LeftGroup::builder().launch((model.monitor.clone(), config.bar));
         let center = CenterGroup::builder().launch(config.bar);
-        let right = RightGroup::builder().launch(config.bar);
+        let right = RightGroup::builder().launch(config.bar).forward(
+            notification_center.sender(),
+            |right_group_msg| match right_group_msg {
+                RightGroupOutput::ToggleNotificationCenter => NotificationCenterMsg::Toggle,
+            },
+        );
 
         let bar = gtk::CenterBox::builder()
             .css_classes(["bar"])
@@ -82,7 +98,8 @@ impl SimpleComponent for Bar {
         let widgets = BarWidgets {
             _left: left.detach(),
             _center: center.detach(),
-            _right: right.detach(),
+            _right: right,
+            _notification_center: notification_center,
         };
 
         ComponentParts { model, widgets }
