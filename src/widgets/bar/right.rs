@@ -4,8 +4,12 @@ use relm4::prelude::*;
 use crate::{
     settings::BarConfig,
     tiles::{
-        battery::BatteryTile, bluetooth::BluetoothTile, brightness::BrightnessTile,
-        network::NetworkTile, notifications::NotificationsTile, pulseaudio::PulseAudioTile,
+        battery::BatteryTile,
+        bluetooth::BluetoothTile,
+        brightness::BrightnessTile,
+        network::NetworkTile,
+        notifications::{NotificationsTile, NotificationsTileOutput},
+        pulseaudio::PulseAudioTile,
     },
 };
 
@@ -21,10 +25,15 @@ pub struct RightWidgets {
     _notifications: Controller<NotificationsTile>,
 }
 
+#[derive(Debug)]
+pub enum RightGroupOutput {
+    ToggleNotificationCenter,
+}
+
 impl SimpleComponent for RightGroup {
     type Init = BarConfig;
     type Input = ();
-    type Output = ();
+    type Output = RightGroupOutput;
     type Root = gtk::Box;
     type Widgets = RightWidgets;
 
@@ -35,7 +44,7 @@ impl SimpleComponent for RightGroup {
     fn init(
         bar_config: Self::Init,
         root: Self::Root,
-        _sender: relm4::ComponentSender<Self>,
+        sender: relm4::ComponentSender<Self>,
     ) -> relm4::ComponentParts<Self> {
         root.set_spacing(bar_config.tile_spacing);
         root.set_margin_horizontal(bar_config.edge_padding);
@@ -45,7 +54,14 @@ impl SimpleComponent for RightGroup {
         let bluetooth = BluetoothTile::builder().launch(()).detach();
         let network = NetworkTile::builder().launch(()).detach();
         let battery = BatteryTile::builder().launch(()).detach();
-        let notifications = NotificationsTile::builder().launch(()).detach();
+        let notifications = NotificationsTile::builder().launch(()).forward(
+            sender.output_sender(),
+            |msg| match msg {
+                NotificationsTileOutput::ToggleNotificationCenter => {
+                    RightGroupOutput::ToggleNotificationCenter
+                }
+            },
+        );
 
         root.append(brightness.widget());
         root.append(volume.widget());
