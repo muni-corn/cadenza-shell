@@ -13,7 +13,7 @@ use crate::notifications::{
 #[derive(Debug)]
 pub struct FreshNotifications {
     visible: bool,
-    notifications: FactoryVecDeque<NotificationCard>,
+    cards: FactoryVecDeque<NotificationCard>,
     monitor: Monitor,
     auto_dismiss_timeouts: HashMap<u32, glib::SourceId>,
 }
@@ -43,7 +43,7 @@ impl SimpleComponent for FreshNotifications {
         #[root]
         window = gtk4::Window {
             #[watch]
-            set_visible: model.visible && !model.notifications.is_empty(),
+            set_visible: model.visible && !model.cards.is_empty(),
 
             #[local_ref]
             notifications_container -> gtk4::Box {
@@ -59,7 +59,7 @@ impl SimpleComponent for FreshNotifications {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let notifications = FactoryVecDeque::builder()
+        let cards = FactoryVecDeque::builder()
             .launch(gtk4::Box::default())
             .forward(sender.input_sender(), |output| match output {
                 NotificationCardOutput::Dismiss(id) => {
@@ -72,12 +72,12 @@ impl SimpleComponent for FreshNotifications {
 
         let model = FreshNotifications {
             visible: true,
-            notifications,
+            cards,
             monitor,
             auto_dismiss_timeouts: HashMap::new(),
         };
 
-        let notifications_container = model.notifications.widget();
+        let notifications_container = model.cards.widget();
         let widgets = view_output!();
 
         // configure layer shell after window creation
@@ -100,9 +100,7 @@ impl SimpleComponent for FreshNotifications {
                 let notification_id = notification.id;
                 let urgency = notification.urgency;
 
-                let mut guard = self.notifications.guard();
-                guard.push_front(notification);
-                drop(guard);
+                self.cards.guard().push_front(notification);
 
                 // set up auto-dismiss for non-critical notifications
                 if !matches!(urgency, NotificationUrgency::Critical) {
@@ -125,15 +123,12 @@ impl SimpleComponent for FreshNotifications {
                 }
 
                 // remove from notifications list
-                let mut guard = self.notifications.guard();
-                let mut index_to_remove = None;
-
-                for (index, item) in guard.iter().enumerate() {
-                    if item.notification_id() == id {
-                        index_to_remove = Some(index);
-                        break;
-                    }
-                }
+                let mut guard = self.cards.guard();
+                let index_to_remove = guard
+                    .iter()
+                    .enumerate()
+                    .find(|(_, item)| item.notification_id() == id)
+                    .map(|(index, _)| index);
 
                 if let Some(index) = index_to_remove {
                     guard.remove(index);
