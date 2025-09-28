@@ -195,15 +195,10 @@ impl FactoryComponent for NotificationCard {
                 .child(&widgets.content_container)
                 .build();
 
-            button.connect_clicked(clone!(
-                #[strong]
-                sender,
-                #[strong]
-                action_id,
-                move |_| {
-                    sender.input(NotificationCardMsg::Action(action_id.clone()));
-                }
-            ));
+            let sender_clone = sender.clone();
+            button.connect_clicked(move |_| {
+                sender_clone.input(NotificationCardMsg::Action(action_id.clone()));
+            });
 
             // Replace content_container with the button
             if let Some(parent) = widgets.content_container.parent() {
