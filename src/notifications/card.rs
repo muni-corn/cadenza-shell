@@ -173,24 +173,17 @@ impl FactoryComponent for NotificationCard {
 
     fn init_model(
         notification: Self::Init,
-        _index: &DynamicIndex,
-        sender: FactorySender<Self>,
+        _index: &Self::Index,
+        _sender: FactorySender<Self>,
     ) -> Self {
-        let card = Self { notification };
-
-        // If there's exactly one action, make the content clickable
-        if card.notification.actions.len() == 1 {
-            // We'll handle this in the post_init
-        }
-
-        card
+        Self { notification }
     }
 
     fn init_widgets(
         &mut self,
-        index: &DynamicIndex,
+        _index: &DynamicIndex,
         root: Self::Root,
-        returned_widget: &gtk4::Widget,
+        _returned_widget: &gtk4::Widget,
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let widgets = view_output!();
@@ -312,6 +305,3 @@ impl NotificationCard {
         self.notification.id
     }
 }
-
-// Export the factory component for use in other modules
-pub type NotificationCardFactory = NotificationCard;
