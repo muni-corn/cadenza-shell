@@ -83,6 +83,7 @@ impl SimpleComponent for FreshNotifications {
         // configure layer shell after window creation
         widgets.window.init_layer_shell();
         widgets.window.set_layer(Layer::Overlay);
+        widgets.window.set_namespace(Some("notifications"));
         widgets.window.set_exclusive_zone(-1); // don't reserve space
         widgets.window.set_anchor(Edge::Top, true);
         widgets.window.set_anchor(Edge::Right, true);
