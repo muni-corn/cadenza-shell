@@ -33,6 +33,11 @@ pub enum NotificationsTileMsg {
     Nothing,
 }
 
+#[derive(Debug)]
+pub enum NotificationsTileOutput {
+    OpenNotificationCenter,
+}
+
 pub struct NotificationsTileWidgets {
     _root: <NotificationsTile as Component>::Root,
     tile: Controller<Tile>,
@@ -41,7 +46,7 @@ pub struct NotificationsTileWidgets {
 impl SimpleComponent for NotificationsTile {
     type Init = ();
     type Input = NotificationsTileMsg;
-    type Output = ();
+    type Output = NotificationsTileOutput;
     type Root = gtk::Box;
     type Widgets = NotificationsTileWidgets;
 
@@ -98,13 +103,15 @@ impl SimpleComponent for NotificationsTile {
         }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             NotificationsTileMsg::TileClicked => {
                 log::debug!("notifications tile clicked");
-                // request current notifications
-                self.notification_worker
-                    .emit(NotificationServiceMsg::GetNotifications);
+                sender
+                    .output(NotificationsTileOutput::OpenNotificationCenter)
+                    .unwrap_or_else(|_| {
+                        log::error!("couldn't send output to open notification center")
+                    });
             }
             NotificationsTileMsg::ServiceUpdate(output) => {
                 match output {
