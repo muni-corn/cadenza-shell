@@ -9,6 +9,7 @@ mod settings;
 mod style;
 mod tiles;
 mod utils;
+mod weather;
 mod widgets;
 mod wifi_menu;
 
