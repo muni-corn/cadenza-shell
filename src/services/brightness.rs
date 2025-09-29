@@ -2,16 +2,9 @@ use std::{fs, path::Path};
 
 use anyhow::Result;
 use inotify::{Inotify, WatchMask};
-use relm4::Worker;
+use relm4::{SharedState, Worker};
 
-#[derive(Debug)]
-pub enum BrightnessEvent {
-    /// The percentage of brightness has changed.
-    Percentage(f64),
-
-    /// The service is unavailable.
-    Unavailable,
-}
+pub static BRIGHTNESS_STATE: SharedState<Option<f64>> = SharedState::new();
 
 #[derive(Default)]
 pub struct BrightnessService;
@@ -19,9 +12,9 @@ pub struct BrightnessService;
 impl Worker for BrightnessService {
     type Init = ();
     type Input = ();
-    type Output = BrightnessEvent;
+    type Output = ();
 
-    fn init(_init: Self::Init, sender: relm4::ComponentSender<Self>) -> Self {
+    fn init(_init: Self::Init, _sender: relm4::ComponentSender<Self>) -> Self {
         // read initial backlight properties. if any fail, we will not consider the
         // service available.
         let Ok((interface, max_val, current_brightness)) = detect_interface()
@@ -38,22 +31,15 @@ impl Worker for BrightnessService {
                     })
             })
         else {
-            sender
-                .output(BrightnessEvent::Unavailable)
-                .unwrap_or_else(|_| log::error!("couldn't send unavailability message"));
+            *BRIGHTNESS_STATE.write() = None;
             return Default::default();
         };
 
         // send initial update
-        sender
-            .output(BrightnessEvent::Percentage(current_brightness))
-            .unwrap_or_else(|_| {
-                log::error!("couldn't send initial state");
-            });
+        *BRIGHTNESS_STATE.write() = Some(current_brightness);
 
         let brightness_path = format!("/sys/class/backlight/{}/brightness", &interface);
         let interface_clone = interface.clone();
-        let sender_clone = sender.clone();
 
         // spawn a thread to handle inotify events
         relm4::spawn(async move {
@@ -81,11 +67,7 @@ impl Worker for BrightnessService {
                         for _ in events {
                             // when the brightness file is closed after writing, read the new value
                             match read_current_brightness_percentage(&interface_clone, max_val) {
-                                Ok(percentage) => sender_clone
-                                    .output(BrightnessEvent::Percentage(percentage))
-                                    .unwrap_or_else(|_| {
-                                        log::error!("error sending brightness update");
-                                    }),
+                                Ok(percentage) => *BRIGHTNESS_STATE.write() = Some(percentage),
                                 Err(e) => log::error!("couldn't update brightness info: {}", e),
                             }
                         }
