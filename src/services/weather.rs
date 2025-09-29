@@ -20,7 +20,6 @@ pub struct WeatherService;
 
 #[derive(Debug)]
 pub enum WeatherServiceMsg {
-    Start,
     Abort,
     Finish(WeatherState),
 }
@@ -35,11 +34,8 @@ impl Worker for WeatherService {
         Self
     }
 
-    fn update(&mut self, msg: Self::Input, sender: relm4::ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: relm4::ComponentSender<Self>) {
         match msg {
-            WeatherServiceMsg::Start => {
-                Self::start_polling(sender);
-            }
             WeatherServiceMsg::Abort => {
                 *WEATHER_STATE.write() = None;
             }
@@ -73,7 +69,6 @@ impl WeatherService {
                 }
                 let wait = backoff.unwrap_or(600);
                 sleep(Duration::from_secs(wait)).await;
-                sender.input(WeatherServiceMsg::Start);
             }
         });
     }
