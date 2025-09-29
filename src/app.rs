@@ -6,8 +6,8 @@ use relm4::{WorkerHandle, prelude::*};
 
 use crate::{
     services::{
-        battery::BatteryService, brightness::BrightnessService, pulseaudio::PulseAudioService,
-        weather::WeatherService,
+        battery::BatteryService, brightness::BrightnessService, network::NetworkService,
+        pulseaudio::PulseAudioService, weather::WeatherService,
     },
     widgets::bar::Bar,
 };
@@ -19,6 +19,7 @@ pub(crate) struct CadenzaShellModel {
     _weather_service: WorkerHandle<WeatherService>,
     _brightness_service: WorkerHandle<BrightnessService>,
     _pulseaudio_service: WorkerHandle<PulseAudioService>,
+    _network_service: WorkerHandle<NetworkService>,
 }
 
 #[derive(Debug)]
@@ -55,6 +56,7 @@ impl SimpleComponent for CadenzaShellModel {
             _weather_service: WeatherService::builder().detach_worker(()),
             _brightness_service: BrightnessService::builder().detach_worker(()),
             _pulseaudio_service: PulseAudioService::builder().detach_worker(()),
+            _network_service: NetworkService::builder().detach_worker(()),
         };
 
         // set up monitor detection

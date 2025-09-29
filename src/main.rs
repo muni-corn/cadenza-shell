@@ -3,6 +3,7 @@
 mod analog_clock;
 mod app;
 mod commands;
+mod network;
 mod notifications;
 mod services;
 mod settings;
