@@ -12,8 +12,10 @@ use pulse::{
     proplist::Proplist,
     volume::{ChannelVolumes, Volume},
 };
-use relm4::Worker;
+use relm4::{SharedState, Worker};
 use tokio::sync::{broadcast, mpsc};
+
+pub static VOLUME_STATE: SharedState<Option<PulseAudioData>> = SharedState::new();
 
 #[derive(Debug, Clone)]
 pub struct PulseAudioData {
@@ -62,9 +64,9 @@ pub struct PulseAudioService {
 impl Worker for PulseAudioService {
     type Init = ();
     type Input = PulseAudioServiceMsg;
-    type Output = PulseAudioServiceEvent;
+    type Output = ();
 
-    fn init(_init: Self::Init, sender: relm4::ComponentSender<Self>) -> Self {
+    fn init(_init: Self::Init, _sender: relm4::ComponentSender<Self>) -> Self {
         let (tx, rx) = broadcast::channel(32);
         let (pulse_tx, pulse_rx) = mpsc::unbounded_channel();
 
@@ -76,11 +78,10 @@ impl Worker for PulseAudioService {
         };
 
         // start pulseaudio connection in a separate thread
-        let sender_clone = sender.clone();
         let tx_clone = worker.tx.clone();
 
         relm4::spawn(async move {
-            if let Err(e) = Self::run_pulse_loop(sender_clone, tx_clone, pulse_rx) {
+            if let Err(e) = Self::run_pulse_loop(tx_clone, pulse_rx) {
                 log::error!("pulse loop error: {}", e);
             }
         });
@@ -104,7 +105,6 @@ impl Worker for PulseAudioService {
 
 impl PulseAudioService {
     fn run_pulse_loop(
-        sender: relm4::ComponentSender<PulseAudioService>,
         tx: broadcast::Sender<PulseAudioData>,
         mut pulse_rx: mpsc::UnboundedReceiver<PulseCommand>,
     ) -> Result<()> {
@@ -136,9 +136,8 @@ impl PulseAudioService {
             let context = context.clone();
             let data = data.clone();
             let tx = tx.clone();
-            let sender = sender.clone();
 
-            move || Self::on_state_change(&context, &data, &tx, &sender)
+            move || Self::on_state_change(&context, &data, &tx)
         });
 
         context
@@ -233,7 +232,6 @@ impl PulseAudioService {
         context: &Arc<Mutex<Context>>,
         data: &Arc<Mutex<PulseAudioData>>,
         tx: &broadcast::Sender<PulseAudioData>,
-        sender: &relm4::ComponentSender<PulseAudioService>,
     ) {
         let Ok(state) = context.try_lock().map(|lock| lock.get_state()) else {
             return;
@@ -250,11 +248,8 @@ impl PulseAudioService {
                     let context = context.clone();
                     let data = data.clone();
                     let tx = tx.clone();
-                    let sender = sender.clone();
 
-                    move |server_info| {
-                        Self::on_server_info(server_info, &context, &data, &tx, &sender)
-                    }
+                    move |server_info| Self::on_server_info(server_info, &context, &data, &tx)
                 });
 
                 // subscribe to changes
@@ -262,11 +257,8 @@ impl PulseAudioService {
                     let context = context.clone();
                     let data = data.clone();
                     let tx = tx.clone();
-                    let sender = sender.clone();
 
-                    move |facility, op, _i| {
-                        Self::on_event(&context, &data, &tx, &sender, facility, op)
-                    }
+                    move |facility, op, _i| Self::on_event(&context, &data, &tx, facility, op)
                 });
 
                 context
@@ -280,9 +272,7 @@ impl PulseAudioService {
             }
             State::Failed => {
                 log::error!("failed to connect to pulseaudio server");
-                let _ = sender.output(PulseAudioServiceEvent::Error(
-                    "failed to connect to pulseaudio server".to_string(),
-                ));
+                *VOLUME_STATE.write() = None;
             }
             State::Terminated => {
                 log::warn!("connection to pulseaudio server terminated");
@@ -296,7 +286,6 @@ impl PulseAudioService {
         context: &Arc<Mutex<Context>>,
         data: &Arc<Mutex<PulseAudioData>>,
         tx: &broadcast::Sender<PulseAudioData>,
-        sender: &relm4::ComponentSender<PulseAudioService>,
     ) {
         let default_sink_name = server_info
             .default_sink_name
@@ -314,9 +303,8 @@ impl PulseAudioService {
             introspect.get_sink_info_by_name(sink_name, {
                 let data = data.clone();
                 let tx = tx.clone();
-                let sender = sender.clone();
 
-                move |sink_info| Self::on_sink_info(sink_info, &data, &tx, &sender)
+                move |sink_info| Self::on_sink_info(sink_info, &data, &tx)
             });
         }
     }
@@ -325,7 +313,6 @@ impl PulseAudioService {
         sink_info: ListResult<&SinkInfo>,
         data: &Arc<Mutex<PulseAudioData>>,
         tx: &broadcast::Sender<PulseAudioData>,
-        sender: &relm4::ComponentSender<PulseAudioService>,
     ) {
         let ListResult::Item(info) = sink_info else {
             return;
@@ -341,14 +328,13 @@ impl PulseAudioService {
         drop(data_guard);
 
         let _ = tx.send(volume_data.clone());
-        let _ = sender.output(PulseAudioServiceEvent::VolumeChanged(volume_data));
+        *VOLUME_STATE.write() = Some(volume_data);
     }
 
     fn on_event(
         context: &Arc<Mutex<Context>>,
         data: &Arc<Mutex<PulseAudioData>>,
         tx: &broadcast::Sender<PulseAudioData>,
-        sender: &relm4::ComponentSender<PulseAudioService>,
         facility: Option<Facility>,
         _op: Option<Operation>,
     ) {
@@ -363,11 +349,8 @@ impl PulseAudioService {
                     let context = context.clone();
                     let data = data.clone();
                     let tx = tx.clone();
-                    let sender = sender.clone();
 
-                    move |server_info| {
-                        Self::on_server_info(server_info, &context, &data, &tx, &sender)
-                    }
+                    move |server_info| Self::on_server_info(server_info, &context, &data, &tx)
                 });
             }
             Facility::Sink => {
@@ -378,9 +361,8 @@ impl PulseAudioService {
                     introspect.get_sink_info_by_name(&sink_name, {
                         let data = data.clone();
                         let tx = tx.clone();
-                        let sender = sender.clone();
 
-                        move |sink_info| Self::on_sink_info(sink_info, &data, &tx, &sender)
+                        move |sink_info| Self::on_sink_info(sink_info, &data, &tx)
                     });
                 }
             }
