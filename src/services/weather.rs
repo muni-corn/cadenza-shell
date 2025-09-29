@@ -168,8 +168,8 @@ async fn fetch_wttr() -> anyhow::Result<WeatherState> {
 
 fn next_backoff(prev: Option<u64>) -> u64 {
     match prev {
-        None => 60,
-        Some(s) => (s * 2).clamp(60, 300), // cap at 5 minutes
+        None => 1,
+        Some(s) => (s * 2).clamp(1, 300), // cap at 5 minutes
     }
 }
 
