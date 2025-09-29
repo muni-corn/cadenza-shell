@@ -1,3 +1,4 @@
+use gdk4::Monitor;
 use gtk4::prelude::*;
 use relm4::{RelmIterChildrenExt, Worker, prelude::*};
 
@@ -5,6 +6,11 @@ use crate::{
     services::niri::{NiriService, NiriUpdate},
     settings::BarConfig,
 };
+
+pub struct NiriInit {
+    pub bar_config: BarConfig,
+    pub monitor: Monitor,
+}
 
 #[derive(Debug)]
 pub struct NiriTile {
@@ -28,14 +34,14 @@ pub enum NiriMsg {
 }
 
 impl SimpleComponent for NiriTile {
-    type Init = BarConfig;
+    type Init = NiriInit;
     type Input = NiriMsg;
     type Output = ();
     type Root = gtk::Box;
     type Widgets = NiriTileWidgets;
 
     fn init(
-        bar_config: Self::Init,
+        init: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -43,7 +49,7 @@ impl SimpleComponent for NiriTile {
             .launch(())
             .forward(sender.input_sender(), NiriMsg::ServiceUpdate);
 
-        root.set_spacing(bar_config.tile_spacing);
+        root.set_spacing(init.bar_config.tile_spacing);
 
         // create workspaces container for visual dots/pill
         let workspaces_container = gtk::Box::new(gtk::Orientation::Horizontal, 8);

@@ -12,7 +12,7 @@ use crate::{
     settings,
     widgets::bar::{
         center::CenterGroup,
-        left::LeftGroup,
+        left::{LeftGroup, LeftGroupInit},
         right::{RightGroup, RightGroupOutput},
     },
 };
@@ -62,7 +62,10 @@ impl SimpleComponent for Bar {
             .launch(model.monitor.clone())
             .detach();
 
-        let left = LeftGroup::builder().launch((model.monitor.clone(), config.bar));
+        let left = LeftGroup::builder().launch(LeftGroupInit {
+            bar_config: config.bar,
+            monitor: model.monitor.clone(),
+        });
         let center = CenterGroup::builder().launch(config.bar);
         let right = RightGroup::builder().launch(config.bar).forward(
             notification_center.sender(),
