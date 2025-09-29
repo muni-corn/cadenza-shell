@@ -1,7 +1,16 @@
+use gdk4::Monitor;
 use gtk4::prelude::BoxExt;
 use relm4::prelude::*;
 
-use crate::{settings::BarConfig, tiles::niri::NiriTile};
+use crate::{
+    settings::BarConfig,
+    tiles::niri::{NiriInit, NiriTile},
+};
+
+pub struct LeftGroupInit {
+    pub bar_config: BarConfig,
+    pub monitor: Monitor,
+}
 
 #[derive(Debug)]
 pub struct LeftGroup;
@@ -12,21 +21,29 @@ pub struct LeftWidgets {
 }
 
 impl SimpleComponent for LeftGroup {
-    type Init = (gdk4::Monitor, BarConfig);
+    type Init = LeftGroupInit;
     type Input = ();
     type Output = ();
     type Root = gtk::Box;
     type Widgets = LeftWidgets;
 
     fn init(
-        (_monitor, bar_config): Self::Init,
+        LeftGroupInit {
+            bar_config,
+            monitor,
+        }: Self::Init,
         root: Self::Root,
         _sender: relm4::ComponentSender<Self>,
     ) -> relm4::ComponentParts<Self> {
         root.set_spacing(bar_config.tile_spacing);
         root.set_margin_horizontal(bar_config.edge_padding);
 
-        let niri_tile = NiriTile::builder().launch(bar_config).detach();
+        let niri_tile = NiriTile::builder()
+            .launch(NiriInit {
+                bar_config,
+                monitor,
+            })
+            .detach();
 
         root.append(niri_tile.widget());
 
