@@ -1,25 +1,21 @@
 use gtk4::prelude::*;
-use relm4::{WorkerController, prelude::*};
+use relm4::prelude::*;
 
 use crate::{
-    services::pulseaudio::{
-        PulseAudioData, PulseAudioService, PulseAudioServiceEvent, PulseAudioServiceMsg,
-    },
+    services::pulseaudio::{PulseAudioData, VOLUME_STATE},
     utils::icons::{VOLUME_ICONS, VOLUME_MUTED, VOLUME_ZERO, percentage_to_icon_from_list},
     widgets::progress_tile::{ProgressTile, ProgressTileInit, ProgressTileMsg, ProgressTileOutput},
 };
 
 #[derive(Debug)]
 pub struct PulseAudioTile {
-    volume_data: PulseAudioData,
-    worker: WorkerController<PulseAudioService>,
     progress_tile: Controller<ProgressTile>,
 }
 
 #[derive(Debug)]
 pub enum PulseAudioTileMsg {
-    ServiceUpdate(PulseAudioServiceEvent),
     TileClicked,
+    Update,
 }
 
 impl SimpleComponent for PulseAudioTile {
@@ -34,11 +30,7 @@ impl SimpleComponent for PulseAudioTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let worker = PulseAudioService::builder()
-            .detach_worker(())
-            .forward(sender.input_sender(), PulseAudioTileMsg::ServiceUpdate);
-
-        let volume_data = PulseAudioData::default();
+        VOLUME_STATE.subscribe(sender.input_sender(), |_| PulseAudioTileMsg::Update);
 
         let progress_tile = ProgressTile::builder()
             .launch(ProgressTileInit {
@@ -50,13 +42,13 @@ impl SimpleComponent for PulseAudioTile {
             .forward(sender.input_sender(), |output| match output {
                 ProgressTileOutput::Clicked => PulseAudioTileMsg::TileClicked,
             });
+
         root.append(progress_tile.widget());
 
-        let model = PulseAudioTile {
-            volume_data,
-            worker,
-            progress_tile,
-        };
+        let model = PulseAudioTile { progress_tile };
+
+        // initialize this tile
+        sender.input(PulseAudioTileMsg::Update);
 
         ComponentParts {
             model,
@@ -64,25 +56,19 @@ impl SimpleComponent for PulseAudioTile {
         }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
-        match msg {
-            PulseAudioTileMsg::TileClicked => {
-                self.worker.emit(PulseAudioServiceMsg::ToggleMute);
-            }
-            PulseAudioTileMsg::ServiceUpdate(output) => match output {
-                PulseAudioServiceEvent::VolumeChanged(data) => {
-                    self.volume_data = data;
-                    self.update_tile_data();
-                }
-                PulseAudioServiceEvent::Error(error) => {
-                    log::error!("volume worker error: {}", error);
-                }
-            },
-        }
-    }
+    fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>) {}
 
     fn update_view(&self, root: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        root.set_visible(self.volume_data.default_sink_name.is_some());
+        if let Some(volume_data) = VOLUME_STATE.read().clone() {
+            self.update_tile_data(&volume_data);
+        }
+
+        root.set_visible(
+            VOLUME_STATE
+                .read()
+                .as_ref()
+                .is_some_and(|data| data.default_sink_name.is_some()),
+        );
     }
 
     fn init_root() -> Self::Root {
@@ -90,26 +76,27 @@ impl SimpleComponent for PulseAudioTile {
     }
 }
 
-impl PulseAudioTile {
-    fn get_icon(&self) -> &str {
-        if self.volume_data.default_sink_name.is_none() || self.volume_data.muted {
-            VOLUME_MUTED
-        } else if self.volume_data.volume == 0.0 {
-            VOLUME_ZERO
-        } else {
-            percentage_to_icon_from_list(self.volume_data.volume / 100.0, VOLUME_ICONS)
-        }
+fn get_icon(volume_data: &PulseAudioData) -> &str {
+    if volume_data.default_sink_name.is_none() || volume_data.muted {
+        VOLUME_MUTED
+    } else if volume_data.volume == 0.0 {
+        VOLUME_ZERO
+    } else {
+        percentage_to_icon_from_list(volume_data.volume / 100.0, VOLUME_ICONS)
     }
+}
 
-    fn update_tile_data(&mut self) {
-        self.progress_tile
-            .emit(ProgressTileMsg::SetIcon(Some(self.get_icon().to_string())));
+impl PulseAudioTile {
+    fn update_tile_data(&self, volume_data: &PulseAudioData) {
+        self.progress_tile.emit(ProgressTileMsg::SetIcon(Some(
+            get_icon(volume_data).to_string(),
+        )));
 
         self.progress_tile
-            .emit(ProgressTileMsg::SetProgress(if self.volume_data.muted {
+            .emit(ProgressTileMsg::SetProgress(if volume_data.muted {
                 0.0
             } else {
-                (self.volume_data.volume / 100.0).clamp(0.0, 1.0)
+                (volume_data.volume / 100.0).clamp(0.0, 1.0)
             }));
     }
 }

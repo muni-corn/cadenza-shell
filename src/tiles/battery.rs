@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use gtk4::prelude::*;
-use relm4::{Worker, prelude::*};
+use relm4::prelude::*;
 
 use crate::{
     icon_names::{BATTERY_CHARGE_REGULAR, BATTERY_CHECKMARK_REGULAR},
-    services::battery::{BATTERY_STATE, BatteryService, BatteryState},
+    services::battery::{BATTERY_STATE, BatteryState},
     tiles::Attention,
     utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Tile, TileMsg},
@@ -112,7 +112,7 @@ impl SimpleComponent for BatteryTile {
     }
 
     fn init_root() -> Self::Root {
-        gtk::Box::new(gtk::Orientation::Horizontal, 0)
+        gtk::Box::builder().visible(false).build()
     }
 }
 
