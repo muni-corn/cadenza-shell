@@ -5,7 +5,7 @@ use gtk4::prelude::*;
 use relm4::{WorkerHandle, prelude::*};
 
 use crate::{
-    services::{battery::BatteryService, weather::WeatherService},
+    services::{battery::BatteryService, brightness::BrightnessService, weather::WeatherService},
     widgets::bar::Bar,
 };
 
@@ -14,6 +14,7 @@ pub(crate) struct CadenzaShellModel {
     display: Display,
     battery_service: WorkerHandle<BatteryService>,
     weather_service: WorkerHandle<WeatherService>,
+    brightness_service: WorkerHandle<BrightnessService>,
 }
 
 #[derive(Debug)]
@@ -48,6 +49,7 @@ impl SimpleComponent for CadenzaShellModel {
             display: display.clone(),
             battery_service: BatteryService::builder().detach_worker(()),
             weather_service: WeatherService::builder().detach_worker(()),
+            brightness_service: BrightnessService::builder().detach_worker(()),
         };
 
         // set up monitor detection

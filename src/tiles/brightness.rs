@@ -1,26 +1,19 @@
 use gtk4::prelude::*;
-use relm4::{Worker, prelude::*};
+use relm4::prelude::*;
 
 use crate::{
-    services::brightness::{BrightnessEvent, BrightnessService},
+    services::brightness::BRIGHTNESS_STATE,
     utils::icons::{BRIGHTNESS_ICON_NAMES, percentage_to_icon_from_list},
     widgets::progress_tile::{ProgressTile, ProgressTileInit, ProgressTileMsg},
 };
 
 pub struct BrightnessTile {
-    brightness_percentage: Option<f64>,
-    _service: Controller<BrightnessService>,
     progress_tile: Controller<ProgressTile>,
-}
-
-#[derive(Debug)]
-pub enum BrightnessMsg {
-    ServiceUpdate(<BrightnessService as Worker>::Output),
 }
 
 impl SimpleComponent for BrightnessTile {
     type Init = ();
-    type Input = BrightnessMsg;
+    type Input = ();
     type Output = ();
     type Root = gtk::Box;
     type Widgets = Self::Root;
@@ -30,11 +23,7 @@ impl SimpleComponent for BrightnessTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let _service = BrightnessService::builder()
-            .launch(())
-            .forward(sender.input_sender(), |state| {
-                BrightnessMsg::ServiceUpdate(state)
-            });
+        BRIGHTNESS_STATE.subscribe(sender.input_sender(), |_| ());
 
         // initialize the progress tile component
         let progress_tile = ProgressTile::builder()
@@ -46,11 +35,7 @@ impl SimpleComponent for BrightnessTile {
 
         root.append(progress_tile.widget());
 
-        let model = BrightnessTile {
-            brightness_percentage: None,
-            _service,
-            progress_tile,
-        };
+        let model = BrightnessTile { progress_tile };
 
         ComponentParts {
             model,
@@ -58,21 +43,10 @@ impl SimpleComponent for BrightnessTile {
         }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
-        match msg {
-            BrightnessMsg::ServiceUpdate(state) => match state {
-                BrightnessEvent::Percentage(p) => {
-                    self.brightness_percentage = Some(p);
-                }
-                BrightnessEvent::Unavailable => {
-                    self.brightness_percentage = None;
-                }
-            },
-        }
-    }
+    fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>) {}
 
     fn update_view(&self, root: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        if let Some(p) = self.brightness_percentage {
+        if let Some(p) = *BRIGHTNESS_STATE.read() {
             // update the progress tile with new data
             self.progress_tile
                 .emit(ProgressTileMsg::SetIcon(Some(self.get_icon().to_string())));
@@ -94,7 +68,8 @@ impl SimpleComponent for BrightnessTile {
 impl BrightnessTile {
     /// Gets the icon for this tile, using a logarithmic curve for brightness.
     fn get_icon(&self) -> &str {
-        self.brightness_percentage
+        BRIGHTNESS_STATE
+            .read()
             .as_ref()
             .map(|p| {
                 let log_brightness = to_logarithmic(*p);
