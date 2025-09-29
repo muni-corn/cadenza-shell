@@ -39,7 +39,7 @@ pub enum NotificationsTileOutput {
 }
 
 pub struct NotificationsTileWidgets {
-    _root: <NotificationsTile as Component>::Root,
+    root: <NotificationsTile as Component>::Root,
     tile: Controller<Tile>,
 }
 
@@ -55,20 +55,6 @@ impl SimpleComponent for NotificationsTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // initialize notification worker
-        let notification_worker = NotificationService::builder()
-            .detach_worker(())
-            .forward(sender.input_sender(), NotificationsTileMsg::ServiceUpdate);
-
-        // initialize the tile component
-        let tile =
-            Tile::builder()
-                .launch(Default::default())
-                .forward(sender.input_sender(), |msg| match msg {
-                    TileOutput::Clicked => NotificationsTileMsg::TileClicked,
-                    _ => NotificationsTileMsg::Nothing,
-                });
-
         // create popups for first monitor only
         let display = gdk4::Display::default().expect("could not get default display");
         let monitor = display
@@ -78,10 +64,22 @@ impl SimpleComponent for NotificationsTile {
             .expect("no monitor available for notifications")
             .expect("couldn't get available monitor for notifications");
 
-        root.append(tile.widget());
+        let widgets = NotificationsTileWidgets {
+            root,
+            tile: Tile::builder().launch(Default::default()).forward(
+                sender.input_sender(),
+                |msg| match msg {
+                    TileOutput::Clicked => NotificationsTileMsg::TileClicked,
+                    _ => NotificationsTileMsg::Nothing,
+                },
+            ),
+        };
 
         let model = NotificationsTile {
-            notification_worker,
+            // initialize notification worker
+            notification_worker: NotificationService::builder()
+                .detach_worker(())
+                .forward(sender.input_sender(), NotificationsTileMsg::ServiceUpdate),
             notification_count: 0,
             active_notifications: HashMap::new(),
             fresh_panel: FreshNotifications::builder().launch(monitor).forward(
@@ -97,10 +95,9 @@ impl SimpleComponent for NotificationsTile {
             ),
         };
 
-        ComponentParts {
-            model,
-            widgets: NotificationsTileWidgets { _root: root, tile },
-        }
+        widgets.root.append(widgets.tile.widget());
+
+        ComponentParts { model, widgets }
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
@@ -175,11 +172,13 @@ impl SimpleComponent for NotificationsTile {
         } else {
             ALERT_REGULAR
         };
+
         let primary_text = if self.notification_count > 0 {
             Some(self.notification_count.to_string())
         } else {
             None
         };
+
         let attention = if self.notification_count > 0 {
             Attention::Normal
         } else {
