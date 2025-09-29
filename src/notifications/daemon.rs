@@ -74,7 +74,7 @@ impl NotificationsDaemon {
             actions,
         };
 
-        dbg!("new notification received: {}", &notification);
+        log::debug!("new notification received: {:?}", &notification);
 
         // store notification in worker
         self.sender.input(NotificationServiceMsg::StoreNotification(
