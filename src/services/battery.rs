@@ -2,16 +2,20 @@ use std::{fs, path::Path, sync::mpsc, time::Duration};
 
 use anyhow::Result;
 use notify::{RecursiveMode, Watcher};
-use relm4::Worker;
+use relm4::{SharedState, Worker};
 use systemstat::{Platform, System};
 
-#[derive(Debug, Copy, Clone, PartialEq)]
-pub enum BatteryUpdate {
-    Stats {
+pub static BATTERY_STATE: SharedState<BatteryState> = SharedState::<BatteryState>::new();
+
+#[derive(Debug, Copy, Clone, PartialEq, Default)]
+pub enum BatteryState {
+    Available {
         percentage: f32,
         charging: bool,
         time_remaining: Duration,
     },
+
+    #[default]
     Unavailable,
 }
 
@@ -20,15 +24,13 @@ pub struct BatteryService;
 impl Worker for BatteryService {
     type Init = ();
     type Input = ();
-    type Output = BatteryUpdate;
+    type Output = ();
 
     fn init(_init: Self::Init, sender: relm4::ComponentSender<Self>) -> Self {
         // detect battery interface
         let Some(battery_interface) = detect_battery_interface() else {
             log::error!("couldn't detect battery interface");
-            sender
-                .output(BatteryUpdate::Unavailable)
-                .unwrap_or_else(|_| log::error!("couldn't send unavailability message"));
+            *BATTERY_STATE.write() = BatteryState::Unavailable;
 
             return Self;
         };
@@ -40,22 +42,16 @@ impl Worker for BatteryService {
         let Ok((percentage, charging, time_remaining)) = read_battery_state(&system)
             .map_err(|e| log::error!("couldn't read initial battery state: {}", e))
         else {
-            sender
-                .output(BatteryUpdate::Unavailable)
-                .unwrap_or_else(|_| log::error!("couldn't send unavailability message"));
+            *BATTERY_STATE.write() = BatteryState::Unavailable;
             return BatteryService;
         };
 
         // send initial update
-        sender
-            .output(BatteryUpdate::Stats {
-                percentage,
-                charging,
-                time_remaining,
-            })
-            .unwrap_or_else(|_| {
-                log::error!("couldn't send initial battery state");
-            });
+        *BATTERY_STATE.write() = BatteryState::Available {
+            percentage,
+            charging,
+            time_remaining,
+        };
 
         relm4::spawn(async move {
             let (tx, rx) = mpsc::channel();
@@ -93,15 +89,11 @@ impl Worker for BatteryService {
 
                 match read_battery_state(&system) {
                     Ok((percentage, charging, time_remaining)) => {
-                        sender
-                            .output(BatteryUpdate::Stats {
-                                percentage,
-                                charging,
-                                time_remaining,
-                            })
-                            .unwrap_or_else(|_| {
-                                log::error!("couldn't send battery update");
-                            });
+                        *BATTERY_STATE.write() = BatteryState::Available {
+                            percentage,
+                            charging,
+                            time_remaining,
+                        };
                     }
                     Err(e) => {
                         log::error!("couldn't read battery state: {}", e);
