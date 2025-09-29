@@ -59,16 +59,9 @@ impl SimpleComponent for PulseAudioTile {
     fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>) {}
 
     fn update_view(&self, root: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        if let Some(volume_data) = VOLUME_STATE.read().clone() {
-            self.update_tile_data(&volume_data);
-        }
-
-        root.set_visible(
-            VOLUME_STATE
-                .read()
-                .as_ref()
-                .is_some_and(|data| data.default_sink_name.is_some()),
-        );
+        let volume_data = VOLUME_STATE.read().clone();
+        self.update_tile_data(&volume_data);
+        root.set_visible(VOLUME_STATE.read().default_sink_name.is_some());
     }
 
     fn init_root() -> Self::Root {

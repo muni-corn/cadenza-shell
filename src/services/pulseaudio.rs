@@ -13,9 +13,9 @@ use pulse::{
     volume::{ChannelVolumes, Volume},
 };
 use relm4::{SharedState, Worker};
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::mpsc;
 
-pub static VOLUME_STATE: SharedState<Option<PulseAudioData>> = SharedState::new();
+pub static VOLUME_STATE: SharedState<PulseAudioData> = SharedState::new();
 
 #[derive(Debug, Clone)]
 pub struct PulseAudioData {
@@ -55,10 +55,7 @@ enum PulseCommand {
 
 #[derive(Debug)]
 pub struct PulseAudioService {
-    data: PulseAudioData,
-    pulse_tx: Option<mpsc::UnboundedSender<PulseCommand>>,
-    tx: broadcast::Sender<PulseAudioData>,
-    _rx: broadcast::Receiver<PulseAudioData>,
+    pulse_tx: mpsc::UnboundedSender<PulseCommand>,
 }
 
 impl Worker for PulseAudioService {
@@ -67,21 +64,13 @@ impl Worker for PulseAudioService {
     type Output = ();
 
     fn init(_init: Self::Init, _sender: relm4::ComponentSender<Self>) -> Self {
-        let (tx, rx) = broadcast::channel(32);
         let (pulse_tx, pulse_rx) = mpsc::unbounded_channel();
 
-        let worker = Self {
-            data: PulseAudioData::default(),
-            pulse_tx: Some(pulse_tx),
-            tx,
-            _rx: rx,
-        };
+        let worker = Self { pulse_tx };
 
         // start pulseaudio connection in a separate thread
-        let tx_clone = worker.tx.clone();
-
         relm4::spawn(async move {
-            if let Err(e) = Self::run_pulse_loop(tx_clone, pulse_rx) {
+            if let Err(e) = Self::run_pulse_loop(pulse_rx) {
                 log::error!("pulse loop error: {}", e);
             }
         });
@@ -90,54 +79,46 @@ impl Worker for PulseAudioService {
     }
 
     fn update(&mut self, message: Self::Input, _sender: relm4::ComponentSender<Self>) {
-        if let Some(ref pulse_tx) = self.pulse_tx {
-            let command = match message {
-                PulseAudioServiceMsg::SetVolume(volume) => PulseCommand::SetVolume(volume),
-                PulseAudioServiceMsg::ToggleMute => PulseCommand::SetMute(!self.data.muted),
-            };
+        let command = match message {
+            PulseAudioServiceMsg::SetVolume(volume) => PulseCommand::SetVolume(volume),
+            PulseAudioServiceMsg::ToggleMute => PulseCommand::SetMute(!VOLUME_STATE.read().muted),
+        };
 
-            if let Err(e) = pulse_tx.send(command) {
-                log::error!("failed to send pulse command: {}", e);
-            }
+        if let Err(e) = self.pulse_tx.send(command) {
+            log::error!("failed to send pulse command: {}", e);
         }
     }
 }
 
 impl PulseAudioService {
-    fn run_pulse_loop(
-        tx: broadcast::Sender<PulseAudioData>,
-        mut pulse_rx: mpsc::UnboundedReceiver<PulseCommand>,
-    ) -> Result<()> {
+    fn run_pulse_loop(mut pulse_rx: mpsc::UnboundedReceiver<PulseCommand>) -> Result<()> {
         let Some(mut proplist) = Proplist::new() else {
-            anyhow::bail!("failed to create pa proplist");
+            anyhow::bail!("failed to create pulseaudio proplist");
         };
 
         if proplist
             .set_str("APPLICATION_NAME", "cadenza-shell")
             .is_err()
         {
-            anyhow::bail!("failed to update pa proplist");
+            anyhow::bail!("failed to update pulseaudio proplist");
         }
 
         let Some(mut mainloop) = Mainloop::new() else {
-            anyhow::bail!("failed to create pa mainloop");
+            anyhow::bail!("failed to create pulseaudio mainloop");
         };
 
         let Some(context) = Context::new_with_proplist(&mainloop, "cadenza-shell", &proplist)
         else {
-            anyhow::bail!("failed to create pa context");
+            anyhow::bail!("failed to create pulseaudio context");
         };
 
         let context = Arc::new(Mutex::new(context));
-        let data = Arc::new(Mutex::new(PulseAudioData::default()));
         let pending_commands = Arc::new(Mutex::new(Vec::<PulseCommand>::new()));
 
         let state_callback = Box::new({
             let context = context.clone();
-            let data = data.clone();
-            let tx = tx.clone();
 
-            move || Self::on_state_change(&context, &data, &tx)
+            move || Self::on_state_change(&context)
         });
 
         context
@@ -155,14 +136,13 @@ impl PulseAudioService {
 
         // handle incoming commands
         let context_clone = context.clone();
-        let data_clone = data.clone();
         let pending_commands_clone = pending_commands.clone();
         relm4::spawn(async move {
             while let Some(command) = pulse_rx.blocking_recv() {
                 // either execute immediately if connected, or queue for later
                 if let Ok(ctx) = context_clone.try_lock() {
                     if ctx.get_state() == State::Ready {
-                        Self::execute_command(&ctx, &data_clone, command);
+                        Self::execute_command(&ctx, command);
                     } else {
                         pending_commands_clone.lock().unwrap().push(command);
                     }
@@ -183,7 +163,7 @@ impl PulseAudioService {
                         && !pending.is_empty()
                     {
                         for command in pending.drain(..) {
-                            Self::execute_command(&ctx, &data, command);
+                            Self::execute_command(&ctx, command);
                         }
                     }
                 }
@@ -197,13 +177,8 @@ impl PulseAudioService {
         Ok(())
     }
 
-    fn execute_command(
-        context: &Context,
-        data: &Arc<Mutex<PulseAudioData>>,
-        command: PulseCommand,
-    ) {
-        let default_sink_name = data.lock().unwrap().default_sink_name.clone();
-        let Some(sink_name) = default_sink_name else {
+    fn execute_command(context: &Context, command: PulseCommand) {
+        let Some(sink_name) = VOLUME_STATE.read().default_sink_name.clone() else {
             return;
         };
 
@@ -228,11 +203,7 @@ impl PulseAudioService {
         }
     }
 
-    fn on_state_change(
-        context: &Arc<Mutex<Context>>,
-        data: &Arc<Mutex<PulseAudioData>>,
-        tx: &broadcast::Sender<PulseAudioData>,
-    ) {
+    fn on_state_change(context: &Arc<Mutex<Context>>) {
         let Ok(state) = context.try_lock().map(|lock| lock.get_state()) else {
             return;
         };
@@ -246,19 +217,15 @@ impl PulseAudioService {
                 // get default sink info
                 introspect.get_server_info({
                     let context = context.clone();
-                    let data = data.clone();
-                    let tx = tx.clone();
 
-                    move |server_info| Self::on_server_info(server_info, &context, &data, &tx)
+                    move |server_info| Self::on_server_info(server_info, &context)
                 });
 
                 // subscribe to changes
                 let subscribe_callback = Box::new({
                     let context = context.clone();
-                    let data = data.clone();
-                    let tx = tx.clone();
 
-                    move |facility, op, _i| Self::on_event(&context, &data, &tx, facility, op)
+                    move |facility, op, _i| Self::on_event(&context, facility, op)
                 });
 
                 context
@@ -272,7 +239,7 @@ impl PulseAudioService {
             }
             State::Failed => {
                 log::error!("failed to connect to pulseaudio server");
-                *VOLUME_STATE.write() = None;
+                VOLUME_STATE.write().default_sink_name = None;
             }
             State::Terminated => {
                 log::warn!("connection to pulseaudio server terminated");
@@ -281,19 +248,14 @@ impl PulseAudioService {
         }
     }
 
-    fn on_server_info(
-        server_info: &ServerInfo,
-        context: &Arc<Mutex<Context>>,
-        data: &Arc<Mutex<PulseAudioData>>,
-        tx: &broadcast::Sender<PulseAudioData>,
-    ) {
+    fn on_server_info(server_info: &ServerInfo, context: &Arc<Mutex<Context>>) {
         let default_sink_name = server_info
             .default_sink_name
             .as_ref()
             .map(ToString::to_string);
 
         {
-            let mut data_guard = data.lock().unwrap();
+            let mut data_guard = VOLUME_STATE.write();
             data_guard.default_sink_name = default_sink_name.clone();
         }
 
@@ -301,43 +263,24 @@ impl PulseAudioService {
         if let Some(ref sink_name) = default_sink_name {
             let introspect = context.lock().unwrap().introspect();
             introspect.get_sink_info_by_name(sink_name, {
-                let data = data.clone();
-                let tx = tx.clone();
-
-                move |sink_info| Self::on_sink_info(sink_info, &data, &tx)
+                move |sink_info| Self::on_sink_info(sink_info)
             });
         }
     }
 
-    fn on_sink_info(
-        sink_info: ListResult<&SinkInfo>,
-        data: &Arc<Mutex<PulseAudioData>>,
-        tx: &broadcast::Sender<PulseAudioData>,
-    ) {
+    fn on_sink_info(sink_info: ListResult<&SinkInfo>) {
         let ListResult::Item(info) = sink_info else {
             return;
         };
 
         let volume_percent = Self::volume_to_percent(&info.volume);
 
-        let mut data_guard = data.lock().unwrap();
+        let mut data_guard = VOLUME_STATE.write();
         data_guard.volume = volume_percent;
         data_guard.muted = info.mute;
-
-        let volume_data = data_guard.clone();
-        drop(data_guard);
-
-        let _ = tx.send(volume_data.clone());
-        *VOLUME_STATE.write() = Some(volume_data);
     }
 
-    fn on_event(
-        context: &Arc<Mutex<Context>>,
-        data: &Arc<Mutex<PulseAudioData>>,
-        tx: &broadcast::Sender<PulseAudioData>,
-        facility: Option<Facility>,
-        _op: Option<Operation>,
-    ) {
+    fn on_event(context: &Arc<Mutex<Context>>, facility: Option<Facility>, _op: Option<Operation>) {
         let Some(facility) = facility else {
             return;
         };
@@ -347,22 +290,16 @@ impl PulseAudioService {
                 let introspect = context.lock().unwrap().introspect();
                 introspect.get_server_info({
                     let context = context.clone();
-                    let data = data.clone();
-                    let tx = tx.clone();
 
-                    move |server_info| Self::on_server_info(server_info, &context, &data, &tx)
+                    move |server_info| Self::on_server_info(server_info, &context)
                 });
             }
             Facility::Sink => {
                 // update default sink info
-                let default_sink_name = data.lock().unwrap().default_sink_name.clone();
-                if let Some(sink_name) = default_sink_name {
+                if let Some(sink_name) = VOLUME_STATE.read().default_sink_name.clone() {
                     let introspect = context.lock().unwrap().introspect();
                     introspect.get_sink_info_by_name(&sink_name, {
-                        let data = data.clone();
-                        let tx = tx.clone();
-
-                        move |sink_info| Self::on_sink_info(sink_info, &data, &tx)
+                        move |sink_info| Self::on_sink_info(sink_info)
                     });
                 }
             }
