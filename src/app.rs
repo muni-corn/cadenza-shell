@@ -11,10 +11,10 @@ use crate::{
 
 pub(crate) struct CadenzaShellModel {
     bars: HashMap<String, Controller<Bar>>,
-    display: Display,
-    battery_service: WorkerHandle<BatteryService>,
-    weather_service: WorkerHandle<WeatherService>,
-    brightness_service: WorkerHandle<BrightnessService>,
+    _display: Display,
+    _battery_service: WorkerHandle<BatteryService>,
+    _weather_service: WorkerHandle<WeatherService>,
+    _brightness_service: WorkerHandle<BrightnessService>,
 }
 
 #[derive(Debug)]
@@ -46,10 +46,10 @@ impl SimpleComponent for CadenzaShellModel {
 
         let model = CadenzaShellModel {
             bars: HashMap::new(),
-            display: display.clone(),
-            battery_service: BatteryService::builder().detach_worker(()),
-            weather_service: WeatherService::builder().detach_worker(()),
-            brightness_service: BrightnessService::builder().detach_worker(()),
+            _display: display.clone(),
+            _battery_service: BatteryService::builder().detach_worker(()),
+            _weather_service: WeatherService::builder().detach_worker(()),
+            _brightness_service: BrightnessService::builder().detach_worker(()),
         };
 
         // set up monitor detection
