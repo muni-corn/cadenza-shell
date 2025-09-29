@@ -191,6 +191,6 @@ impl SimpleComponent for NotificationsTile {
     }
 
     fn init_root() -> Self::Root {
-        gtk::Box::new(gtk::Orientation::Horizontal, 0)
+        gtk::Box::builder().visible(false).build()
     }
 }
