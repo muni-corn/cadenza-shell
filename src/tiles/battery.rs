@@ -5,7 +5,7 @@ use relm4::{Worker, prelude::*};
 
 use crate::{
     icon_names::{BATTERY_CHARGE_REGULAR, BATTERY_CHECKMARK_REGULAR},
-    services::battery::{BatteryService, BatteryUpdate},
+    services::battery::{BATTERY_STATE, BatteryService, BatteryState},
     tiles::Attention,
     utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Tile, TileMsg},
@@ -17,13 +17,11 @@ pub struct BatteryTile {
     current_percentage: f32,
     charging: bool,
     time_remaining: Duration,
-
-    _service: Controller<BatteryService>,
 }
 
 #[derive(Debug)]
 pub enum BatteryMsg {
-    ServiceUpdate(<BatteryService as Worker>::Output),
+    StateUpdate(BatteryState),
 }
 
 pub struct BatteryWidgets {
@@ -49,14 +47,14 @@ impl SimpleComponent for BatteryTile {
             current_percentage: 0.,
             charging: false,
             time_remaining: Duration::ZERO,
-
-            _service: BatteryService::builder()
-                .launch(())
-                .forward(sender.input_sender(), BatteryMsg::ServiceUpdate),
         };
 
         let tile = Tile::builder().launch(Default::default()).detach();
         root.append(tile.widget());
+
+        BATTERY_STATE.subscribe(sender.input_sender(), |new_state| {
+            BatteryMsg::StateUpdate(*new_state)
+        });
 
         ComponentParts {
             model,
@@ -66,8 +64,8 @@ impl SimpleComponent for BatteryTile {
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            BatteryMsg::ServiceUpdate(m) => match m {
-                BatteryUpdate::Stats {
+            BatteryMsg::StateUpdate(m) => match m {
+                BatteryState::Available {
                     percentage,
                     charging,
                     time_remaining,
@@ -77,7 +75,7 @@ impl SimpleComponent for BatteryTile {
                     self.time_remaining = time_remaining;
                     self.available = true;
                 }
-                BatteryUpdate::Unavailable => {
+                BatteryState::Unavailable => {
                     self.available = false;
                 }
             },
