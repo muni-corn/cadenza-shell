@@ -3,7 +3,7 @@ use gtk4::prelude::*;
 use relm4::{RelmIterChildrenExt, Worker, prelude::*};
 
 use crate::{
-    services::niri::{NiriService, NiriUpdate},
+    services::niri::{NiriService, NiriState},
     settings::BarConfig,
 };
 
@@ -84,20 +84,20 @@ impl SimpleComponent for NiriTile {
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            NiriMsg::ServiceUpdate(m) => match m {
-                NiriUpdate::State {
+            NiriMsg::ServiceUpdate(m) => {
+                if let Some(NiriState {
                     mut workspaces,
                     focused_window_title,
-                } => {
+                }) = m
+                {
                     workspaces.sort_by_key(|ws| ws.idx);
                     self.workspaces = workspaces;
                     self.focused_window_title = focused_window_title;
                     self.available = true;
-                }
-                NiriUpdate::Unavailable => {
+                } else {
                     self.available = false;
                 }
-            },
+            }
         }
     }
 

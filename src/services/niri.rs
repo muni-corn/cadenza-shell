@@ -6,12 +6,9 @@ use tokio::{
 };
 
 #[derive(Debug, Clone)]
-pub enum NiriUpdate {
-    State {
-        workspaces: Vec<NiriWorkspace>,
-        focused_window_title: String,
-    },
-    Unavailable,
+pub struct NiriState {
+    pub workspaces: Vec<NiriWorkspace>,
+    pub focused_window_title: String,
 }
 
 #[derive(Debug, Default)]
@@ -22,7 +19,7 @@ pub struct NiriService {
 impl Worker for NiriService {
     type Init = ();
     type Input = ();
-    type Output = NiriUpdate;
+    type Output = Option<NiriState>;
 
     fn init(_init: Self::Init, sender: relm4::ComponentSender<Self>) -> Self {
         let socket_path = std::env::var("NIRI_SOCKET").ok();
@@ -34,11 +31,11 @@ impl Worker for NiriService {
             relm4::spawn(async move {
                 if let Err(e) = initialize_and_stream(&socket_path, sender_clone.clone()).await {
                     log::warn!("niri service error: {}", e);
-                    let _ = sender_clone.output(NiriUpdate::Unavailable);
+                    let _ = sender_clone.output(None);
                 }
             });
         } else {
-            let _ = sender.output(NiriUpdate::Unavailable);
+            let _ = sender.output(None);
         }
 
         service
@@ -92,10 +89,10 @@ async fn fetch_and_emit(
     }
 
     sender
-        .output(NiriUpdate::State {
+        .output(Some(NiriState {
             workspaces,
             focused_window_title,
-        })
+        }))
         .unwrap_or_else(|_| log::error!("failed to send niri update"));
 
     Ok(())
