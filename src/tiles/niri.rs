@@ -92,6 +92,7 @@ impl SimpleComponent for NiriTile {
         state
             .workspaces
             .iter()
+            .filter(|ws| self.is_workspace_on_monitor(ws))
             .zip(widgets.workspaces_container.iter_children())
             .for_each(|(ws, ind)| {
                 // active workspace - pill shape
@@ -146,5 +147,18 @@ impl SimpleComponent for NiriTile {
             .css_classes(["tile"])
             .margin_start(10)
             .build()
+    }
+}
+
+impl NiriTile {
+    fn is_workspace_on_monitor(&self, ws: &Workspace) -> bool {
+        ws.output
+            .as_ref()
+            .and_then(|ws_output| {
+                self.monitor
+                    .connector()
+                    .map(|monitor_name| *ws_output == monitor_name)
+            })
+            .unwrap_or(false)
     }
 }
