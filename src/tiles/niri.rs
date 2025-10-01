@@ -1,11 +1,9 @@
 use gdk4::Monitor;
 use gtk4::prelude::*;
-use relm4::{RelmIterChildrenExt, Worker, prelude::*};
+use niri_ipc::Workspace;
+use relm4::{RelmIterChildrenExt, prelude::*};
 
-use crate::{
-    services::niri::{NiriService, NiriState},
-    settings::BarConfig,
-};
+use crate::{services::niri::NIRI_STATE, settings::BarConfig};
 
 pub struct NiriInit {
     pub bar_config: BarConfig,
@@ -14,11 +12,7 @@ pub struct NiriInit {
 
 #[derive(Debug)]
 pub struct NiriTile {
-    available: bool,
-    workspaces: Vec<niri_ipc::Workspace>,
-    focused_window_title: String,
-
-    _service: Controller<NiriService>,
+    pub monitor: Monitor,
 }
 
 #[derive(Debug)]
@@ -30,7 +24,7 @@ pub struct NiriTileWidgets {
 
 #[derive(Debug)]
 pub enum NiriMsg {
-    ServiceUpdate(<NiriService as Worker>::Output),
+    Update,
 }
 
 impl SimpleComponent for NiriTile {
@@ -45,9 +39,7 @@ impl SimpleComponent for NiriTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let _service = NiriService::builder()
-            .launch(())
-            .forward(sender.input_sender(), NiriMsg::ServiceUpdate);
+        NIRI_STATE.subscribe(sender.input_sender(), |state| NiriMsg::Update);
 
         root.set_spacing(init.bar_config.tile_spacing);
 
@@ -66,11 +58,11 @@ impl SimpleComponent for NiriTile {
         root.append(&window_title_label);
 
         let model = NiriTile {
-            available: false,
-            workspaces: Vec::new(),
-            focused_window_title: String::new(),
-            _service,
+            monitor: init.monitor.clone(),
         };
+
+        // init
+        sender.input(NiriMsg::Update);
 
         ComponentParts {
             model,
@@ -82,27 +74,23 @@ impl SimpleComponent for NiriTile {
         }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
-        match msg {
-            NiriMsg::ServiceUpdate(m) => {
-                if let Some(NiriState {
-                    mut workspaces,
-                    focused_window_title,
-                }) = m
-                {
-                    workspaces.sort_by_key(|ws| ws.idx);
-                    self.workspaces = workspaces;
-                    self.focused_window_title = focused_window_title;
-                    self.available = true;
-                } else {
-                    self.available = false;
-                }
-            }
-        }
-    }
+    fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>) {}
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        self.workspaces
+        let Some(state) = NIRI_STATE.read().clone() else {
+            log::debug!(
+                "no niri state for monitor {}, not updating view",
+                self.monitor
+                    .connector()
+                    .unwrap_or_else(|| String::from("(none)").into())
+            );
+            return;
+        };
+
+        widgets.root.set_visible(true);
+
+        state
+            .workspaces
             .iter()
             .zip(widgets.workspaces_container.iter_children())
             .for_each(|(ws, ind)| {
@@ -115,11 +103,11 @@ impl SimpleComponent for NiriTile {
             });
 
         // create new indicators for extra workspaces, or remove extras
-        let workspace_count = self.workspaces.len();
+        let workspace_count = state.workspaces.len();
         let indicator_count = widgets.workspaces_container.iter_children().count();
         if workspace_count > indicator_count {
             // create new indicators
-            let extra_workspaces = &self.workspaces[indicator_count..];
+            let extra_workspaces = &state.workspaces[indicator_count..];
             for new_ws in extra_workspaces {
                 let indicator = gtk::Box::builder()
                     .css_classes(["workspace"])
@@ -149,10 +137,7 @@ impl SimpleComponent for NiriTile {
         // update window title
         widgets
             .window_title_label
-            .set_text(&self.focused_window_title);
-
-        // show if available
-        widgets.root.set_visible(self.available);
+            .set_text(&state.focused_window_title);
     }
 
     fn init_root() -> Self::Root {

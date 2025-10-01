@@ -1,9 +1,11 @@
 use niri_ipc::{Event, Reply, Request, Response, Window as NiriWindow, Workspace as NiriWorkspace};
-use relm4::Worker;
+use relm4::{SharedState, Worker};
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::UnixStream,
 };
+
+pub static NIRI_STATE: SharedState<Option<NiriState>> = SharedState::new();
 
 #[derive(Debug, Clone)]
 pub struct NiriState {
@@ -19,23 +21,22 @@ pub struct NiriService {
 impl Worker for NiriService {
     type Init = ();
     type Input = ();
-    type Output = Option<NiriState>;
+    type Output = ();
 
-    fn init(_init: Self::Init, sender: relm4::ComponentSender<Self>) -> Self {
+    fn init(_init: Self::Init, _sender: relm4::ComponentSender<Self>) -> Self {
         let socket_path = std::env::var("NIRI_SOCKET").ok();
         let service = Self { socket_path };
 
         if let Some(socket_path) = &service.socket_path {
             let socket_path = socket_path.clone();
-            let sender_clone = sender.clone();
             relm4::spawn(async move {
-                if let Err(e) = initialize_and_stream(&socket_path, sender_clone.clone()).await {
+                if let Err(e) = initialize_and_stream(&socket_path).await {
                     log::warn!("niri service error: {}", e);
-                    let _ = sender_clone.output(None);
+                    *NIRI_STATE.write() = None;
                 }
             });
         } else {
-            let _ = sender.output(None);
+            *NIRI_STATE.write() = None;
         }
 
         service
@@ -44,15 +45,12 @@ impl Worker for NiriService {
     fn update(&mut self, _msg: Self::Input, _sender: relm4::ComponentSender<Self>) {}
 }
 
-async fn initialize_and_stream(
-    socket_path: &str,
-    sender: relm4::ComponentSender<NiriService>,
-) -> anyhow::Result<()> {
+async fn initialize_and_stream(socket_path: &str) -> anyhow::Result<()> {
     // initial state
-    fetch_and_emit(socket_path, &sender).await?;
+    fetch_and_update(socket_path).await?;
 
     // event stream
-    start_event_listener(socket_path, sender).await;
+    start_event_listener(socket_path).await;
     Ok(())
 }
 
@@ -70,10 +68,7 @@ async fn send_request(socket_path: &str, request: Request) -> anyhow::Result<Rep
     Ok(reply)
 }
 
-async fn fetch_and_emit(
-    socket_path: &str,
-    sender: &relm4::ComponentSender<NiriService>,
-) -> anyhow::Result<()> {
+async fn fetch_and_update(socket_path: &str) -> anyhow::Result<()> {
     let mut workspaces: Vec<NiriWorkspace> = Vec::new();
     if let Ok(reply) = send_request(socket_path, Request::Workspaces).await
         && let Ok(Response::Workspaces(ws)) = reply
@@ -88,17 +83,15 @@ async fn fetch_and_emit(
         focused_window_title = title.unwrap_or_default();
     }
 
-    sender
-        .output(Some(NiriState {
-            workspaces,
-            focused_window_title,
-        }))
-        .unwrap_or_else(|_| log::error!("failed to send niri update"));
+    *NIRI_STATE.write() = Some(NiriState {
+        workspaces,
+        focused_window_title,
+    });
 
     Ok(())
 }
 
-async fn start_event_listener(socket_path: &str, sender: relm4::ComponentSender<NiriService>) {
+async fn start_event_listener(socket_path: &str) {
     loop {
         if let Ok(mut stream) = UnixStream::connect(socket_path).await {
             let json = serde_json::to_string(&Request::EventStream).unwrap();
@@ -109,16 +102,25 @@ async fn start_event_listener(socket_path: &str, sender: relm4::ComponentSender<
                 let mut reader = BufReader::new(stream);
                 let mut line = String::new();
                 while reader.read_line(&mut line).await.is_ok() {
-                    if let Ok(event) = serde_json::from_str::<Event>(line.trim())
-                        && let Event::WorkspacesChanged { .. }
-                        | Event::WorkspaceActivated { .. }
-                        | Event::WorkspaceActiveWindowChanged { .. }
-                        | Event::WindowsChanged { .. }
-                        | Event::WindowOpenedOrChanged { .. }
-                        | Event::WindowClosed { .. }
-                        | Event::WindowFocusChanged { .. } = event
-                    {
-                        let _ = fetch_and_emit(socket_path, &sender).await;
+                    match serde_json::from_str::<Event>(line.trim()) {
+                        Ok(event) => {
+                            log::debug!("niri event received: {:?}", event);
+                            match event {
+                                Event::WorkspacesChanged { .. }
+                                | Event::WorkspaceActivated { .. }
+                                | Event::WorkspaceActiveWindowChanged { .. }
+                                | Event::WindowsChanged { .. }
+                                | Event::WindowOpenedOrChanged { .. }
+                                | Event::WindowClosed { .. }
+                                | Event::WindowFocusChanged { .. } => {
+                                    fetch_and_update(socket_path).await.unwrap_or_else(|e| {
+                                        log::error!("couldn't update niri state: {}", e)
+                                    });
+                                }
+                                _ => (),
+                            }
+                        }
+                        Err(e) => log::error!("error parsing niri message: {}", e),
                     }
                     line.clear();
                 }
