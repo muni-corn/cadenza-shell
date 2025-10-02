@@ -3,14 +3,13 @@ use relm4::prelude::*;
 
 use crate::{
     icon_names::{MUSIC_NOTE_1_REGULAR, PAUSE_REGULAR},
-    services::mpris::{MprisService, MprisState},
+    services::mpris::{MPRIS_STATE, MprisState},
     widgets::tile::{Tile, TileMsg},
 };
 
 #[derive(Debug)]
 pub struct MprisTile {
-    _service: Controller<MprisService>,
-    state: MprisState,
+    state: Option<MprisState>,
 }
 
 #[derive(Debug)]
@@ -21,7 +20,7 @@ pub struct MprisWidgets {
 
 impl SimpleComponent for MprisTile {
     type Init = ();
-    type Input = MprisState;
+    type Input = Option<MprisState>;
     type Output = ();
     type Root = gtk::Box;
     type Widgets = MprisWidgets;
@@ -31,19 +30,15 @@ impl SimpleComponent for MprisTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let _service = MprisService::builder()
-            .launch(())
-            .forward(sender.input_sender(), |s| s);
+        MPRIS_STATE.subscribe(sender.input_sender(), |data| data.clone());
+        sender.input(MPRIS_STATE.read().clone());
 
         // initialize the tile component
         let tile = Tile::builder().launch(Default::default()).detach();
 
         root.append(tile.widget());
 
-        let model = MprisTile {
-            _service,
-            state: MprisState::Unavailable,
-        };
+        let model = MprisTile { state: None };
 
         ComponentParts {
             model,
@@ -57,12 +52,12 @@ impl SimpleComponent for MprisTile {
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         match &self.state {
-            MprisState::Unavailable => widgets.root.set_visible(false),
-            MprisState::Info {
+            None => widgets.root.set_visible(false),
+            Some(MprisState {
                 title,
                 artist,
                 status,
-            } => {
+            }) => {
                 let icon = match status {
                     mpris::PlaybackStatus::Playing => MUSIC_NOTE_1_REGULAR,
                     _ => PAUSE_REGULAR,
