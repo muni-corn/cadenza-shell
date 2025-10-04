@@ -8,6 +8,7 @@ pub mod network;
 pub mod niri;
 pub mod notifications;
 pub mod pulseaudio;
+pub mod tray;
 pub mod weather;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
