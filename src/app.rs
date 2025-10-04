@@ -8,7 +8,7 @@ use crate::{
     services::{
         battery::BatteryService, brightness::BrightnessService, mpris::MprisService,
         network::NetworkService, niri::NiriService, pulseaudio::PulseAudioService,
-        weather::WeatherService,
+        tray::TrayService, weather::WeatherService,
     },
     widgets::bar::Bar,
 };
@@ -23,6 +23,7 @@ pub(crate) struct CadenzaShellModel {
     _network_service: WorkerHandle<NetworkService>,
     _niri_service: WorkerHandle<NiriService>,
     _mpris_service: WorkerHandle<MprisService>,
+    _tray_service: WorkerHandle<TrayService>,
 }
 
 #[derive(Debug)]
@@ -62,6 +63,7 @@ impl SimpleComponent for CadenzaShellModel {
             _network_service: NetworkService::builder().detach_worker(()),
             _niri_service: NiriService::builder().detach_worker(()),
             _mpris_service: MprisService::builder().detach_worker(()),
+            _tray_service: TrayService::builder().detach_worker(()),
         };
 
         // set up monitor detection
