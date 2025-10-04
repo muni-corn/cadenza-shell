@@ -9,6 +9,7 @@ mod services;
 mod settings;
 mod style;
 mod tiles;
+mod tray;
 mod utils;
 mod weather;
 mod widgets;
