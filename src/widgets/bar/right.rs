@@ -10,6 +10,7 @@ use crate::{
         network::NetworkTile,
         notifications::{NotificationsTile, NotificationsTileOutput},
         pulseaudio::PulseAudioTile,
+        tray::TrayWidget,
     },
 };
 
@@ -23,6 +24,7 @@ pub struct RightWidgets {
     _network: Controller<NetworkTile>,
     _battery: Controller<BatteryTile>,
     _notifications: Controller<NotificationsTile>,
+    _tray: Controller<TrayWidget>,
 }
 
 #[derive(Debug)]
@@ -62,6 +64,7 @@ impl SimpleComponent for RightGroup {
                 }
             },
         );
+        let tray = TrayWidget::builder().launch(()).detach();
 
         root.append(brightness.widget());
         root.append(volume.widget());
@@ -69,6 +72,7 @@ impl SimpleComponent for RightGroup {
         root.append(network.widget());
         root.append(battery.widget());
         root.append(notifications.widget());
+        root.append(tray.widget());
 
         ComponentParts {
             model: RightGroup,
@@ -79,6 +83,7 @@ impl SimpleComponent for RightGroup {
                 _network: network,
                 _battery: battery,
                 _notifications: notifications,
+                _tray: tray,
             },
         }
     }
