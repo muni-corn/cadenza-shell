@@ -267,6 +267,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_repr",
+ "system-tray",
  "systemstat",
  "thiserror 2.0.16",
  "tokio",
@@ -2669,6 +2670,21 @@ dependencies = [
  "pkg-config",
  "toml 0.8.23",
  "version-compare",
+]
+
+[[package]]
+name = "system-tray"
+version = "0.8.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e0d3765ed17239bdd18a7fe74406fc61cbfcbac7bc684475215525aab5134ce8"
+dependencies = [
+ "cfg-if",
+ "futures-lite",
+ "serde",
+ "thiserror 2.0.16",
+ "tokio",
+ "tracing",
+ "zbus",
 ]
 
 [[package]]
