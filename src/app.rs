@@ -11,11 +11,14 @@ use crate::{
         network::NetworkService, niri::NiriService, pulseaudio::PulseAudioService,
         weather::WeatherService,
     },
+    tray::{TrayClient, TrayEvent, TrayItemOutput},
     widgets::bar::Bar,
 };
 
 pub(crate) struct CadenzaShellModel {
     bars: HashMap<String, Controller<Bar>>,
+    tray_client: Option<Arc<Mutex<TrayClient>>>,
+
     _display: Display,
     _battery_service: WorkerHandle<BatteryService>,
     _weather_service: WorkerHandle<WeatherService>,
@@ -55,10 +58,43 @@ impl AsyncComponent for CadenzaShellModel {
         _root: Self::Root,
         sender: AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
+        let tray_client = TrayClient::new()
+            .await
+            .inspect_err(|e| log::error!("couldn't setup tray client: {}", e))
+            .ok()
+            .map(|c| Arc::new(Mutex::new(c)));
+
+        if let Some(ref tray_client) = tray_client {
+            let tray_client = Arc::clone(tray_client);
+            sender.command(|out, shutdown| {
+                shutdown
+                    .register(async move {
+                        // subscribe to tray events
+                        let mut rx = tray_client.lock().await.subscribe();
+                        loop {
+                            match rx.recv().await {
+                                Ok(event) => {
+                                    log::debug!("tray event received: {:?}", event);
+                                    out.send(CadenzaShellCommandOutput::TrayEvent(event))
+                                        .unwrap_or_else(|_| {
+                                            log::error!(
+                                                "unable to send tray event as command output",
+                                            )
+                                        });
+                                }
+                                Err(e) => log::error!("error receiving tray event: {}", e),
+                            }
+                        }
+                    })
+                    .drop_on_shutdown()
+            });
+        }
         let display = Display::default().expect("could not get default display");
 
         let model = CadenzaShellModel {
             bars: HashMap::new(),
+            tray_client,
+
             _display: display.clone(),
             _battery_service: BatteryService::builder().detach_worker(()),
             _weather_service: WeatherService::builder().detach_worker(()),
@@ -112,6 +148,13 @@ impl AsyncComponent for CadenzaShellModel {
                 let connector = monitor.connector();
                 if let Some(connector) = connector {
                     let connector_str = connector.to_string();
+
+                    // get the current system tray items
+                    let tray_items = if let Some(ref c) = self.tray_client {
+                        Some(c.lock().await.items())
+                    } else {
+                        None
+                    };
 
                     self.bars
                         .entry(connector_str.clone())
