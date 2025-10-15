@@ -12,7 +12,7 @@ use crate::{
         weather::WeatherService,
     },
     tray::{TrayClient, TrayEvent, TrayItemOutput},
-    widgets::bar::Bar,
+    widgets::bar::{Bar, BarInit, BarMsg, BarOutput},
 };
 
 pub(crate) struct CadenzaShellModel {
@@ -162,7 +162,19 @@ impl AsyncComponent for CadenzaShellModel {
                             log::info!("creating bar for monitor: {}", connector_str);
 
                             // create a new bar component for this monitor
-                            Bar::builder().launch(monitor.clone()).detach()
+                            Bar::builder()
+                                .launch(BarInit {
+                                    monitor,
+                                    tray_items,
+                                })
+                                .forward(sender.input_sender(), |output| match output {
+                                    BarOutput::ToggleNotificationCenter => {
+                                        todo!()
+                                    }
+                                    BarOutput::TrayItemOutput(tray_item_output) => {
+                                        CadenzaShellMsg::HandleTrayItemOutput(tray_item_output)
+                                    }
+                                })
                         });
                 }
             }

@@ -13,6 +13,7 @@ use system_tray::data::BaseMap;
 use crate::{
     notifications::center::{NotificationCenter, NotificationCenterMsg},
     settings,
+    tray::{TrayEvent, TrayItemOutput},
     widgets::bar::{
         center::CenterGroup,
         left::{LeftGroup, LeftGroupInit},
@@ -26,7 +27,10 @@ pub struct Bar {
 }
 
 #[derive(Debug)]
-pub enum BarMsg {}
+pub struct BarInit {
+    pub monitor: Monitor,
+    pub tray_items: Option<Arc<Mutex<BaseMap>>>,
+}
 
 pub struct BarWidgets {
     // save Controllers so they aren't dropped
@@ -37,9 +41,9 @@ pub struct BarWidgets {
 }
 
 impl SimpleAsyncComponent for Bar {
-    type Init = Monitor;
+    type Init = BarInit;
     type Input = BarMsg;
-    type Output = ();
+    type Output = BarOutput;
     type Root = gtk::Window;
     type Widgets = BarWidgets;
 
@@ -52,9 +56,12 @@ impl SimpleAsyncComponent for Bar {
     }
 
     async fn init(
-        monitor: Self::Init,
+        BarInit {
+            monitor,
+            tray_items,
+        }: Self::Init,
         window: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: AsyncComponentSender<Self>,
     ) -> AsyncComponentParts<Self> {
         let config = settings::get_config();
 
