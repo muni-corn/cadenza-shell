@@ -19,6 +19,7 @@ pub enum BluetoothWorkerOutput {
     StateChanged(BluetoothInfo),
 }
 
+#[derive(Debug)]
 pub struct BluetoothService;
 
 impl Worker for BluetoothService {

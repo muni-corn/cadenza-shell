@@ -7,6 +7,7 @@ use crate::{
     widgets::progress_tile::{ProgressTile, ProgressTileInit, ProgressTileMsg},
 };
 
+#[derive(Debug)]
 pub struct BrightnessTile {
     progress_tile: Controller<ProgressTile>,
 }
