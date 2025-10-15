@@ -1,5 +1,8 @@
+use std::sync::{Arc, Mutex};
+
 use gtk4::prelude::BoxExt;
 use relm4::prelude::*;
+use system_tray::{client::Event as TrayEvent, data::BaseMap};
 
 use crate::{
     settings::BarConfig,
@@ -12,29 +15,43 @@ use crate::{
         pulseaudio::PulseAudioTile,
         tray::TrayWidget,
     },
+    tray::TrayItemOutput,
 };
 
 #[derive(Debug)]
 pub struct RightGroup;
 
+#[derive(Debug)]
 pub struct RightWidgets {
     _brightness: Controller<BrightnessTile>,
     _volume: Controller<PulseAudioTile>,
     _bluetooth: Controller<BluetoothTile>,
+
     _network: Controller<NetworkTile>,
     _battery: Controller<BatteryTile>,
     _notifications: Controller<NotificationsTile>,
-    _tray: Controller<TrayWidget>,
+    _tray: Option<AsyncController<TrayWidget>>,
+}
+
+pub struct RightGroupInit {
+    pub bar_config: BarConfig,
+    pub tray_items: Option<Arc<Mutex<BaseMap>>>,
+}
+
+#[derive(Debug)]
+pub enum RightGroupMsg {
+    TrayEvent(TrayEvent),
 }
 
 #[derive(Debug)]
 pub enum RightGroupOutput {
     ToggleNotificationCenter,
+    TrayItemOutput(TrayItemOutput),
 }
 
 impl SimpleComponent for RightGroup {
-    type Init = BarConfig;
-    type Input = ();
+    type Init = RightGroupInit;
+    type Input = RightGroupMsg;
     type Output = RightGroupOutput;
     type Root = gtk::Box;
     type Widgets = RightWidgets;
@@ -44,7 +61,10 @@ impl SimpleComponent for RightGroup {
     }
 
     fn init(
-        bar_config: Self::Init,
+        RightGroupInit {
+            bar_config,
+            tray_items,
+        }: Self::Init,
         root: Self::Root,
         sender: relm4::ComponentSender<Self>,
     ) -> relm4::ComponentParts<Self> {
@@ -64,7 +84,17 @@ impl SimpleComponent for RightGroup {
                 }
             },
         );
-        let tray = TrayWidget::builder().launch(()).detach();
+        let tray_opt = tray_items.and_then(|m| match m.lock() {
+            Ok(items) => Some(
+                TrayWidget::builder()
+                    .launch(items.clone())
+                    .forward(sender.output_sender(), RightGroupOutput::TrayItemOutput),
+            ),
+            Err(e) => {
+                log::error!("couldn't lock tray items mutex: {}", e);
+                None
+            }
+        });
 
         root.append(brightness.widget());
         root.append(volume.widget());
@@ -72,7 +102,9 @@ impl SimpleComponent for RightGroup {
         root.append(network.widget());
         root.append(battery.widget());
         root.append(notifications.widget());
-        root.append(tray.widget());
+        if let Some(tray) = &tray_opt {
+            root.append(tray.widget());
+        }
 
         ComponentParts {
             model: RightGroup,
@@ -83,7 +115,7 @@ impl SimpleComponent for RightGroup {
                 _network: network,
                 _battery: battery,
                 _notifications: notifications,
-                _tray: tray,
+                _tray: tray_opt,
             },
         }
     }
