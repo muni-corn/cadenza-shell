@@ -1,8 +1,9 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, sync::Arc};
 
 use gdk4::Display;
 use gtk4::prelude::*;
 use relm4::{WorkerHandle, prelude::*};
+use tokio::sync::Mutex;
 
 use crate::{
     services::{
@@ -32,7 +33,13 @@ pub enum CadenzaShellMsg {
     MonitorRemoved(String), // monitor connector name
 }
 
-impl SimpleComponent for CadenzaShellModel {
+#[derive(Debug)]
+pub(crate) enum CadenzaShellCommandOutput {
+    TrayEvent(TrayEvent),
+}
+
+impl AsyncComponent for CadenzaShellModel {
+    type CommandOutput = CadenzaShellCommandOutput;
     type Init = ();
     type Input = CadenzaShellMsg;
     type Output = ();
@@ -44,13 +51,11 @@ impl SimpleComponent for CadenzaShellModel {
         gtk::Window::new()
     }
 
-    fn init(
+    async fn init(
         _init: Self::Init,
         _root: Self::Root,
-        sender: ComponentSender<Self>,
-    ) -> ComponentParts<Self> {
-        // load css styles at startup
-
+        sender: AsyncComponentSender<Self>,
+    ) -> AsyncComponentParts<Self> {
         let display = Display::default().expect("could not get default display");
 
         let model = CadenzaShellModel {
@@ -95,10 +100,15 @@ impl SimpleComponent for CadenzaShellModel {
             }
         });
 
-        ComponentParts { model, widgets: () }
+        AsyncComponentParts { model, widgets: () }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+    async fn update(
+        &mut self,
+        msg: Self::Input,
+        sender: AsyncComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
         match msg {
             CadenzaShellMsg::MonitorAdded(monitor) => {
                 let connector = monitor.connector();
@@ -118,6 +128,21 @@ impl SimpleComponent for CadenzaShellModel {
             CadenzaShellMsg::MonitorRemoved(connector) => {
                 log::info!("removing bar for monitor: {}", connector);
                 self.bars.remove(&connector);
+            }
+        }
+    }
+
+    async fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        _sender: AsyncComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            Self::CommandOutput::TrayEvent(event) => {
+                for bar in self.bars.values() {
+                    bar.emit(BarMsg::TrayEvent(event.clone()));
+                }
             }
         }
     }
