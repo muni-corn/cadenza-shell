@@ -11,6 +11,7 @@ use crate::{
     widgets::tile::{Tile, TileMsg},
 };
 
+#[derive(Debug)]
 pub struct BatteryTile {
     available: bool,
 
@@ -24,6 +25,7 @@ pub enum BatteryMsg {
     StateUpdate(BatteryState),
 }
 
+#[derive(Debug)]
 pub struct BatteryWidgets {
     root: <BatteryTile as Component>::Root,
     tile: Controller<Tile>,

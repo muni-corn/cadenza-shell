@@ -38,6 +38,7 @@ pub enum NotificationsTileOutput {
     ToggleNotificationCenter,
 }
 
+#[derive(Debug)]
 pub struct NotificationsTileWidgets {
     root: <NotificationsTile as Component>::Root,
     tile: Controller<Tile>,

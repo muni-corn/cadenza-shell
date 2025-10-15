@@ -7,11 +7,13 @@ use crate::{
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
 
+#[derive(Debug)]
 pub struct BluetoothTile {
     bluetooth_info: BluetoothInfo,
     _worker: WorkerController<BluetoothService>,
 }
 
+#[derive(Debug)]
 pub struct BluetoothWidgets {
     root: gtk::Box,
     tile: Controller<Tile>,
