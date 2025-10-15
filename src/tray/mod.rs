@@ -1,136 +1,135 @@
 use gtk4::prelude::*;
-use relm4::{
-    factory::{FactoryComponent, FactoryView},
-    prelude::*,
+use relm4::{factory::FactoryView, prelude::*};
+pub(crate) use system_tray::client::{Client as TrayClient, Event as TrayEvent};
+use system_tray::{
+    client::ActivateRequest,
+    item::{Status, StatusNotifierItem},
+    menu::TrayMenu,
 };
 
-use crate::tray::status_notifier::item::{StatusNotifierItemProxyBlocking, StatusNotifierTooltip};
-
-pub mod status_notifier;
-
-pub type TrayStatus = status_notifier::item::StatusNotifierStatus;
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct TrayPixmap {
-    pub width: i32,
-    pub height: i32,
-    pub data: Vec<u8>, // RGBA data
+#[derive(Debug, Clone)]
+pub struct TrayItem {
+    address: String,
+    data: StatusNotifierItem,
+    menu: Option<TrayMenu>,
 }
 
-impl From<(i32, i32, Vec<u8>)> for TrayPixmap {
-    fn from((width, height, data): (i32, i32, Vec<u8>)) -> Self {
-        Self {
-            width,
-            height,
-            data,
-        }
+impl TrayItem {
+    pub fn address(&self) -> &String {
+        &self.address
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct TrayState {
-    pub items: Vec<TrayItem>,
-    pub expanded: bool,
+#[derive(Debug)]
+pub enum TrayItemOutput {
+    Activate(ActivateRequest),
+    RequestMenu,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct TrayItem {
-    index: <Self as FactoryComponent>::Index,
-    pub id: String,
-    pub title: String,
-    pub icon_name: Option<String>,
-    pub icon_pixmap: Option<TrayPixmap>,
-    pub tooltip: Option<StatusNotifierTooltip>,
-    pub menu: Option<String>,
-    pub status: TrayStatus,
-    pub service_name: String,
-    pub object_path: String,
-}
-
-impl FactoryComponent for TrayItem {
+impl AsyncFactoryComponent for TrayItem {
     type CommandOutput = ();
-    type Index = DynamicIndex;
-    type Init = StatusNotifierItemProxyBlocking<'static>;
+    type Init = (String, StatusNotifierItem, Option<TrayMenu>);
     type Input = ();
-    type Output = ();
+    type Output = TrayItemOutput;
     type ParentWidget = gtk::Box;
     type Root = gtk::Button;
     type Widgets = ();
 
-    fn init_root(&self) -> Self::Root {
+    fn init_root() -> Self::Root {
         gtk::Button::builder().build()
     }
 
-    fn init_model(init: Self::Init, index: &Self::Index, _sender: FactorySender<Self>) -> Self {
-        // For now, we'll use placeholder values for service_name and object_path
-        // These will be set properly when the tray service creates the items
+    async fn init_model(
+        (address, data, menu): Self::Init,
+        _index: &DynamicIndex,
+        _sender: AsyncFactorySender<Self>,
+    ) -> Self {
         Self {
-            index: index.clone(),
-            id: init.id().unwrap_or_default(),
-            title: init.title().unwrap_or_default(),
-            icon_name: init.icon_name().ok(),
-            icon_pixmap: init.icon_pixmap().ok().map(Into::into),
-            tooltip: init.tool_tip().ok(),
-            menu: init.menu().ok(),
-            status: init.status().unwrap_or_default(),
-            service_name: String::new(), // Will be set by tray service
-            object_path: String::new(),  // Will be set by tray service
+            address,
+            data,
+            menu,
         }
     }
 
     fn init_widgets(
         &mut self,
-        _index: &Self::Index,
+        _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        _sender: FactorySender<Self>,
+        sender: AsyncFactorySender<Self>,
     ) -> Self::Widgets {
-        // Set up the button styling
-        root.add_css_class("bar-button");
+        // set up the button styling
+        root.add_css_class("tray-item");
         root.set_width_request(24);
         root.set_height_request(24);
 
-        // Add status-specific CSS classes
-        match self.status {
-            TrayStatus::Active => root.add_css_class("tray-active"),
-            TrayStatus::NeedsAttention => root.add_css_class("tray-needs-attention"),
-            TrayStatus::Passive => {} // Default styling
+        // add status-specific CSS classes
+        match self.data.status {
+            Status::Active => root.add_css_class("tray-active"),
+            Status::NeedsAttention => root.add_css_class("tray-needs-attention"),
+            _ => {} // default styling
         }
 
         // Create enhanced tooltip with more information
-        let tooltip_text = if let Some(tooltip) = &self.tooltip {
-            format!("{}\n{}", self.title, tooltip.description)
+        let tooltip_text = if let Some(tooltip) = &self.data.tool_tip {
+            format!("{:?}\n{}", self.data.title, tooltip.description)
         } else {
-            format!("{}\n{}", self.title, self.id)
+            format!("{:?}\n{}", self.data.title, self.data.id)
         };
         root.set_tooltip_text(Some(&tooltip_text));
 
         // Create image or label for the button
-        if let Some(icon_name) = &self.icon_name {
+        if let Some(icon_name) = &self.data.icon_name {
             let image = gtk::Image::from_icon_name(icon_name);
             image.set_pixel_size(16);
             image.set_halign(gtk::Align::Center);
             image.set_valign(gtk::Align::Center);
             root.set_child(Some(&image));
-        } else if let Some(_pixmap) = &self.icon_pixmap {
+        } else if let Some(_pixmap) = &self.data.icon_pixmap {
             // TODO: Implement pixmap icon rendering in Phase 4
             // For now, fallback to text
-            let label = gtk::Label::new(Some(&self.id.chars().take(2).collect::<String>()));
+            let label = gtk::Label::new(Some(&self.data.id.chars().take(2).collect::<String>()));
             root.set_child(Some(&label));
         } else {
             // Fallback to text
-            let label = gtk::Label::new(Some(&self.id.chars().take(2).collect::<String>()));
+            let label = gtk::Label::new(Some(&self.data.id.chars().take(2).collect::<String>()));
             root.set_child(Some(&label));
         }
 
-        // Connect click handlers for D-Bus actions (Phase 2)
-        let item_id = self.id.clone();
-
-        // Left click - activate
-        root.connect_clicked(move |_button| {
-            log::debug!("Tray item activated: {}", item_id);
-            // TODO: This will be implemented in Phase 2
-            log::info!("Would activate tray item {}", item_id);
+        // TODO: Left click - activate
+        let address_clone = self.address.clone();
+        let sender_clone = sender.clone();
+        root.connect_clicked(move |_| {
+            log::debug!("tray activate requested: {}", address_clone.clone());
+            sender_clone
+                .output(TrayItemOutput::Activate(ActivateRequest::Default {
+                    address: address_clone.clone(),
+                    x: 0,
+                    y: 0,
+                }))
+                .unwrap_or_else(|_| log::error!("couldn't activate tray item {}", address_clone));
         });
+
+        // right click for context menu
+        // create a gesture for right-click detection
+        let gesture = gtk::GestureClick::new();
+        gesture.set_button(3); // right click
+        let address_clone = self.address.clone();
+        gesture.connect_pressed(move |_, _, x, y| {
+            log::debug!(
+                "TODO: tray secondary activate requested: {}",
+                address_clone.clone()
+            );
+            sender
+                .output(TrayItemOutput::Activate(ActivateRequest::Secondary {
+                    address: address_clone.clone(),
+                    x: x.round() as i32,
+                    y: y.round() as i32,
+                }))
+                .unwrap_or_else(|_| {
+                    log::error!("couldn't secondary activate for {}", address_clone)
+                })
+        });
+        root.add_controller(gesture);
     }
 }
