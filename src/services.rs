@@ -11,7 +11,6 @@ pub mod network;
 pub mod niri;
 pub mod notifications;
 pub mod pulseaudio;
-pub mod tray;
 pub mod weather;
 
 /// A callback function that services can call. Takes the service's state as
