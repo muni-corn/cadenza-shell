@@ -2,10 +2,13 @@ mod center;
 mod left;
 mod right;
 
+use std::sync::{Arc, Mutex};
+
 use gdk4::Monitor;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::prelude::*;
+use system_tray::data::BaseMap;
 
 use crate::{
     notifications::center::{NotificationCenter, NotificationCenterMsg},
@@ -33,7 +36,7 @@ pub struct BarWidgets {
     _notification_center: Controller<NotificationCenter>,
 }
 
-impl SimpleComponent for Bar {
+impl SimpleAsyncComponent for Bar {
     type Init = Monitor;
     type Input = BarMsg;
     type Output = ();
@@ -48,11 +51,11 @@ impl SimpleComponent for Bar {
             .build()
     }
 
-    fn init(
+    async fn init(
         monitor: Self::Init,
         window: Self::Root,
         _sender: ComponentSender<Self>,
-    ) -> ComponentParts<Self> {
+    ) -> AsyncComponentParts<Self> {
         let config = settings::get_config();
 
         // create notification center for this bar/monitor
@@ -105,10 +108,10 @@ impl SimpleComponent for Bar {
             _notification_center: notification_center,
         };
 
-        ComponentParts { model, widgets }
+        AsyncComponentParts { model, widgets: () }
     }
 
-    fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>) {}
+    async fn update(&mut self, msg: Self::Input, _sender: AsyncComponentSender<Self>) {}
 
-    fn update_view(&self, _widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {}
+    fn update_view(&self, _widgets: &mut Self::Widgets, _sender: AsyncComponentSender<Self>) {}
 }

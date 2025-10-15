@@ -16,7 +16,7 @@ use crate::{
 };
 
 pub(crate) struct CadenzaShellModel {
-    bars: HashMap<String, Controller<Bar>>,
+    bars: HashMap<String, AsyncController<Bar>>,
     tray_client: Option<Arc<Mutex<TrayClient>>>,
 
     _display: Display,
