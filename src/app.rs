@@ -30,9 +30,10 @@ pub(crate) struct CadenzaShellModel {
 }
 
 #[derive(Debug)]
-pub enum CadenzaShellMsg {
+pub(crate) enum CadenzaShellMsg {
     MonitorAdded(gdk4::Monitor),
     MonitorRemoved(String), // monitor connector name
+    HandleTrayItemOutput(TrayItemOutput),
 }
 
 #[derive(Debug)]
@@ -182,6 +183,21 @@ impl AsyncComponent for CadenzaShellModel {
                 log::info!("removing bar for monitor: {}", connector);
                 self.bars.remove(&connector);
             }
+            CadenzaShellMsg::HandleTrayItemOutput(tray_item_output) => match tray_item_output {
+                TrayItemOutput::Activate(activate_request) => {
+                    if let Some(client) = &self.tray_client {
+                        client
+                            .lock()
+                            .await
+                            .activate(activate_request)
+                            .await
+                            .unwrap_or_else(|e| {
+                                log::error!("error sending activate request to tray client: {}", e)
+                            });
+                    }
+                }
+                TrayItemOutput::RequestMenu => todo!(),
+            },
         }
     }
 
