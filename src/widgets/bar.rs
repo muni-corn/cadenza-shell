@@ -11,19 +11,26 @@ use relm4::prelude::*;
 use system_tray::data::BaseMap;
 
 use crate::{
-    notifications::center::{NotificationCenter, NotificationCenterMsg},
+    notifications::center::NotificationCenter,
     settings,
     tray::{TrayEvent, TrayItemOutput},
     widgets::bar::{
         center::CenterGroup,
         left::{LeftGroup, LeftGroupInit},
-        right::{RightGroup, RightGroupOutput},
+        right::{RightGroup, RightGroupInit, RightGroupMsg, RightGroupOutput},
     },
 };
 
 #[derive(Debug)]
 pub struct Bar {
     monitor: Monitor,
+
+    // save Controllers so they aren't dropped
+    left: Controller<LeftGroup>,
+    center: Controller<CenterGroup>,
+    right: Controller<RightGroup>,
+
+    _notification_center: Controller<NotificationCenter>,
 }
 
 #[derive(Debug)]
@@ -32,12 +39,15 @@ pub struct BarInit {
     pub tray_items: Option<Arc<Mutex<BaseMap>>>,
 }
 
-pub struct BarWidgets {
-    // save Controllers so they aren't dropped
-    _left: Controller<LeftGroup>,
-    _center: Controller<CenterGroup>,
-    _right: Controller<RightGroup>,
-    _notification_center: Controller<NotificationCenter>,
+#[derive(Debug)]
+pub enum BarMsg {
+    TrayEvent(TrayEvent),
+}
+
+#[derive(Debug)]
+pub enum BarOutput {
+    ToggleNotificationCenter,
+    TrayItemOutput(TrayItemOutput),
 }
 
 impl SimpleAsyncComponent for Bar {
@@ -45,7 +55,7 @@ impl SimpleAsyncComponent for Bar {
     type Input = BarMsg;
     type Output = BarOutput;
     type Root = gtk::Window;
-    type Widgets = BarWidgets;
+    type Widgets = ();
 
     fn init_root() -> Self::Root {
         gtk::Window::builder()
@@ -66,32 +76,45 @@ impl SimpleAsyncComponent for Bar {
         let config = settings::get_config();
 
         // create notification center for this bar/monitor
-        let model = Bar { monitor };
-
         let notification_center = NotificationCenter::builder()
-            .launch(model.monitor.clone())
+            .launch(monitor.clone())
             .detach();
 
-        let left = LeftGroup::builder().launch(LeftGroupInit {
-            bar_config: config.bar,
-            monitor: model.monitor.clone(),
-        });
-        let center = CenterGroup::builder().launch(config.bar);
-        let right = RightGroup::builder().launch(config.bar).forward(
-            notification_center.sender(),
-            |right_group_msg| match right_group_msg {
-                RightGroupOutput::ToggleNotificationCenter => NotificationCenterMsg::Toggle,
-            },
-        );
+        let model = Bar {
+            left: LeftGroup::builder()
+                .launch(LeftGroupInit {
+                    bar_config: config.bar,
+                    monitor: monitor.clone(),
+                })
+                .detach(),
+            center: CenterGroup::builder().launch(config.bar).detach(),
+            right: RightGroup::builder()
+                .launch(RightGroupInit {
+                    bar_config: config.bar,
+                    tray_items,
+                })
+                .forward(sender.output_sender(), |output| match output {
+                    RightGroupOutput::ToggleNotificationCenter => {
+                        BarOutput::ToggleNotificationCenter
+                    }
+                    RightGroupOutput::TrayItemOutput(tray_item_output) => {
+                        BarOutput::TrayItemOutput(tray_item_output)
+                    }
+                }),
+
+            _notification_center: notification_center,
+
+            monitor,
+        };
 
         let bar = gtk::CenterBox::builder()
             .css_classes(["bar"])
             .height_request(config.bar.height)
             .hexpand(true)
             .shrink_center_last(true)
-            .start_widget(left.widget())
-            .center_widget(center.widget())
-            .end_widget(right.widget())
+            .start_widget(model.left.widget())
+            .center_widget(model.center.widget())
+            .end_widget(model.right.widget())
             .build();
 
         // init layer shell
@@ -108,17 +131,15 @@ impl SimpleAsyncComponent for Bar {
         window.set_anchor(Edge::Right, true);
         window.set_child(Some(&bar));
 
-        let widgets = BarWidgets {
-            _left: left.detach(),
-            _center: center.detach(),
-            _right: right,
-            _notification_center: notification_center,
-        };
-
         AsyncComponentParts { model, widgets: () }
     }
 
-    async fn update(&mut self, msg: Self::Input, _sender: AsyncComponentSender<Self>) {}
+    async fn update(&mut self, msg: Self::Input, _sender: AsyncComponentSender<Self>) {
+        match msg {
+            // propagate tray update to the right group
+            BarMsg::TrayEvent(event) => self.right.emit(RightGroupMsg::TrayEvent(event)),
+        }
+    }
 
     fn update_view(&self, _widgets: &mut Self::Widgets, _sender: AsyncComponentSender<Self>) {}
 }
