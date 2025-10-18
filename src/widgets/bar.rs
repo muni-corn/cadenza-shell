@@ -13,11 +13,13 @@ use system_tray::data::BaseMap;
 use crate::{
     notifications::center::NotificationCenter,
     settings,
-    tray::{TrayEvent, TrayItemOutput},
-    widgets::bar::{
-        center::CenterGroup,
-        left::{LeftGroup, LeftGroupInit},
-        right::{RightGroup, RightGroupInit, RightGroupMsg, RightGroupOutput},
+    widgets::{
+        bar::{
+            center::CenterGroup,
+            left::{LeftGroup, LeftGroupInit},
+            right::{RightGroup, RightGroupInit, RightGroupMsg, RightGroupOutput},
+        },
+        tray_item::{TrayEvent, TrayItemOutput},
     },
 };
 

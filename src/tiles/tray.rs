@@ -2,7 +2,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 use system_tray::data::BaseMap;
 
-use crate::tray::{TrayEvent, TrayItem, TrayItemOutput};
+use crate::widgets::tray_item::{TrayEvent, TrayItem, TrayItemOutput};
 
 #[derive(Debug)]
 pub struct TrayWidget {
