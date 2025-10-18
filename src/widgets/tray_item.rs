@@ -9,8 +9,9 @@ use system_tray::{
 
 #[derive(Debug, Clone)]
 pub struct TrayItem {
+    inner: StatusNotifierItem,
+
     address: String,
-    data: StatusNotifierItem,
     menu: Option<TrayMenu>,
 }
 
@@ -40,13 +41,13 @@ impl AsyncFactoryComponent for TrayItem {
     }
 
     async fn init_model(
-        (address, data, menu): Self::Init,
+        (address, inner, menu): Self::Init,
         _index: &DynamicIndex,
         _sender: AsyncFactorySender<Self>,
     ) -> Self {
         Self {
             address,
-            data,
+            inner,
             menu,
         }
     }
@@ -64,35 +65,35 @@ impl AsyncFactoryComponent for TrayItem {
         root.set_height_request(24);
 
         // add status-specific CSS classes
-        match self.data.status {
+        match self.inner.status {
             Status::Active => root.add_css_class("tray-active"),
             Status::NeedsAttention => root.add_css_class("tray-needs-attention"),
             _ => {} // default styling
         }
 
         // Create enhanced tooltip with more information
-        let tooltip_text = if let Some(tooltip) = &self.data.tool_tip {
-            format!("{:?}\n{}", self.data.title, tooltip.description)
+        let tooltip_text = if let Some(tooltip) = &self.inner.tool_tip {
+            format!("{:?}\n{}", self.inner.title, tooltip.description)
         } else {
-            format!("{:?}\n{}", self.data.title, self.data.id)
+            format!("{:?}\n{}", self.inner.title, self.inner.id)
         };
         root.set_tooltip_text(Some(&tooltip_text));
 
         // Create image or label for the button
-        if let Some(icon_name) = &self.data.icon_name {
+        if let Some(icon_name) = &self.inner.icon_name {
             let image = gtk::Image::from_icon_name(icon_name);
             image.set_pixel_size(16);
             image.set_halign(gtk::Align::Center);
             image.set_valign(gtk::Align::Center);
             root.set_child(Some(&image));
-        } else if let Some(_pixmap) = &self.data.icon_pixmap {
+        } else if let Some(_pixmap) = &self.inner.icon_pixmap {
             // TODO: Implement pixmap icon rendering in Phase 4
             // For now, fallback to text
-            let label = gtk::Label::new(Some(&self.data.id.chars().take(2).collect::<String>()));
+            let label = gtk::Label::new(Some(&self.inner.id.chars().take(2).collect::<String>()));
             root.set_child(Some(&label));
         } else {
             // Fallback to text
-            let label = gtk::Label::new(Some(&self.data.id.chars().take(2).collect::<String>()));
+            let label = gtk::Label::new(Some(&self.inner.id.chars().take(2).collect::<String>()));
             root.set_child(Some(&label));
         }
 

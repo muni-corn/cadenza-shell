@@ -11,8 +11,10 @@ use crate::{
         network::NetworkService, niri::NiriService, pulseaudio::PulseAudioService,
         weather::WeatherService,
     },
-    tray::{TrayClient, TrayEvent, TrayItemOutput},
-    widgets::bar::{Bar, BarInit, BarMsg, BarOutput},
+    widgets::{
+        bar::{Bar, BarInit, BarMsg, BarOutput},
+        tray_item::{TrayClient, TrayEvent, TrayItemOutput},
+    },
 };
 
 pub(crate) struct CadenzaShellModel {

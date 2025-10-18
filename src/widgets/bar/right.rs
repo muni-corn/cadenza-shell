@@ -15,7 +15,7 @@ use crate::{
         pulseaudio::PulseAudioTile,
         tray::TrayWidget,
     },
-    tray::TrayItemOutput,
+    widgets::tray_item::TrayItemOutput,
 };
 
 #[derive(Debug)]
