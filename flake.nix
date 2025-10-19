@@ -188,10 +188,6 @@
 
           # formatting
           treefmt.programs = {
-            biome = {
-              enable = true;
-              settings = lib.importJSON ./biome.json;
-            };
             mdformat = {
               enable = true;
               package = pkgs.mdformat.withPlugins (
