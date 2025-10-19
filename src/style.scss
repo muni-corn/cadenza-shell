@@ -1,14 +1,14 @@
 @use 'sass:string';
 
-$warn-color: #ffaa00;
+$warn-color: #fa0;
 $dim-color: rgba(255, 255, 255, 0.5);
 
 .tile {
-  font-weight: normal;
-  background-color: transparent;
-  border-radius: 0;
-  box-shadow: none;
   min-width: 0;
+  border-radius: 0;
+  background-color: transparent;
+  box-shadow: none;
+  font-weight: normal;
 }
 
 button.tile:hover {
@@ -22,11 +22,10 @@ window {
 .bar {
   background-color: rgba(0, 0, 0, 0.5);
 
-  .bar-button,
-  menubutton.bar-button>button {
+  .bar-button, menubutton.bar-button > button {
     min-width: 0;
-    background-color: transparent;
     border-radius: 0;
+    background-color: transparent;
     box-shadow: none;
     font-weight: unset;
 
@@ -40,22 +39,18 @@ window {
   border-spacing: 40px;
 }
 
-.bright,
-.active,
-.primary {
+.bright, .active, .primary {
   color: rgba(255, 255, 255, 1.0);
 }
 
-.dim,
-.secondary {
+.dim, .secondary {
   color: $dim-color;
 }
 
 progressbar {
   background-color: transparent;
 
-  progress,
-  trough {
+  progress, trough {
     min-height: 2px;
     transition:
       min-width 500ms cubic-bezier(0.5, 0, 0, 1),
@@ -71,14 +66,12 @@ progressbar {
     }
 
     &.full progress {
-      background-color: #ffaa00;
+      background-color: #fa0;
     }
   }
 
   &.dim {
-
-    progress,
-    trough {
+    progress, trough {
       transition:
         min-width 500ms cubic-bezier(0.5, 0, 0, 1),
         background-color 1s cubic-bezier(0.5, 0, 0, 1);
@@ -95,15 +88,15 @@ progressbar {
       }
 
       &.full progress {
-        background-color: #ffaa00;
+        background-color: #fa0;
       }
     }
   }
 }
 
 .icon {
-  color: white;
   margin-right: 4px;
+  color: white;
 
   &.dim {
     color: $dim-color;
@@ -117,12 +110,12 @@ progressbar {
 }
 
 .alarm {
+  color: rgba(255, 0, 0, 1);
   animation-duration: 0.5s;
+  animation-timing-function: ease-in;
   animation-iteration-count: infinite;
   animation-direction: alternate;
-  animation-timing-function: ease-in;
   animation-name: alarm;
-  color: rgba(255, 0, 0, 1);
 }
 
 @keyframes alarm {
@@ -140,7 +133,7 @@ progressbar {
 }
 
 @function gtkalpha($c, $a) {
-  @return string.unquote("alpha(#{$c},#{$a})");
+  @return string.unquote('alpha(#{$c},#{$a})');
 }
 
 box.notification-card {
@@ -150,24 +143,24 @@ box.notification-card {
     box-shadow: none;
   }
 
-  &:first-child>box {
+  &:first-child > box {
     margin-top: 16px;
   }
 
-  &:last-child>box {
+  &:last-child > box {
     margin-bottom: 16px;
   }
 
-  >box {
+  > box {
     min-width: 400px;
+    margin: 8px 16px;
+    border: 2px solid gtkalpha(white, 0.25);
     border-radius: 12px;
     background-color: rgba(0, 0, 0, 0.5);
-    margin: 8px 16px;
     box-shadow: 0px 4px 8px gtkalpha(black, 0.5);
-    border: 2px solid gtkalpha(white, 0.25);
   }
 
-  &.critical>box {
+  &.critical > box {
     border: 2px solid $warn-color;
 
     .header {
@@ -198,15 +191,15 @@ box.notification-card {
     }
 
     .time {
-      margin-left: 16px;
       margin-right: 4px;
+      margin-left: 16px;
     }
 
     button {
-      padding: 8px;
-      margin-right: 4px;
       min-width: 0;
       min-height: 0;
+      margin-right: 4px;
+      padding: 8px;
       border-radius: 99px;
     }
   }
@@ -222,8 +215,8 @@ box.notification-card {
 
     .summary {
       margin-bottom: 4px;
-      font-weight: bold;
       color: white;
+      font-weight: bold;
     }
 
     .body {
@@ -231,12 +224,12 @@ box.notification-card {
     }
 
     .image {
-      margin-right: 16px;
-      border-radius: 12px;
       min-width: 48px;
       min-height: 48px;
-      background-size: cover;
+      margin-right: 16px;
+      border-radius: 12px;
       background-position: center;
+      background-size: cover;
     }
   }
 
@@ -261,11 +254,8 @@ box.notification-card {
   }
 }
 
-popover,
-popover.menu {
-
-  contents,
-  arrow {
+popover, popover.menu {
+  contents, arrow {
     background-color: rgba(0, 0, 0, 0.75);
   }
 }
@@ -275,9 +265,9 @@ revealer {
 }
 
 window.notification-center {
-  background-color: rgba(0, 0, 0, 0.75);
-  border-radius: 16px;
   padding: 16px 16px 0px 16px;
+  border-radius: 16px;
+  background-color: rgba(0, 0, 0, 0.75);
 
   .empty-state {
     margin-top: 20px;
@@ -286,35 +276,34 @@ window.notification-center {
 }
 
 .content-title {
-  font-weight: 700;
   margin-top: 32px;
+  font-weight: 700;
   font-size: 2em;
 }
 
 .section-title {
-  font-weight: 600;
   margin-top: 16px;
+  font-weight: 600;
   font-size: 1.25em;
 }
 
 calendar.view {
-  background-color: transparent;
   border: none;
+  background-color: transparent;
   font-size: 0.85em;
 
   // Calendar header (month/year navigation)
   header {
-    background-color: transparent;
     border: none;
+    background-color: transparent;
 
     button {
-      border-radius: 99px;
       min-width: 24px;
       min-height: 24px;
+      border-radius: 99px;
     }
 
-    .month,
-    .year {
+    .month, .year {
       font-weight: 500;
     }
   }
@@ -329,11 +318,11 @@ calendar.view {
 
     // Individual day cells
     .day-number {
-      background-color: transparent;
-      border: none;
-      border-radius: 99px;
       min-width: 24px;
       min-height: 24px;
+      border: none;
+      border-radius: 99px;
+      background-color: transparent;
 
       // Selected date
       &:selected {
@@ -358,8 +347,8 @@ calendar.view {
 }
 
 .big-clock {
-  font-size: 3em;
   font-weight: 900;
+  font-size: 3em;
 }
 
 .bold {
@@ -369,16 +358,16 @@ calendar.view {
 .access-point-frequency {
   font-weight: normal;
 }
-.workspace {
-  border-radius: 4px;
-  transition: all 0.25s cubic-bezier(0.5, 0, 0, 1);
 
-  background-color: rgba(255, 255, 255, 0.3);
+.workspace {
   min-width: 8px;
+  border-radius: 4px;
+  background-color: rgba(255, 255, 255, 0.3);
+  transition: all 0.25s cubic-bezier(0.5, 0, 0, 1);
 
   // niri workspace indicators
   &.active {
-    background-color: rgba(255, 255, 255, 0.8);
     min-width: 20px;
+    background-color: rgba(255, 255, 255, 0.8);
   }
 }
