@@ -59,7 +59,6 @@ impl WeatherService {
                     Ok(data) => {
                         sender.input(WeatherServiceMsg::Finish(data));
                         backoff = None;
-                        continue;
                     }
                     Err(e) => {
                         log::error!("weather fetch failed: {e:?}");
