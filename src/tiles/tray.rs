@@ -2,7 +2,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 use system_tray::data::BaseMap;
 
-use crate::widgets::tray_item::{TrayEvent, TrayItem, TrayItemOutput};
+use crate::widgets::tray_item::{TrayEvent, TrayItem, TrayItemInput, TrayItemOutput};
 
 #[derive(Debug)]
 pub struct TrayWidget {
@@ -120,28 +120,38 @@ impl SimpleAsyncComponent for TrayWidget {
                 }
                 TrayEvent::Update(address, update_event) => {
                     log::debug!("tray item {} updated: {:?}", address, update_event);
-                    // match update_event {
-                    //     UpdateEvent::AttentionIcon(_) => todo!(),
-                    //     UpdateEvent::Icon {
-                    //         icon_name,
-                    //         icon_pixmap,
-                    //     } => todo!(),
-                    //     UpdateEvent::OverlayIcon(_) => todo!(),
-                    //     UpdateEvent::Status(status) => todo!(),
-                    //     UpdateEvent::Title(_) => todo!(),
-                    //     UpdateEvent::Tooltip(tooltip) => todo!(),
-                    //     UpdateEvent::Menu(tray_menu) => todo!(),
-                    //     UpdateEvent::MenuDiff(menu_diffs) => todo!(),
-                    //     UpdateEvent::MenuConnect(_) => todo!(),
-                    // }
+                    let index_opt = self.items.iter().find_map(|o| {
+                        if let Some(item) = o
+                            && *item.address() == address
+                        {
+                            Some(item.index().current_index())
+                        } else {
+                            None
+                        }
+                    });
+
+                    if let Some(index_to_update) = index_opt {
+                        log::debug!("sending update to tray item at index {}", index_to_update);
+                        self.items
+                            .send(index_to_update, TrayItemInput::DataUpdate(update_event));
+                    } else {
+                        log::warn!("couldn't find tray item {} to send update", address);
+                    }
                 }
-                TrayEvent::Remove(name) => {
-                    let index_opt = self
-                        .items
-                        .iter()
-                        .position(|o| o.is_some_and(|i| *i.address() == name));
+                TrayEvent::Remove(address) => {
+                    let index_opt = self.items.iter().find_map(|o| {
+                        if let Some(item) = o
+                            && *item.address() == address
+                        {
+                            Some(item.index().current_index())
+                        } else {
+                            log::warn!("couldn't find tray item for {address}");
+                            None
+                        }
+                    });
 
                     if let Some(index) = index_opt {
+                        log::info!("removing tray item found for {address}");
                         self.items.guard().remove(index);
                     }
                 }
