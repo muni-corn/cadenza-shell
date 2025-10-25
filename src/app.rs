@@ -198,7 +198,6 @@ impl AsyncComponent for CadenzaShellModel {
                             });
                     }
                 }
-                TrayItemOutput::RequestMenu => todo!(),
             },
         }
     }

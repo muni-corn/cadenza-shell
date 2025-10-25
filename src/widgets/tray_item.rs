@@ -40,7 +40,6 @@ pub enum TrayItemInput {
 #[derive(Debug)]
 pub enum TrayItemOutput {
     Activate(ActivateRequest),
-    RequestMenu,
 }
 
 impl AsyncFactoryComponent for TrayItem {
