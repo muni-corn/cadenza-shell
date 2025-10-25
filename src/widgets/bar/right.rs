@@ -13,13 +13,15 @@ use crate::{
         network::NetworkTile,
         notifications::{NotificationsTile, NotificationsTileOutput},
         pulseaudio::PulseAudioTile,
-        tray::TrayWidget,
+        tray::{TrayMsg, TrayWidget},
     },
     widgets::tray_item::TrayItemOutput,
 };
 
 #[derive(Debug)]
-pub struct RightGroup;
+pub struct RightGroup {
+    tray: Option<AsyncController<TrayWidget>>,
+}
 
 #[derive(Debug)]
 pub struct RightWidgets {
@@ -30,7 +32,6 @@ pub struct RightWidgets {
     _network: Controller<NetworkTile>,
     _battery: Controller<BatteryTile>,
     _notifications: Controller<NotificationsTile>,
-    _tray: Option<AsyncController<TrayWidget>>,
 }
 
 pub struct RightGroupInit {
@@ -107,7 +108,7 @@ impl SimpleComponent for RightGroup {
         }
 
         ComponentParts {
-            model: RightGroup,
+            model: RightGroup { tray: tray_opt },
             widgets: RightWidgets {
                 _brightness: brightness,
                 _volume: volume,
@@ -115,8 +116,17 @@ impl SimpleComponent for RightGroup {
                 _network: network,
                 _battery: battery,
                 _notifications: notifications,
-                _tray: tray_opt,
             },
+        }
+    }
+
+    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
+        match message {
+            RightGroupMsg::TrayEvent(event) => {
+                if let Some(ref tray) = self.tray {
+                    tray.emit(TrayMsg::TrayEvent(event));
+                }
+            }
         }
     }
 }
