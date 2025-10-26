@@ -20,7 +20,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct RightGroup {
-    tray: Option<AsyncController<TrayWidget>>,
+    tray: Option<Controller<TrayWidget>>,
 }
 
 #[derive(Debug)]
