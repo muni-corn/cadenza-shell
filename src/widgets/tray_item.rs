@@ -30,6 +30,10 @@ impl TrayItem {
     pub fn index(&self) -> &DynamicIndex {
         &self.index
     }
+
+    pub fn replace_inner(&mut self, status_notifier_item: StatusNotifierItem) {
+        self.inner = status_notifier_item;
+    }
 }
 
 #[derive(Debug)]

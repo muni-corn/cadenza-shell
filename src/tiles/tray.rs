@@ -17,6 +17,19 @@ pub enum TrayMsg {
     TrayEvent(TrayEvent),
 }
 
+impl TrayWidget {
+    fn replace_item(&mut self, address: &str, content: StatusNotifierItem) {
+        if let Some(item) = self
+            .items
+            .guard()
+            .iter_mut()
+            .find(|item| *item.address() == address)
+        {
+            item.replace_inner(content)
+        }
+    }
+}
+
 #[relm4::component(pub, async)]
 impl SimpleAsyncComponent for TrayWidget {
     type Init = BaseMap;
