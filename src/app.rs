@@ -9,8 +9,8 @@ use crate::{
     services::{
         battery::BatteryService, brightness::BrightnessService, mpris::MprisService,
         network::NetworkService, niri::NiriService, pulseaudio::PulseAudioService,
-        weather::WeatherService,
     },
+    weather::start_weather_polling,
     widgets::{
         bar::{Bar, BarInit, BarMsg, BarOutput},
         tray_item::{TrayClient, TrayEvent, TrayItemOutput},
@@ -23,7 +23,6 @@ pub(crate) struct CadenzaShellModel {
 
     _display: Display,
     _battery_service: WorkerHandle<BatteryService>,
-    _weather_service: WorkerHandle<WeatherService>,
     _brightness_service: WorkerHandle<BrightnessService>,
     _pulseaudio_service: WorkerHandle<PulseAudioService>,
     _network_service: WorkerHandle<NetworkService>,
@@ -67,6 +66,13 @@ impl AsyncComponent for CadenzaShellModel {
             .ok()
             .map(|c| Arc::new(Mutex::new(c)));
 
+        // start weather watching
+        sender.command(|_, shutdown| {
+            shutdown
+                .register(start_weather_polling())
+                .drop_on_shutdown()
+        });
+
         if let Some(ref tray_client) = tray_client {
             let tray_client = Arc::clone(tray_client);
             sender.command(|out, shutdown| {
@@ -100,7 +106,6 @@ impl AsyncComponent for CadenzaShellModel {
 
             _display: display.clone(),
             _battery_service: BatteryService::builder().detach_worker(()),
-            _weather_service: WeatherService::builder().detach_worker(()),
             _brightness_service: BrightnessService::builder().detach_worker(()),
             _pulseaudio_service: PulseAudioService::builder().detach_worker(()),
             _network_service: NetworkService::builder().detach_worker(()),

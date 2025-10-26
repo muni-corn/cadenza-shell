@@ -2,7 +2,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    services::weather::WEATHER_STATE,
+    weather::WEATHER_STATE,
     widgets::tile::{Tile, TileMsg},
 };
 
