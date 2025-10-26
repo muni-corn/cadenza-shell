@@ -46,8 +46,9 @@ pub enum TrayItemOutput {
     Activate(ActivateRequest),
 }
 
-impl AsyncFactoryComponent for TrayItem {
+impl FactoryComponent for TrayItem {
     type CommandOutput = ();
+    type Index = DynamicIndex;
     type Init = (String, StatusNotifierItem, Option<TrayMenu>);
     type Input = TrayItemInput;
     type Output = TrayItemOutput;
@@ -55,14 +56,14 @@ impl AsyncFactoryComponent for TrayItem {
     type Root = gtk::Button;
     type Widgets = TrayItemWidgets;
 
-    fn init_root() -> Self::Root {
+    fn init_root(&self) -> Self::Root {
         gtk::Button::builder().build()
     }
 
-    async fn init_model(
+    fn init_model(
         (address, inner, menu): Self::Init,
         index: &DynamicIndex,
-        _sender: AsyncFactorySender<Self>,
+        _sender: FactorySender<Self>,
     ) -> Self {
         log::info!(
             "initializing tray item: address={}, has_menu={}",
@@ -78,7 +79,7 @@ impl AsyncFactoryComponent for TrayItem {
         }
     }
 
-    async fn update(&mut self, message: Self::Input, _sender: AsyncFactorySender<Self>) {
+    fn update(&mut self, message: Self::Input, _sender: FactorySender<Self>) {
         match message {
             TrayItemInput::DataUpdate(update_event) => match update_event {
                 UpdateEvent::AttentionIcon(attention_icon_name) => {
@@ -121,7 +122,7 @@ impl AsyncFactoryComponent for TrayItem {
         _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        sender: AsyncFactorySender<Self>,
+        sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let (menu_model, action_group) = if let Some(ref menu) = self.menu
             && let Some(ref menu_path) = self.inner.menu
@@ -225,7 +226,7 @@ impl AsyncFactoryComponent for TrayItem {
         }
     }
 
-    fn update_view(&self, widgets: &mut Self::Widgets, sender: AsyncFactorySender<Self>) {
+    fn update_view(&self, widgets: &mut Self::Widgets, sender: FactorySender<Self>) {
         if let Some(ref menu) = self.menu
             && let Some(ref menu_path) = self.inner.menu
         {
@@ -258,7 +259,7 @@ impl AsyncFactoryComponent for TrayItem {
 trait AsMenuWithActions {
     fn as_menu_with_actions(
         &self,
-        sender: &AsyncFactorySender<TrayItem>,
+        sender: &FactorySender<TrayItem>,
         address: &str,
         menu_path: &str,
     ) -> (gio::Menu, gio::SimpleActionGroup);
@@ -267,7 +268,7 @@ trait AsMenuWithActions {
 impl AsMenuWithActions for TrayMenu {
     fn as_menu_with_actions(
         &self,
-        sender: &AsyncFactorySender<TrayItem>,
+        sender: &FactorySender<TrayItem>,
         address: &str,
         menu_path: &str,
     ) -> (gio::Menu, gio::SimpleActionGroup) {
@@ -285,7 +286,7 @@ fn clean_menu_label(label: &str) -> String {
 
 fn create_menu_from_items(
     items: &[MenuItem],
-    sender: &AsyncFactorySender<TrayItem>,
+    sender: &FactorySender<TrayItem>,
     address: &str,
     menu_path: &str,
 ) -> (gio::Menu, gio::SimpleActionGroup) {

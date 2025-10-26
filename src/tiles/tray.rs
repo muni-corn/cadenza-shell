@@ -1,12 +1,12 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
-use system_tray::data::BaseMap;
+use system_tray::{data::BaseMap, item::StatusNotifierItem};
 
 use crate::widgets::tray_item::{TrayEvent, TrayItem, TrayItemInput, TrayItemOutput};
 
 #[derive(Debug)]
 pub struct TrayWidget {
-    items: AsyncFactoryVecDeque<TrayItem>,
+    items: FactoryVecDeque<TrayItem>,
     visible: bool,
     expanded: bool,
 }
@@ -30,8 +30,8 @@ impl TrayWidget {
     }
 }
 
-#[relm4::component(pub, async)]
-impl SimpleAsyncComponent for TrayWidget {
+#[relm4::component(pub)]
+impl SimpleComponent for TrayWidget {
     type Init = BaseMap;
     type Input = TrayMsg;
     type Output = TrayItemOutput;
@@ -95,13 +95,13 @@ impl SimpleAsyncComponent for TrayWidget {
         }
     }
 
-    async fn init(
+    fn init(
         current_tray_items: Self::Init,
         _root: Self::Root,
-        sender: AsyncComponentSender<Self>,
-    ) -> AsyncComponentParts<Self> {
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
         let mut model = TrayWidget {
-            items: AsyncFactoryVecDeque::builder()
+            items: FactoryVecDeque::builder()
                 .launch(gtk::Box::default())
                 .forward(sender.output_sender(), |output| output),
             visible: true,
@@ -118,30 +118,31 @@ impl SimpleAsyncComponent for TrayWidget {
         let items_box = model.items.widget();
         let widgets = view_output!();
 
-        AsyncComponentParts { model, widgets }
+        ComponentParts { model, widgets }
     }
 
-    async fn update(&mut self, msg: Self::Input, _sender: AsyncComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
             TrayMsg::ToggleExpanded => self.expanded = !self.expanded,
             TrayMsg::TrayEvent(event) => match event {
                 TrayEvent::Add(address, status_notifier_item) => {
-                    // TODO: get TrayMenu here
-                    self.items
-                        .guard()
-                        .push_back((address, *status_notifier_item, None));
+                    let already_exists = self.items.iter().any(|i| *i.address() == address);
+
+                    if already_exists {
+                        self.replace_item(&address, *status_notifier_item);
+                    } else {
+                        self.items
+                            .guard()
+                            .push_back((address, *status_notifier_item, None));
+                    }
                 }
                 TrayEvent::Update(address, update_event) => {
                     log::debug!("tray item {} updated: {:?}", address, update_event);
-                    let index_opt = self.items.iter().find_map(|o| {
-                        if let Some(item) = o
-                            && *item.address() == address
-                        {
-                            Some(item.index().current_index())
-                        } else {
-                            None
-                        }
-                    });
+                    let index_opt = self
+                        .items
+                        .iter()
+                        .find(|item| *item.address() == address)
+                        .map(|item| item.index().current_index());
 
                     if let Some(index_to_update) = index_opt {
                         log::debug!("sending update to tray item at index {}", index_to_update);
@@ -152,20 +153,17 @@ impl SimpleAsyncComponent for TrayWidget {
                     }
                 }
                 TrayEvent::Remove(address) => {
-                    let index_opt = self.items.iter().find_map(|o| {
-                        if let Some(item) = o
-                            && *item.address() == address
-                        {
-                            Some(item.index().current_index())
-                        } else {
-                            log::warn!("couldn't find tray item for {address}");
-                            None
-                        }
-                    });
+                    let index_opt = self
+                        .items
+                        .iter()
+                        .find(|item| *item.address() == address)
+                        .map(|item| item.index().current_index());
 
                     if let Some(index) = index_opt {
                         log::info!("removing tray item found for {address}");
                         self.items.guard().remove(index);
+                    } else {
+                        log::warn!("couldn't find tray item for {address}");
                     }
                 }
             },
