@@ -33,11 +33,6 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-
-    ags = {
-      url = "github:aylur/ags";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
   };
 
   outputs =
@@ -61,9 +56,7 @@
       perSystem =
         {
           config,
-          lib,
           pkgs,
-          system,
           ...
         }:
         let
@@ -230,52 +223,7 @@
             taplo.enable = true;
           };
 
-          # Legacy TypeScript build (for compatibility)
-          packages = {
-            typescript = pkgs.stdenv.mkDerivation {
-              name = "${pname}-typescript";
-              src = ./.;
-
-              nativeBuildInputs = with pkgs; [
-                gobject-introspection
-                inputs.ags.packages.${system}.default
-              ];
-
-              buildInputs = (
-                with inputs.ags.packages.${system};
-                [
-                  astal4
-                  battery
-                  bluetooth
-                  hyprland
-                  io
-                  mpris
-                  network
-                  notifd
-                  tray
-                  wireplumber
-
-                  pkgs.libadwaita
-                  pkgs.libsoup_3
-                  pkgs.gjs
-                ]
-              );
-
-              installPhase = ''
-                runHook preInstall
-
-                mkdir -p $out/bin
-                mkdir -p $out/share
-                cp -r * $out/share
-                ags bundle src/app.ts $out/bin/${pname} -d "SRC='$out/share'"
-
-                runHook postInstall
-              '';
-            };
-
-            # set the rust build as default
-            default = config.rust-project.crates.${pname}.crane.outputs.packages.${pname};
-          };
+          packages.default = config.rust-project.crates.${pname}.crane.outputs.packages.${pname};
         };
     };
 }
