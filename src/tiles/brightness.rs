@@ -38,6 +38,10 @@ impl SimpleComponent for BrightnessTile {
 
         let model = BrightnessTile { progress_tile };
 
+        // inits the tile in case it missed the initialization from the
+        // BrightnessService
+        sender.input(());
+
         ComponentParts {
             model,
             widgets: root,
