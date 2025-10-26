@@ -1,10 +1,11 @@
+use gdk4::prelude::*;
 use gtk4::prelude::*;
 use relm4::{factory::FactoryView, prelude::*};
 pub(crate) use system_tray::client::{Client as TrayClient, Event as TrayEvent};
 use system_tray::{
     client::{ActivateRequest, UpdateEvent},
     data::apply_menu_diffs,
-    item::{Status, StatusNotifierItem},
+    item::{IconPixmap, Status, StatusNotifierItem},
     menu::{MenuItem, MenuType, TrayMenu},
 };
 
@@ -175,13 +176,19 @@ impl FactoryComponent for TrayItem {
             image.set_halign(gtk::Align::Center);
             image.set_valign(gtk::Align::Center);
             root.set_child(Some(&image));
-        } else if let Some(_pixmap) = &self.inner.icon_pixmap {
-            // TODO: Implement pixmap icon rendering in Phase 4
-            // For now, fallback to text
-            let label = gtk::Label::new(Some(&self.inner.id.chars().take(2).collect::<String>()));
-            root.set_child(Some(&label));
+        } else if let Some(pixmaps) = &self.inner.icon_pixmap {
+            if let Some(texture) = pixmap_to_texture(pixmaps) {
+                let image = gtk::Image::from_paintable(Some(&texture));
+                image.set_pixel_size(16);
+                image.set_halign(gtk::Align::Center);
+                image.set_valign(gtk::Align::Center);
+                root.set_child(Some(&image));
+            } else {
+                let label =
+                    gtk::Label::new(Some(&self.inner.id.chars().take(2).collect::<String>()));
+                root.set_child(Some(&label));
+            }
         } else {
-            // Fallback to text
             let label = gtk::Label::new(Some(&self.inner.id.chars().take(2).collect::<String>()));
             root.set_child(Some(&label));
         }
@@ -368,4 +375,50 @@ fn create_menu_from_items(
     }
 
     (menu, action_group)
+}
+
+fn pixmap_to_texture(pixmaps: &[IconPixmap]) -> Option<gdk4::Texture> {
+    let pixmap = pixmaps.first()?;
+
+    if pixmap.width <= 0 || pixmap.height <= 0 {
+        return None;
+    }
+
+    let width = pixmap.width as usize;
+    let height = pixmap.height as usize;
+    let expected_len = width * height * 4;
+
+    if pixmap.pixels.len() != expected_len {
+        log::warn!(
+            "pixmap size mismatch: expected {} bytes, got {}",
+            expected_len,
+            pixmap.pixels.len()
+        );
+        return None;
+    }
+
+    let mut rgba_data = Vec::with_capacity(expected_len);
+
+    for chunk in pixmap.pixels.chunks_exact(4) {
+        let a = chunk[0];
+        let r = chunk[1];
+        let g = chunk[2];
+        let b = chunk[3];
+
+        rgba_data.push(r);
+        rgba_data.push(g);
+        rgba_data.push(b);
+        rgba_data.push(a);
+    }
+
+    let bytes = glib::Bytes::from_owned(rgba_data);
+    let texture = gdk4::MemoryTexture::new(
+        pixmap.width,
+        pixmap.height,
+        gdk4::MemoryFormat::R8g8b8a8,
+        &bytes,
+        (pixmap.width * 4) as usize,
+    );
+
+    Some(texture.upcast())
 }
