@@ -39,7 +39,7 @@ impl SimpleComponent for NiriTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        NIRI_STATE.subscribe(sender.input_sender(), |state| NiriMsg::Update);
+        NIRI_STATE.subscribe(sender.input_sender(), |_| NiriMsg::Update);
 
         root.set_spacing(init.bar_config.tile_spacing);
 

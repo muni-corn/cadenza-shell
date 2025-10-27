@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 use crate::{
     services::{
         battery::BatteryService, brightness::BrightnessService, mpris::MprisService,
-        network::NetworkService, niri::NiriService, pulseaudio::PulseAudioService,
+        network::NetworkService, niri, pulseaudio::PulseAudioService,
     },
     weather::start_weather_polling,
     widgets::{
@@ -26,7 +26,6 @@ pub(crate) struct CadenzaShellModel {
     _brightness_service: WorkerHandle<BrightnessService>,
     _pulseaudio_service: WorkerHandle<PulseAudioService>,
     _network_service: WorkerHandle<NetworkService>,
-    _niri_service: WorkerHandle<NiriService>,
     _mpris_service: WorkerHandle<MprisService>,
 }
 
@@ -73,6 +72,13 @@ impl AsyncComponent for CadenzaShellModel {
                 .drop_on_shutdown()
         });
 
+        // start niri event watching
+        sender.command(|_, shutdown| {
+            shutdown
+                .register(niri::start_event_listener())
+                .drop_on_shutdown()
+        });
+
         if let Some(ref tray_client) = tray_client {
             let tray_client = Arc::clone(tray_client);
             sender.command(|out, shutdown| {
@@ -109,7 +115,6 @@ impl AsyncComponent for CadenzaShellModel {
             _brightness_service: BrightnessService::builder().detach_worker(()),
             _pulseaudio_service: PulseAudioService::builder().detach_worker(()),
             _network_service: NetworkService::builder().detach_worker(()),
-            _niri_service: NiriService::builder().detach_worker(()),
             _mpris_service: MprisService::builder().detach_worker(()),
         };
 
