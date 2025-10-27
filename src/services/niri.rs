@@ -33,6 +33,7 @@ async fn fetch_and_update(socket_path: &str) -> anyhow::Result<()> {
         && let Ok(Response::Workspaces(ws)) = reply
     {
         workspaces = ws;
+        workspaces.sort_by_cached_key(|w| w.id);
     }
 
     let mut focused_window_title = String::new();
