@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     services::{
-        battery::BatteryService, brightness::BrightnessService, mpris::MprisService,
+        battery::start_battery_watcher, brightness::BrightnessService, mpris::MprisService,
         network::NetworkService, niri, pulseaudio::PulseAudioService,
     },
     weather::start_weather_polling,
@@ -22,7 +22,6 @@ pub(crate) struct CadenzaShellModel {
     tray_client: Option<Arc<Mutex<TrayClient>>>,
 
     _display: Display,
-    _battery_service: WorkerHandle<BatteryService>,
     _brightness_service: WorkerHandle<BrightnessService>,
     _pulseaudio_service: WorkerHandle<PulseAudioService>,
     _network_service: WorkerHandle<NetworkService>,
@@ -64,6 +63,13 @@ impl AsyncComponent for CadenzaShellModel {
             .inspect_err(|e| log::error!("couldn't setup tray client: {}", e))
             .ok()
             .map(|c| Arc::new(Mutex::new(c)));
+
+        // start battery watching
+        sender.command(|_, shutdown| {
+            shutdown
+                .register(start_battery_watcher())
+                .drop_on_shutdown()
+        });
 
         // start weather watching
         sender.command(|_, shutdown| {
@@ -111,7 +117,6 @@ impl AsyncComponent for CadenzaShellModel {
             tray_client,
 
             _display: display.clone(),
-            _battery_service: BatteryService::builder().detach_worker(()),
             _brightness_service: BrightnessService::builder().detach_worker(()),
             _pulseaudio_service: PulseAudioService::builder().detach_worker(()),
             _network_service: NetworkService::builder().detach_worker(()),
