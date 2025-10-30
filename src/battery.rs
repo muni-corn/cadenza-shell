@@ -38,54 +38,52 @@ pub async fn start_battery_watcher() {
         time_remaining,
     });
 
-    relm4::spawn(async move {
-        let (tx, rx) = mpsc::channel();
+    let (tx, rx) = mpsc::channel();
 
-        // watch only the status file for instant updates
-        let mut watcher = match notify::recommended_watcher(tx) {
-            Ok(watcher) => watcher,
-            Err(e) => {
-                log::error!("couldn't create battery watcher: {}", e);
-                return;
-            }
-        };
-
-        // Watch status file for charging state changes
-        let status_path = format!("/sys/class/power_supply/{}/status", battery_interface);
-
-        if let Err(e) = watcher.watch(Path::new(&status_path), RecursiveMode::NonRecursive) {
-            log::error!("couldn't set up watcher for {}: {}", status_path, e);
+    // watch only the status file for instant updates
+    let mut watcher = match notify::recommended_watcher(tx) {
+        Ok(watcher) => watcher,
+        Err(e) => {
+            log::error!("couldn't create battery watcher: {}", e);
             return;
         }
+    };
 
-        let mut has_watcher = true;
-        loop {
-            // waits on file changes, or polls every 30 seconds
-            if has_watcher
-                && let Err(mpsc::RecvTimeoutError::Disconnected) =
-                    rx.recv_timeout(Duration::from_secs(30))
-            {
-                log::error!("battery status watcher has died");
-                has_watcher = false;
-            } else {
-                // just poll every 30 seconds without a watcher
-                tokio::time::sleep(Duration::from_secs(30)).await
+    // Watch status file for charging state changes
+    let status_path = format!("/sys/class/power_supply/{}/status", battery_interface);
+
+    if let Err(e) = watcher.watch(Path::new(&status_path), RecursiveMode::NonRecursive) {
+        log::error!("couldn't set up watcher for {}: {}", status_path, e);
+        return;
+    }
+
+    let mut has_watcher = true;
+    loop {
+        // waits on file changes, or polls every 30 seconds
+        if has_watcher
+            && let Err(mpsc::RecvTimeoutError::Disconnected) =
+                rx.recv_timeout(Duration::from_secs(30))
+        {
+            log::error!("battery status watcher has died");
+            has_watcher = false;
+        } else {
+            // just poll every 30 seconds without a watcher
+            tokio::time::sleep(Duration::from_secs(30)).await
+        }
+
+        match read_battery_state(&system) {
+            Ok((percentage, charging, time_remaining)) => {
+                *BATTERY_STATE.write() = Some(BatteryState {
+                    percentage,
+                    charging,
+                    time_remaining,
+                });
             }
-
-            match read_battery_state(&system) {
-                Ok((percentage, charging, time_remaining)) => {
-                    *BATTERY_STATE.write() = Some(BatteryState {
-                        percentage,
-                        charging,
-                        time_remaining,
-                    });
-                }
-                Err(e) => {
-                    log::error!("couldn't read battery state: {}", e);
-                }
+            Err(e) => {
+                log::error!("couldn't read battery state: {}", e);
             }
         }
-    });
+    }
 }
 
 /// Detect the battery interface by scanning /sys/class/power_supply/ for
