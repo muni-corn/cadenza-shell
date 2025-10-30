@@ -22,7 +22,7 @@ pub struct BatteryTile {
 
 #[derive(Debug)]
 pub enum BatteryMsg {
-    StateUpdate(BatteryState),
+    StateUpdate(Option<BatteryState>),
 }
 
 #[derive(Debug)]
@@ -64,23 +64,19 @@ impl SimpleComponent for BatteryTile {
         }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
-        match msg {
-            BatteryMsg::StateUpdate(m) => match m {
-                BatteryState::Available {
-                    percentage,
-                    charging,
-                    time_remaining,
-                } => {
-                    self.current_percentage = percentage;
-                    self.charging = charging;
-                    self.time_remaining = time_remaining;
-                    self.available = true;
-                }
-                BatteryState::Unavailable => {
-                    self.available = false;
-                }
-            },
+    fn update(&mut self, BatteryMsg::StateUpdate(o): Self::Input, _sender: ComponentSender<Self>) {
+        if let Some(BatteryState {
+            percentage,
+            charging,
+            time_remaining,
+        }) = o
+        {
+            self.current_percentage = percentage;
+            self.charging = charging;
+            self.time_remaining = time_remaining;
+            self.available = true;
+        } else {
+            self.available = false;
         }
     }
 
