@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     services::{
-        battery::start_battery_watcher, brightness::BrightnessService, mpris::MprisService,
+        battery::start_battery_watcher, brightness::start_brightness_watcher, mpris::MprisService,
         network::NetworkService, niri, pulseaudio::PulseAudioService,
     },
     weather::start_weather_polling,
@@ -22,7 +22,6 @@ pub(crate) struct CadenzaShellModel {
     tray_client: Option<Arc<Mutex<TrayClient>>>,
 
     _display: Display,
-    _brightness_service: WorkerHandle<BrightnessService>,
     _pulseaudio_service: WorkerHandle<PulseAudioService>,
     _network_service: WorkerHandle<NetworkService>,
     _mpris_service: WorkerHandle<MprisService>,
@@ -68,6 +67,13 @@ impl AsyncComponent for CadenzaShellModel {
         sender.command(|_, shutdown| {
             shutdown
                 .register(start_battery_watcher())
+                .drop_on_shutdown()
+        });
+
+        // start brightness watching
+        sender.command(|_, shutdown| {
+            shutdown
+                .register(start_brightness_watcher())
                 .drop_on_shutdown()
         });
 
@@ -117,7 +123,6 @@ impl AsyncComponent for CadenzaShellModel {
             tray_client,
 
             _display: display.clone(),
-            _brightness_service: BrightnessService::builder().detach_worker(()),
             _pulseaudio_service: PulseAudioService::builder().detach_worker(()),
             _network_service: NetworkService::builder().detach_worker(()),
             _mpris_service: MprisService::builder().detach_worker(()),

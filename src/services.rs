@@ -3,7 +3,6 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 
 pub mod bluetooth;
-pub mod brightness;
 pub mod hyprland;
 pub mod mpris;
 pub mod network;
