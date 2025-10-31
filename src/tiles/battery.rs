@@ -4,8 +4,8 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
+    battery::{BATTERY_STATE, BatteryState},
     icon_names::{BATTERY_CHARGE_REGULAR, BATTERY_CHECKMARK_REGULAR},
-    services::battery::{BATTERY_STATE, BatteryState},
     tiles::Attention,
     utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Tile, TileMsg},

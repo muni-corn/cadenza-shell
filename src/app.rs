@@ -6,10 +6,9 @@ use relm4::{WorkerHandle, prelude::*};
 use tokio::sync::Mutex;
 
 use crate::{
-    services::{
-        battery::start_battery_watcher, brightness::start_brightness_watcher, mpris::MprisService,
-        network::NetworkService, niri, pulseaudio::PulseAudioService,
-    },
+    battery::start_battery_watcher,
+    brightness::start_brightness_watcher,
+    services::{mpris::MprisService, network::NetworkService, niri, pulseaudio::PulseAudioService},
     weather::start_weather_polling,
     widgets::{
         bar::{Bar, BarInit, BarMsg, BarOutput},

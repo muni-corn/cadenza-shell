@@ -2,6 +2,8 @@
 
 mod analog_clock;
 mod app;
+mod battery;
+mod brightness;
 mod commands;
 mod network;
 mod notifications;
