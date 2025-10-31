@@ -129,9 +129,14 @@ impl SimpleComponent for NiriTile {
         widgets.root.set_visible(true);
 
         // update window title
-        widgets
-            .window_title_label
-            .set_text(&state.focused_window_title);
+        if self.monitor_connector_name == Some(state.focused_output) {
+            widgets.window_title_label.set_visible(true);
+            widgets
+                .window_title_label
+                .set_text(&state.focused_window_title);
+        } else {
+            widgets.window_title_label.set_visible(false);
+        };
     }
 
     fn init_root() -> Self::Root {

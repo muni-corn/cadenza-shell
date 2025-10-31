@@ -11,6 +11,7 @@ pub static NIRI_STATE: SharedState<Option<NiriState>> = SharedState::new();
 pub struct NiriState {
     pub workspaces: Vec<NiriWorkspace>,
     pub focused_window_title: String,
+    pub focused_output: String,
 }
 
 async fn send_request(socket_path: &str, request: Request) -> anyhow::Result<Reply> {
@@ -46,9 +47,16 @@ async fn fetch_and_update(socket_path: &str) -> anyhow::Result<()> {
             Default::default()
         };
 
+    let focused_output = workspaces
+        .iter()
+        .find(|ws| ws.is_focused)
+        .and_then(|ws| ws.output.to_owned())
+        .unwrap_or_default();
+
     *NIRI_STATE.write() = Some(NiriState {
         workspaces,
         focused_window_title,
+        focused_output,
     });
 
     Ok(())
