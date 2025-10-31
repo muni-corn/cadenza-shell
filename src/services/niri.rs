@@ -28,20 +28,23 @@ async fn send_request(socket_path: &str, request: Request) -> anyhow::Result<Rep
 }
 
 async fn fetch_and_update(socket_path: &str) -> anyhow::Result<()> {
-    let mut workspaces: Vec<NiriWorkspace> = Vec::new();
-    if let Ok(reply) = send_request(socket_path, Request::Workspaces).await
-        && let Ok(Response::Workspaces(ws)) = reply
+    let workspaces = if let Ok(reply) = send_request(socket_path, Request::Workspaces).await
+        && let Ok(Response::Workspaces(mut ws)) = reply
     {
-        workspaces = ws;
-        workspaces.sort_by_cached_key(|w| w.id);
-    }
+        ws.sort_by_cached_key(|w| w.id);
+        ws
+    } else {
+        Vec::new()
+    };
 
-    let mut focused_window_title = String::new();
-    if let Ok(reply) = send_request(socket_path, Request::FocusedWindow).await
-        && let Ok(Response::FocusedWindow(Some(NiriWindow { title, .. }))) = reply
-    {
-        focused_window_title = title.unwrap_or_default();
-    }
+    let focused_window_title =
+        if let Ok(Ok(Response::FocusedWindow(Some(NiriWindow { title, .. })))) =
+            send_request(socket_path, Request::FocusedWindow).await
+        {
+            title.unwrap_or_default()
+        } else {
+            Default::default()
+        };
 
     *NIRI_STATE.write() = Some(NiriState {
         workspaces,
