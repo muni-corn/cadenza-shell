@@ -54,8 +54,6 @@ impl SimpleComponent for TrayWidget {
                 #[local_ref]
                 items_box -> gtk::Box {
                     set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 2,
-                    set_margin_end: 4,
                 }
             },
 
@@ -69,26 +67,12 @@ impl SimpleComponent for TrayWidget {
 
                 gtk::Box {
                     set_orientation: gtk::Orientation::Horizontal,
-                    set_spacing: 8,
                     set_halign: gtk::Align::Center,
 
                     gtk::Label {
                         #[watch]
                         set_label: if model.expanded { "󰅂" } else { "󰅁" }, // Arrow icons
                         add_css_class: "tile-icon",
-                    },
-
-                    gtk::Label {
-                        #[watch]
-                        set_text: &if !model.items.is_empty() {
-                            model.items.len().to_string()
-                        } else {
-                            "".to_string()
-                        },
-                        #[watch]
-                        set_visible: !model.items.is_empty(),
-                        add_css_class: "tile-text",
-                        add_css_class: "tray-count",
                     },
                 }
             }
@@ -105,7 +89,7 @@ impl SimpleComponent for TrayWidget {
                 .launch(gtk::Box::default())
                 .forward(sender.output_sender(), |output| output),
             visible: true,
-            expanded: true,
+            expanded: false,
         };
 
         for (address, (item, menu)) in current_tray_items.iter() {
