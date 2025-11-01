@@ -23,7 +23,9 @@ niri-ipc = "25.8.0"
 notify = "8"
 pango = "0.21"
 pulse = { version = "2.30", package = "libpulse-binding" }
-relm4 = { version = "0.10", features = ["macros"] }
+relm4 = { git = "https://github.com/muni-corn/relm4", branch = "async-reducible", features = [
+  "macros",
+] }
 relm4-components = "0.10"
 relm4-icons = { git = "https://github.com/muni-corn/relm4-icons", branch = "more-fluent-icons" }
 reqwest = { version = "0.12", default-features = false, features = [

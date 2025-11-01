@@ -258,7 +258,7 @@ dependencies = [
  "niri-ipc",
  "notify",
  "pango",
- "relm4",
+ "relm4 0.10.0 (git+https://github.com/muni-corn/relm4?branch=async-reducible)",
  "relm4-components",
  "relm4-icons",
  "relm4-icons-build",
@@ -2194,8 +2194,24 @@ dependencies = [
  "futures",
  "gtk4",
  "once_cell",
- "relm4-css",
- "relm4-macros",
+ "relm4-css 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "relm4-macros 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
+name = "relm4"
+version = "0.10.0"
+source = "git+https://github.com/muni-corn/relm4?branch=async-reducible#1480ea43719ec65d532f1df60b97f297f80eaaa0"
+dependencies = [
+ "flume",
+ "fragile",
+ "futures",
+ "gtk4",
+ "once_cell",
+ "relm4-css 0.10.0 (git+https://github.com/muni-corn/relm4?branch=async-reducible)",
+ "relm4-macros 0.10.0 (git+https://github.com/muni-corn/relm4?branch=async-reducible)",
  "tokio",
  "tracing",
 ]
@@ -2207,7 +2223,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3155d84425d33cdc62929ed2c79bfcfdcb2fff6340c5f7041ed24b56577c9d57"
 dependencies = [
  "once_cell",
- "relm4",
+ "relm4 0.10.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "tracker",
 ]
 
@@ -2216,6 +2232,11 @@ name = "relm4-css"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "37dbe7a114855a22618f0e13595ce6b3f165478c13c2dfc4f4f99614da105797"
+
+[[package]]
+name = "relm4-css"
+version = "0.10.0"
+source = "git+https://github.com/muni-corn/relm4?branch=async-reducible#1480ea43719ec65d532f1df60b97f297f80eaaa0"
 
 [[package]]
 name = "relm4-icons"
@@ -2241,6 +2262,16 @@ name = "relm4-macros"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "175fce497fc6f11dde7ea56daa30ff7ad29a534bbc209d59d766659c880ba5f1"
+dependencies = [
+ "proc-macro2",
+ "quote 1.0.40",
+ "syn 2.0.106",
+]
+
+[[package]]
+name = "relm4-macros"
+version = "0.10.0"
+source = "git+https://github.com/muni-corn/relm4?branch=async-reducible#1480ea43719ec65d532f1df60b97f297f80eaaa0"
 dependencies = [
  "proc-macro2",
  "quote 1.0.40",
