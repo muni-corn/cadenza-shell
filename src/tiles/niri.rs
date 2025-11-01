@@ -5,7 +5,7 @@ use gtk4::prelude::*;
 use niri_ipc::Workspace;
 use relm4::prelude::*;
 
-use crate::{services::niri::NIRI_STATE, settings::BarConfig};
+use crate::{niri::NIRI_STATE, settings::BarConfig};
 
 pub struct NiriInit {
     pub bar_config: BarConfig,
