@@ -237,7 +237,7 @@ impl FactoryComponent for TrayItem {
         if let Some(ref menu) = self.menu
             && let Some(ref menu_path) = self.inner.menu
         {
-            log::info!(
+            log::debug!(
                 "updating menu view for '{}': menu_path='{}'",
                 self.address,
                 menu_path
