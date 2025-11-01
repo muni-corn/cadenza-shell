@@ -6,6 +6,7 @@ mod battery;
 mod brightness;
 mod commands;
 mod network;
+mod niri;
 mod notifications;
 mod services;
 mod settings;
