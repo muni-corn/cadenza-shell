@@ -1,16 +1,15 @@
 use gtk4::prelude::*;
-use relm4::{WorkerController, prelude::*};
+use relm4::prelude::*;
 
 use crate::{
+    bluetooth::{BLUETOOTH_REDUCER, BluetoothState},
     icon_names::{BLUETOOTH_CONNECTED_REGULAR, BLUETOOTH_DISABLED_REGULAR, BLUETOOTH_REGULAR},
-    services::bluetooth::{BluetoothInfo, BluetoothService, BluetoothWorkerOutput},
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
 
 #[derive(Debug)]
 pub struct BluetoothTile {
-    bluetooth_info: BluetoothInfo,
-    _worker: WorkerController<BluetoothService>,
+    bluetooth_info: Option<BluetoothState>,
 }
 
 #[derive(Debug)]
@@ -21,7 +20,7 @@ pub struct BluetoothWidgets {
 
 impl SimpleComponent for BluetoothTile {
     type Init = ();
-    type Input = BluetoothInfo;
+    type Input = BluetoothState;
     type Output = TileOutput;
     type Root = gtk::Box;
     type Widgets = BluetoothWidgets;
@@ -31,37 +30,34 @@ impl SimpleComponent for BluetoothTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // Initialize the Tile component
+        BLUETOOTH_REDUCER.subscribe_optional(sender.input_sender(), |info| info.state().cloned());
+
+        // initialize the tile component
         let tile = Tile::builder().launch(Default::default()).detach();
 
         root.append(tile.widget());
 
-        // Start Bluetooth service worker
-        let bluetooth_worker = BluetoothService::builder().detach_worker(()).forward(
-            sender.input_sender(),
-            |output| match output {
-                BluetoothWorkerOutput::StateChanged(info) => info,
-            },
-        );
-
-        let model = BluetoothTile {
-            bluetooth_info: BluetoothInfo::default(),
-            _worker: bluetooth_worker,
-        };
-
         ComponentParts {
-            model,
+            model: Self {
+                bluetooth_info: None,
+            },
             widgets: BluetoothWidgets { root, tile },
         }
     }
 
     fn update(&mut self, info: Self::Input, _sender: ComponentSender<Self>) {
-        self.bluetooth_info = info;
+        self.bluetooth_info = Some(info);
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        widgets.root.set_visible(self.bluetooth_info.available);
-        widgets.tile.emit(TileMsg::SetIcon(Some(self.get_icon())));
+        if let Some(ref state) = self.bluetooth_info {
+            widgets.root.set_visible(true);
+            widgets
+                .tile
+                .emit(TileMsg::SetIcon(Some(get_bluetooth_icon(state))));
+        } else {
+            widgets.root.set_visible(false);
+        }
     }
 
     fn init_root() -> Self::Root {
@@ -69,19 +65,15 @@ impl SimpleComponent for BluetoothTile {
     }
 }
 
-impl BluetoothTile {
-    fn get_icon(&self) -> String {
-        if !self.bluetooth_info.available {
-            BLUETOOTH_DISABLED_REGULAR
-        } else if self.bluetooth_info.enabled {
-            if self.bluetooth_info.connected_devices > 0 {
-                BLUETOOTH_CONNECTED_REGULAR
-            } else {
-                BLUETOOTH_REGULAR
-            }
+fn get_bluetooth_icon(state: &BluetoothState) -> String {
+    if state.powered {
+        if state.connected_device_count > 0 {
+            BLUETOOTH_CONNECTED_REGULAR
         } else {
-            BLUETOOTH_DISABLED_REGULAR
+            BLUETOOTH_REGULAR
         }
-        .to_string()
+    } else {
+        BLUETOOTH_DISABLED_REGULAR
     }
+    .to_string()
 }

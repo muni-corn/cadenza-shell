@@ -1,4 +1,3 @@
-pub mod bluetooth;
 pub mod hyprland;
 pub mod mpris;
 pub mod network;

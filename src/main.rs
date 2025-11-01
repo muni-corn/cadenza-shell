@@ -3,6 +3,7 @@
 mod analog_clock;
 mod app;
 mod battery;
+mod bluetooth;
 mod brightness;
 mod commands;
 mod network;
