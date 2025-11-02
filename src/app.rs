@@ -8,8 +8,9 @@ use tokio::sync::Mutex;
 use crate::{
     battery::start_battery_watcher,
     brightness::start_brightness_watcher,
+    network::NetworkService,
     niri,
-    services::{mpris::MprisService, network::NetworkService, pulseaudio::PulseAudioService},
+    services::{mpris::MprisService, pulseaudio::PulseAudioService},
     weather::start_weather_polling,
     widgets::{
         bar::{Bar, BarInit, BarMsg, BarOutput},

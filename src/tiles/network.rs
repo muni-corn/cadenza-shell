@@ -3,8 +3,10 @@ use relm4::prelude::*;
 
 use crate::{
     icon_names::*,
-    network::types::{DeviceType, NetworkState, State},
-    services::network::NETWORK_STATE,
+    network::{
+        NETWORK_STATE,
+        types::{DeviceType, NetworkState, State},
+    },
     utils::icons::{NETWORK_WIFI_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
