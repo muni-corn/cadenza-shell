@@ -66,6 +66,7 @@ fn main() {
             "wifi-4-regular",
             // network misc
             "earth-regular",
+            "globe-off-regular",
             // bluetooth
             "bluetooth-connected-regular",
             "bluetooth-disabled-regular",
