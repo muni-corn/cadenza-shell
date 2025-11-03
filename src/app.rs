@@ -8,7 +8,6 @@ use tokio::sync::Mutex;
 use crate::{
     battery::start_battery_watcher,
     brightness::start_brightness_watcher,
-    network::NetworkService,
     niri,
     services::{mpris::MprisService, pulseaudio::PulseAudioService},
     weather::start_weather_polling,
@@ -24,7 +23,6 @@ pub(crate) struct CadenzaShellModel {
 
     _display: Display,
     _pulseaudio_service: WorkerHandle<PulseAudioService>,
-    _network_service: WorkerHandle<NetworkService>,
     _mpris_service: WorkerHandle<MprisService>,
 }
 
@@ -125,7 +123,6 @@ impl AsyncComponent for CadenzaShellModel {
 
             _display: display.clone(),
             _pulseaudio_service: PulseAudioService::builder().detach_worker(()),
-            _network_service: NetworkService::builder().detach_worker(()),
             _mpris_service: MprisService::builder().detach_worker(()),
         };
 
