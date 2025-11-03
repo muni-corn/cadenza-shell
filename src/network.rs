@@ -3,45 +3,49 @@ pub mod types;
 
 use futures_lite::StreamExt;
 use relm4::{AsyncReducer, AsyncReducible};
+use zbus::zvariant::OwnedObjectPath;
 
 use crate::network::{
     dbus::{
         AccessPointProxy, ActiveConnectionProxy, NetworkDeviceProxy, NetworkManagerProxy,
         WirelessDeviceProxy,
     },
-    types::{ConnectivityState, DeviceState, DeviceType, State},
+    types::{ConnectivityState, DeviceType, State},
 };
 
 pub static NETWORK_STATE: AsyncReducer<NetworkInfo> = AsyncReducer::new();
 
 #[derive(Debug, Clone)]
 pub struct NetworkInfo {
-    pub connected: bool,
-    pub state: State,
+    pub connection_state: State,
     pub connectivity: ConnectivityState,
-    pub device_type: DeviceType,
-    pub wifi_ssid: String,
-    pub wifi_strength: u8,
+    pub specific_info: Option<SpecificNetworkInfo>,
 }
 
 impl Default for NetworkInfo {
     fn default() -> Self {
         Self {
-            connected: false,
-            state: State::Unknown,
+            connection_state: State::Unknown,
             connectivity: ConnectivityState::Unknown,
-            device_type: DeviceType::Unknown,
-            wifi_ssid: String::new(),
-            wifi_strength: 0,
+            specific_info: None,
         }
     }
+}
+
+#[derive(Clone, Debug)]
+pub enum SpecificNetworkInfo {
+    WiFi {
+        wifi_ssid: String,
+        wifi_strength: u8,
+    },
+    Wired,
 }
 
 #[derive(Debug)]
 pub enum NetworkPropertyChange {
     State(State),
     Connectivity(ConnectivityState),
-    Primary,
+    Primary(OwnedObjectPath),
 }
 
 impl AsyncReducible for NetworkInfo {
@@ -57,9 +61,9 @@ impl AsyncReducible for NetworkInfo {
         log::debug!("new network update: {:?}", input);
 
         match input {
-            NetworkPropertyChange::State(state) => self.state = state,
+            NetworkPropertyChange::State(state) => self.connection_state = state,
             NetworkPropertyChange::Connectivity(connectivity) => self.connectivity = connectivity,
-            NetworkPropertyChange::Primary => match fetch_network_info().await {
+            NetworkPropertyChange::Primary(path) => match fetch_network_info(path).await {
                 Ok(new_info) => {
                     log::debug!("fetched new network info: {:?}", new_info);
                     *self = new_info;
@@ -117,110 +121,86 @@ async fn setup_property_watching() -> anyhow::Result<()> {
     // watch for primary connection changes
     let mut primary_connection_stream = nm_proxy.receive_primary_connection_changed().await;
     relm4::spawn(async move {
-        while primary_connection_stream.next().await.is_some() {
-            NETWORK_STATE.emit(NetworkPropertyChange::Primary);
+        while let Some(change) = primary_connection_stream.next().await {
+            if let Ok(new_primary_connection_path) = change
+                .get()
+                .await
+                .inspect_err(|e| log::error!("couldn't get primary connection change value: {e}"))
+            {
+                NETWORK_STATE.emit(NetworkPropertyChange::Primary(new_primary_connection_path));
+            }
         }
     });
 
     Ok(())
 }
 
-async fn fetch_network_info() -> anyhow::Result<NetworkInfo> {
+async fn fetch_network_info(
+    primary_connection_path: OwnedObjectPath,
+) -> anyhow::Result<NetworkInfo> {
     let conn = zbus::Connection::system().await?;
     let nm_proxy = NetworkManagerProxy::new(&conn).await?;
 
     // get overall state
-    let state = nm_proxy.state().await?;
-    let is_connected = matches!(
-        state,
-        State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal
-    );
+    let connection_state = nm_proxy.state().await?;
 
     // get connectivity
     let connectivity = nm_proxy.connectivity().await?;
 
-    let mut info = NetworkInfo {
-        connected: is_connected,
-        state,
-        connectivity,
-        device_type: DeviceType::Unknown,
-        wifi_ssid: String::new(),
-        wifi_strength: 0,
-    };
-
+    let is_connected = matches!(
+        connection_state,
+        State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal
+    );
     if is_connected {
-        match nm_proxy.get_devices().await {
-            Ok(devices) => {
-                // find the active device
-                for device_path in devices {
-                    let device_proxy = NetworkDeviceProxy::builder(&conn)
-                        .path(&device_path)?
-                        .build()
-                        .await?;
+        // get primary connection details
+        let active_conn_proxy = ActiveConnectionProxy::builder(&conn)
+            .path(&primary_connection_path)?
+            .build()
+            .await?;
 
-                    let device_type = device_proxy.device_type().await?;
-                    let device_state = device_proxy.state().await?;
+        let active_device_paths = active_conn_proxy.devices().await?;
 
-                    // only activated devices are considered active for primary connection
-                    if device_state == DeviceState::Activated {
-                        info.device_type = device_type;
+        log::debug!("active network device paths: {:?}", active_device_paths);
 
-                        if device_type == DeviceType::Wifi {
-                            // get wifi specific info
-                            match get_wifi_info(&conn, &device_path).await {
-                                Ok(wifi_info) => {
-                                    info.wifi_ssid = wifi_info.0;
-                                    info.wifi_strength = wifi_info.1;
-                                    // wifi info successfully retrieved
-                                }
-                                Err(e) => {
-                                    log::error!("failed to get WiFi info: {}", e);
-                                    // try to get at least the interface name as fallback
-                                    if let Ok(interface) = device_proxy.interface().await {
-                                        info.wifi_ssid = interface;
-                                    }
-                                }
-                            }
-                            break; // found our primary wifi connection
-                        }
-                        // for non-wifi activated devices, set as primary
-                        // but continue looking for wifi
-                    } else if device_type == DeviceType::Wifi {
-                        // even if wifi is not activated, try to get the ssid if connecting
-                        if matches!(
-                            device_state,
-                            DeviceState::Config | DeviceState::IpConfig | DeviceState::IpCheck
-                        ) {
-                            match get_wifi_info(&conn, &device_path).await {
-                                Ok(wifi_info) => {
-                                    info.device_type = device_type;
-                                    info.wifi_ssid = wifi_info.0;
-                                    info.wifi_strength = wifi_info.1;
-                                    log::debug!(
-                                        "wifi connecting/configuring: ssid='{}', strength={}",
-                                        info.wifi_ssid,
-                                        info.wifi_strength
-                                    );
-                                    break;
-                                }
-                                Err(e) => {
-                                    log::debug!(
-                                        "wifi device in progress but no ssid available: {}",
-                                        e
-                                    );
-                                }
-                            }
-                        }
-                    }
+        if let Some(device_path) = active_device_paths.first() {
+            let device_proxy = NetworkDeviceProxy::builder(&conn)
+                .path(device_path)?
+                .build()
+                .await?;
+
+            let device_type = device_proxy.device_type().await?;
+
+            let specific_info = match device_type {
+                DeviceType::Ethernet => Some(SpecificNetworkInfo::Wired),
+                DeviceType::Wifi => {
+                    let wifi_info = get_wifi_info(&conn, device_path).await?;
+                    Some(SpecificNetworkInfo::WiFi {
+                        wifi_ssid: wifi_info.0,
+                        wifi_strength: wifi_info.1,
+                    })
                 }
-            }
-            Err(e) => {
-                log::error!("failed to get devices: {}", e);
-            }
-        }
-    }
+                _ => None,
+            };
 
-    Ok(info)
+            Ok(NetworkInfo {
+                connection_state,
+                connectivity,
+                specific_info,
+            })
+        } else {
+            Ok(NetworkInfo {
+                connection_state,
+                connectivity,
+                specific_info: None,
+            })
+        }
+    } else {
+        Ok(NetworkInfo {
+            connection_state,
+            connectivity,
+            specific_info: None,
+        })
+    }
 }
 
 async fn get_wifi_info(

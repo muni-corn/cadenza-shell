@@ -65,7 +65,7 @@ impl From<OwnedValue> for State {
     fn from(value: OwnedValue) -> Self {
         value
             .downcast_ref::<u32>()
-            .map(|u| Self::from(u))
+            .map(Self::from)
             .unwrap_or_default()
     }
 }
@@ -222,7 +222,7 @@ impl From<OwnedValue> for DeviceType {
     fn from(value: OwnedValue) -> Self {
         value
             .downcast_ref::<u32>()
-            .map(|u| Self::from(u))
+            .map(Self::from)
             .unwrap_or_default()
     }
 }
@@ -313,7 +313,7 @@ impl From<OwnedValue> for DeviceState {
     fn from(value: OwnedValue) -> Self {
         value
             .downcast_ref::<u32>()
-            .map(|u| Self::from(u))
+            .map(Self::from)
             .unwrap_or_default()
     }
 }
@@ -639,7 +639,7 @@ impl From<OwnedValue> for DeviceStateReason {
     fn from(value: OwnedValue) -> Self {
         value
             .downcast_ref::<u32>()
-            .map(|u| Self::from(u))
+            .map(Self::from)
             .unwrap_or_default()
     }
 }
@@ -739,7 +739,7 @@ impl From<OwnedValue> for ActiveConnectionStateReason {
     fn from(value: OwnedValue) -> Self {
         value
             .downcast_ref::<u32>()
-            .map(|u| Self::from(u))
+            .map(Self::from)
             .unwrap_or_default()
     }
 }
@@ -793,7 +793,7 @@ impl From<OwnedValue> for ConnectivityState {
     fn from(value: OwnedValue) -> Self {
         value
             .downcast_ref::<u32>()
-            .map(|u| Self::from(u))
+            .map(Self::from)
             .unwrap_or_default()
     }
 }
