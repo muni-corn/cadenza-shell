@@ -2,19 +2,82 @@ use std::{fs, path::Path, sync::mpsc, time::Duration};
 
 use anyhow::Result;
 use notify::{RecursiveMode, Watcher};
-use relm4::SharedState;
+use relm4::{Reducer, Reducible};
 use systemstat::{Platform, System};
 
-pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
+pub static BATTERY_STATE: Reducer<BatteryState> = Reducer::new();
 
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
-pub struct BatteryState {
-    pub percentage: f32,
-    pub charging: bool,
-    pub time_remaining: Duration,
+pub enum BatteryState {
+    #[default]
+    Unavailable,
+    Available {
+        percentage: f32,
+        charging: bool,
+        time_remaining: Duration,
+    },
 }
 
-pub async fn start_battery_watcher() {
+impl Reducible for BatteryState {
+    type Input = BatteryUpdate;
+
+    fn init() -> Self {
+        relm4::spawn(start_battery_watcher());
+
+        Self::Unavailable
+    }
+
+    fn reduce(&mut self, input: Self::Input) -> bool {
+        let Self::Available {
+            percentage,
+            charging,
+            time_remaining,
+        } = self
+        else {
+            match input {
+                BatteryUpdate::PercentLeft(p) => {
+                    *self = Self::Available {
+                        percentage: p,
+                        charging: false,
+                        time_remaining: Duration::ZERO,
+                    }
+                }
+                BatteryUpdate::Charging(c) => {
+                    *self = Self::Available {
+                        percentage: 0.,
+                        charging: c,
+                        time_remaining: Duration::ZERO,
+                    }
+                }
+                BatteryUpdate::TimeRemaining(duration) => {
+                    *self = Self::Available {
+                        percentage: 0.,
+                        charging: false,
+                        time_remaining: duration,
+                    }
+                }
+            };
+
+            return true;
+        };
+
+        match input {
+            BatteryUpdate::PercentLeft(p) => *percentage = p,
+            BatteryUpdate::Charging(c) => *charging = c,
+            BatteryUpdate::TimeRemaining(duration) => *time_remaining = duration,
+        }
+
+        true
+    }
+}
+
+pub enum BatteryUpdate {
+    PercentLeft(f32),
+    Charging(bool),
+    TimeRemaining(Duration),
+}
+
+async fn start_battery_watcher() {
     // detect battery interface
     let Some(battery_interface) = detect_battery_interface() else {
         log::error!("couldn't detect battery interface");
@@ -23,20 +86,12 @@ pub async fn start_battery_watcher() {
 
     let system = System::new();
 
-    // read initial battery properties. if any fail, we will not consider the
-    // service available.
-    let Ok((percentage, charging, time_remaining)) = read_battery_state(&system)
-        .map_err(|e| log::error!("couldn't read initial battery state: {}", e))
-    else {
+    // read initial battery properties. if any fail, battery information will not be
+    // available.
+    if let Err(e) = update_entire_battery_state(&system) {
+        log::error!("couldn't read initial battery state: {}", e);
         return;
     };
-
-    // send initial update
-    *BATTERY_STATE.write() = Some(BatteryState {
-        percentage,
-        charging,
-        time_remaining,
-    });
 
     let (tx, rx) = mpsc::channel();
 
@@ -49,7 +104,7 @@ pub async fn start_battery_watcher() {
         }
     };
 
-    // Watch status file for charging state changes
+    // watch status file for charging state changes
     let status_path = format!("/sys/class/power_supply/{}/status", battery_interface);
 
     if let Err(e) = watcher.watch(Path::new(&status_path), RecursiveMode::NonRecursive) {
@@ -57,31 +112,19 @@ pub async fn start_battery_watcher() {
         return;
     }
 
-    let mut has_watcher = true;
     loop {
         // waits on file changes, or polls every 30 seconds
-        if has_watcher
-            && let Err(mpsc::RecvTimeoutError::Disconnected) =
-                rx.recv_timeout(Duration::from_secs(30))
+        if let Err(mpsc::RecvTimeoutError::Disconnected) = rx.recv_timeout(Duration::from_secs(30))
         {
             log::error!("battery status watcher has died");
-            has_watcher = false;
+            break;
         } else {
             // just poll every 30 seconds without a watcher
             tokio::time::sleep(Duration::from_secs(30)).await
         }
 
-        match read_battery_state(&system) {
-            Ok((percentage, charging, time_remaining)) => {
-                *BATTERY_STATE.write() = Some(BatteryState {
-                    percentage,
-                    charging,
-                    time_remaining,
-                });
-            }
-            Err(e) => {
-                log::error!("couldn't read battery state: {}", e);
-            }
+        if let Err(e) = update_entire_battery_state(&system) {
+            log::error!("couldn't read battery state: {}", e);
         }
     }
 }
@@ -118,14 +161,16 @@ fn detect_battery_interface() -> Option<String> {
     })
 }
 
-/// Returns the percentage remaining, whether the battery is charging, and how
-/// much time is remaining.
-fn read_battery_state(system: &System) -> Result<(f32, bool, Duration)> {
+/// Feeds the BatteryState Reducer with the percentage remaining, whether the
+/// battery is charging, and how much time is remaining.
+fn update_entire_battery_state(system: &System) -> Result<()> {
     let battery_info = system.battery_life()?;
 
-    let percentage = battery_info.remaining_capacity;
-    let charging = system.on_ac_power()?;
-    let time_remaining = battery_info.remaining_time;
+    BATTERY_STATE.emit(BatteryUpdate::PercentLeft(battery_info.remaining_capacity));
+    BATTERY_STATE.emit(BatteryUpdate::TimeRemaining(battery_info.remaining_time));
 
-    Ok((percentage, charging, time_remaining))
+    // update charging state last, since it seems fallible
+    BATTERY_STATE.emit(BatteryUpdate::Charging(system.on_ac_power()?));
+
+    Ok(())
 }
