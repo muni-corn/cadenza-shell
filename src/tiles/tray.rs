@@ -50,11 +50,6 @@ impl SimpleComponent for TrayWidget {
                 set_reveal_child: model.expanded,
                 set_transition_type: gtk::RevealerTransitionType::SlideLeft,
                 set_transition_duration: 200,
-
-                #[local_ref]
-                items_box -> gtk::Box {
-                    set_orientation: gtk::Orientation::Horizontal,
-                }
             },
 
             gtk::Button {
@@ -99,8 +94,8 @@ impl SimpleComponent for TrayWidget {
                 .push_back((address.clone(), item.clone(), menu.clone()));
         }
 
-        let items_box = model.items.widget();
         let widgets = view_output!();
+        widgets.revealer.set_child(Some(model.items.widget()));
 
         ComponentParts { model, widgets }
     }
