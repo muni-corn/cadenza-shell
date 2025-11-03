@@ -4,20 +4,23 @@ use relm4::prelude::*;
 use crate::{
     icon_names::*,
     network::{
-        NETWORK_STATE,
-        types::{DeviceType, NetworkState, State},
+        NETWORK_STATE, NetworkInfo,
+        types::{DeviceType, State},
     },
     utils::icons::{NETWORK_WIFI_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
 
-#[derive(Debug)]
-pub struct NetworkTile;
+#[derive(Debug, Default)]
+pub struct NetworkTile {
+    current_state: Option<NetworkInfo>,
+}
 
 #[derive(Debug)]
 pub enum NetworkTileMsg {
     Click,
-    Update,
+    Update(NetworkInfo),
+    Nothing,
 }
 
 impl SimpleComponent for NetworkTile {
@@ -32,7 +35,9 @@ impl SimpleComponent for NetworkTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        NETWORK_STATE.subscribe(sender.input_sender(), |_| NetworkTileMsg::Update);
+        NETWORK_STATE.subscribe(sender.input_sender(), |state| {
+            NetworkTileMsg::Update(state.clone())
+        });
 
         // initialize the Tile component
         let tile =
@@ -40,24 +45,27 @@ impl SimpleComponent for NetworkTile {
                 .launch(Default::default())
                 .forward(sender.input_sender(), |output| match output {
                     TileOutput::Clicked => NetworkTileMsg::Click,
-                    _ => NetworkTileMsg::Update,
+                    _ => NetworkTileMsg::Nothing,
                 });
 
         root.append(tile.widget());
 
-        // initialize
-        sender.input(NetworkTileMsg::Update);
-
         ComponentParts {
-            model: Self,
+            model: Default::default(),
             widgets: tile,
         }
     }
 
-    fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>) {}
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+        if let NetworkTileMsg::Update(new_info) = msg {
+            self.current_state = Some(new_info);
+        }
+    }
 
     fn update_view(&self, tile: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        let info = &*NETWORK_STATE.read();
+        let Some(ref info) = self.current_state else {
+            return;
+        };
 
         let icon = get_icon(info);
 
@@ -73,7 +81,7 @@ impl SimpleComponent for NetworkTile {
     }
 }
 
-fn get_icon(info: &NetworkState) -> &str {
+fn get_icon(info: &NetworkInfo) -> &str {
     if !info.connected {
         return "network-offline-symbolic";
     }
@@ -87,7 +95,7 @@ fn get_icon(info: &NetworkState) -> &str {
     }
 }
 
-fn get_secondary_text(info: &NetworkState) -> Option<&str> {
+fn get_secondary_text(info: &NetworkInfo) -> Option<&str> {
     if !info.connected {
         return Some("Disconnected");
     }
