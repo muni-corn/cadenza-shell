@@ -49,5 +49,3 @@ relm4-icons-build = { git = "https://github.com/muni-corn/relm4-icons", branch =
 [features]
 default = []
 docs = []
-# networkmanager = ["nm-rs"]
-# audio = ["pipewire", "wireplumber"]
