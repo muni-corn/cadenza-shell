@@ -2,11 +2,8 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    icon_names::*,
-    network::{
-        NETWORK_STATE, NetworkInfo,
-        types::{DeviceType, State},
-    },
+    icon_names::{self, *},
+    network::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, types::State},
     utils::icons::{NETWORK_WIFI_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
@@ -57,6 +54,7 @@ impl SimpleComponent for NetworkTile {
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+        log::debug!("network tile received update: {msg:?}");
         if let NetworkTileMsg::Update(new_info) = msg {
             self.current_state = Some(new_info);
         }
@@ -82,25 +80,30 @@ impl SimpleComponent for NetworkTile {
 }
 
 fn get_icon(info: &NetworkInfo) -> &str {
-    if !info.connected {
-        return "network-offline-symbolic";
+    if let State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown =
+        info.connection_state
+    {
+        return icon_names::GLOBE_OFF_REGULAR;
     }
 
-    match info.device_type {
-        DeviceType::Wifi => {
-            let strength = info.wifi_strength as f64;
+    match info.specific_info {
+        Some(SpecificNetworkInfo::WiFi { wifi_strength, .. }) => {
+            let strength = wifi_strength as f64 / 100.;
             percentage_to_icon_from_list(strength, NETWORK_WIFI_ICON_NAMES)
         }
-        _ => EARTH_REGULAR,
+        Some(_) => EARTH_REGULAR,
+        None => GLOBE_OFF_REGULAR,
     }
 }
 
 fn get_secondary_text(info: &NetworkInfo) -> Option<&str> {
-    if !info.connected {
+    if let State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown =
+        info.connection_state
+    {
         return Some("Disconnected");
     }
 
-    Some(match info.state {
+    Some(match info.connection_state {
         State::ConnectedLocal | State::ConnectedGlobal | State::ConnectedSite => return None,
         State::Unknown => "State unknown",
         State::Asleep => "Asleep",
