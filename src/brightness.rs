@@ -2,9 +2,29 @@ use std::{fs, path::Path};
 
 use anyhow::Result;
 use inotify::{Inotify, WatchMask};
-use relm4::SharedState;
+use relm4::{Reducer, Reducible};
 
-pub static BRIGHTNESS_STATE: SharedState<Option<f64>> = SharedState::new();
+pub static BRIGHTNESS_STATE: Reducer<BrightnessState> = Reducer::new();
+
+pub struct BrightnessState(pub Option<f64>);
+
+impl Reducible for BrightnessState {
+    type Input = f64;
+
+    fn init() -> Self {
+        relm4::spawn(start_brightness_watcher());
+        Self(None)
+    }
+
+    fn reduce(&mut self, input: Self::Input) -> bool {
+        if Some(input) != self.0 {
+            self.0 = Some(input);
+            true
+        } else {
+            false
+        }
+    }
+}
 
 pub async fn start_brightness_watcher() {
     // read initial backlight properties. if any fail, we will not consider the
@@ -25,7 +45,7 @@ pub async fn start_brightness_watcher() {
     };
 
     // send initial update
-    *BRIGHTNESS_STATE.write() = Some(current_brightness);
+    BRIGHTNESS_STATE.emit(current_brightness);
 
     let brightness_path = format!("/sys/class/backlight/{}/brightness", &interface);
     let interface_clone = interface.clone();
@@ -54,7 +74,7 @@ pub async fn start_brightness_watcher() {
                 for _ in events {
                     // when the brightness file is closed after writing, read the new value
                     match read_current_brightness_percentage(&interface_clone, max_val) {
-                        Ok(percentage) => *BRIGHTNESS_STATE.write() = Some(percentage),
+                        Ok(percentage) => BRIGHTNESS_STATE.emit(percentage),
                         Err(e) => log::error!("couldn't update brightness info: {}", e),
                     }
                 }
