@@ -1,6 +1,5 @@
 use std::sync::{Arc, Mutex};
 
-use anyhow::Result;
 use pulse::{
     callbacks::ListResult,
     context::{
@@ -12,8 +11,7 @@ use pulse::{
     proplist::Proplist,
     volume::{ChannelVolumes, Volume},
 };
-use relm4::{SharedState, Worker};
-use tokio::sync::mpsc;
+use relm4::SharedState;
 
 pub static VOLUME_STATE: SharedState<PulseAudioData> = SharedState::new();
 
@@ -34,306 +32,191 @@ impl Default for PulseAudioData {
     }
 }
 
-#[derive(Debug)]
-pub enum PulseAudioServiceMsg {
-    SetVolume(f64),
-    ToggleMute,
-}
+pub async fn run_pulseaudio_loop() {
+    let Some(mut proplist) = Proplist::new() else {
+        log::error!("failed to create pulseaudio proplist");
+        return;
+    };
 
-#[derive(Debug, Clone)]
-pub enum PulseAudioServiceEvent {
-    VolumeChanged(PulseAudioData),
-    Error(String),
-}
-
-// internal command to send to pulse thread
-#[derive(Debug)]
-enum PulseCommand {
-    SetVolume(f64),
-    SetMute(bool),
-}
-
-#[derive(Debug)]
-pub struct PulseAudioService {
-    pulse_tx: mpsc::UnboundedSender<PulseCommand>,
-}
-
-impl Worker for PulseAudioService {
-    type Init = ();
-    type Input = PulseAudioServiceMsg;
-    type Output = ();
-
-    fn init(_init: Self::Init, _sender: relm4::ComponentSender<Self>) -> Self {
-        let (pulse_tx, pulse_rx) = mpsc::unbounded_channel();
-
-        let worker = Self { pulse_tx };
-
-        // start pulseaudio connection in a separate thread
-        relm4::spawn(async move {
-            if let Err(e) = Self::run_pulse_loop(pulse_rx) {
-                log::error!("pulse loop error: {}", e);
-            }
-        });
-
-        worker
+    if proplist
+        .set_str("APPLICATION_NAME", "cadenza-shell")
+        .is_err()
+    {
+        log::error!("failed to update pulseaudio proplist");
+        return;
     }
 
-    fn update(&mut self, message: Self::Input, _sender: relm4::ComponentSender<Self>) {
-        let command = match message {
-            PulseAudioServiceMsg::SetVolume(volume) => PulseCommand::SetVolume(volume),
-            PulseAudioServiceMsg::ToggleMute => PulseCommand::SetMute(!VOLUME_STATE.read().muted),
-        };
+    let Some(mut mainloop) = Mainloop::new() else {
+        log::error!("failed to create pulseaudio mainloop");
+        return;
+    };
 
-        if let Err(e) = self.pulse_tx.send(command) {
-            log::error!("failed to send pulse command: {}", e);
+    let Some(context) = Context::new_with_proplist(&mainloop, "cadenza-shell", &proplist) else {
+        log::error!("failed to create pulseaudio context");
+        return;
+    };
+
+    let context = Arc::new(Mutex::new(context));
+
+    let state_callback = Box::new({
+        let context = context.clone();
+        move || on_state_change(&context)
+    });
+
+    context
+        .lock()
+        .unwrap()
+        .set_state_callback(Some(state_callback));
+
+    if let Err(err) = context
+        .lock()
+        .unwrap()
+        .connect(None, FlagSet::NOAUTOSPAWN, None)
+    {
+        log::error!("failed to connect to pulse: {}", err);
+        return;
+    }
+
+    // run mainloop
+    loop {
+        match mainloop.iterate(true) {
+            IterateResult::Success(_) => {}
+            IterateResult::Err(err) => {
+                log::error!("pulse mainloop error: {:?}", err);
+            }
+            IterateResult::Quit(_) => break,
         }
     }
 }
 
-impl PulseAudioService {
-    fn run_pulse_loop(mut pulse_rx: mpsc::UnboundedReceiver<PulseCommand>) -> Result<()> {
-        let Some(mut proplist) = Proplist::new() else {
-            anyhow::bail!("failed to create pulseaudio proplist");
-        };
+fn on_state_change(context: &Arc<Mutex<Context>>) {
+    let Ok(state) = context.try_lock().map(|lock| lock.get_state()) else {
+        return;
+    };
 
-        if proplist
-            .set_str("APPLICATION_NAME", "cadenza-shell")
-            .is_err()
-        {
-            anyhow::bail!("failed to update pulseaudio proplist");
-        }
+    match state {
+        State::Ready => {
+            log::info!("connected to pulseaudio server");
 
-        let Some(mut mainloop) = Mainloop::new() else {
-            anyhow::bail!("failed to create pulseaudio mainloop");
-        };
-
-        let Some(context) = Context::new_with_proplist(&mainloop, "cadenza-shell", &proplist)
-        else {
-            anyhow::bail!("failed to create pulseaudio context");
-        };
-
-        let context = Arc::new(Mutex::new(context));
-        let pending_commands = Arc::new(Mutex::new(Vec::<PulseCommand>::new()));
-
-        let state_callback = Box::new({
-            let context = context.clone();
-
-            move || Self::on_state_change(&context)
-        });
-
-        context
-            .lock()
-            .unwrap()
-            .set_state_callback(Some(state_callback));
-
-        if let Err(err) = context
-            .lock()
-            .unwrap()
-            .connect(None, FlagSet::NOAUTOSPAWN, None)
-        {
-            anyhow::bail!("failed to connect to pulse: {}", err);
-        }
-
-        // handle incoming commands
-        let context_clone = context.clone();
-        let pending_commands_clone = pending_commands.clone();
-        relm4::spawn(async move {
-            while let Some(command) = pulse_rx.blocking_recv() {
-                // either execute immediately if connected, or queue for later
-                if let Ok(ctx) = context_clone.try_lock() {
-                    if ctx.get_state() == State::Ready {
-                        Self::execute_command(&ctx, command);
-                    } else {
-                        pending_commands_clone.lock().unwrap().push(command);
-                    }
-                } else {
-                    pending_commands_clone.lock().unwrap().push(command);
-                }
-            }
-        });
-
-        // run mainloop
-        loop {
-            match mainloop.iterate(true) {
-                IterateResult::Success(_) => {
-                    // process any pending commands
-                    if let (Ok(ctx), Ok(mut pending)) =
-                        (context.try_lock(), pending_commands.try_lock())
-                        && ctx.get_state() == State::Ready
-                        && !pending.is_empty()
-                    {
-                        for command in pending.drain(..) {
-                            Self::execute_command(&ctx, command);
-                        }
-                    }
-                }
-                IterateResult::Err(err) => {
-                    log::error!("pulse mainloop error: {:?}", err);
-                }
-                IterateResult::Quit(_) => break,
-            }
-        }
-
-        Ok(())
-    }
-
-    fn execute_command(context: &Context, command: PulseCommand) {
-        let Some(sink_name) = VOLUME_STATE.read().default_sink_name.clone() else {
-            return;
-        };
-
-        let mut introspector = context.introspect();
-
-        match command {
-            PulseCommand::SetVolume(volume) => {
-                let clamped_volume = volume.clamp(0.0, 150.0);
-                let pulse_volume = Self::percent_to_volume(clamped_volume);
-
-                let mut channel_volumes = ChannelVolumes::default();
-                channel_volumes.set_len(2); // assume stereo
-                for i in 0..channel_volumes.len() {
-                    channel_volumes.get_mut()[i as usize] = Volume(pulse_volume);
-                }
-
-                introspector.set_sink_volume_by_name(&sink_name, &channel_volumes, None);
-            }
-            PulseCommand::SetMute(muted) => {
-                introspector.set_sink_mute_by_name(&sink_name, muted, None);
-            }
-        }
-    }
-
-    fn on_state_change(context: &Arc<Mutex<Context>>) {
-        let Ok(state) = context.try_lock().map(|lock| lock.get_state()) else {
-            return;
-        };
-
-        match state {
-            State::Ready => {
-                log::info!("connected to pulseaudio server");
-
-                let introspect = context.lock().unwrap().introspect();
-
-                // get default sink info
-                introspect.get_server_info({
-                    let context = context.clone();
-
-                    move |server_info| Self::on_server_info(server_info, &context)
-                });
-
-                // subscribe to changes
-                let subscribe_callback = Box::new({
-                    let context = context.clone();
-
-                    move |facility, op, _i| Self::on_event(&context, facility, op)
-                });
-
-                context
-                    .lock()
-                    .unwrap()
-                    .set_subscribe_callback(Some(subscribe_callback));
-                context
-                    .lock()
-                    .unwrap()
-                    .subscribe(InterestMaskSet::SERVER | InterestMaskSet::SINK, |_| ());
-            }
-            State::Failed => {
-                log::error!("failed to connect to pulseaudio server");
-                VOLUME_STATE.write().default_sink_name = None;
-            }
-            State::Terminated => {
-                log::warn!("connection to pulseaudio server terminated");
-            }
-            _ => {}
-        }
-    }
-
-    fn on_server_info(server_info: &ServerInfo, context: &Arc<Mutex<Context>>) {
-        let default_sink_name = server_info
-            .default_sink_name
-            .as_ref()
-            .map(ToString::to_string);
-
-        {
-            let mut data_guard = VOLUME_STATE.write();
-            data_guard.default_sink_name = default_sink_name.clone();
-        }
-
-        // get sink info for the default sink
-        if let Some(ref sink_name) = default_sink_name {
             let introspect = context.lock().unwrap().introspect();
-            introspect.get_sink_info_by_name(sink_name, {
-                move |sink_info| Self::on_sink_info(sink_info)
+
+            // get default sink info
+            introspect.get_server_info({
+                let context = context.clone();
+
+                move |server_info| on_server_info(server_info, &context)
+            });
+
+            // subscribe to changes
+            let subscribe_callback = Box::new({
+                let context = context.clone();
+
+                move |facility, op, _i| on_event(&context, facility, op)
+            });
+
+            context
+                .lock()
+                .unwrap()
+                .set_subscribe_callback(Some(subscribe_callback));
+            context
+                .lock()
+                .unwrap()
+                .subscribe(InterestMaskSet::SERVER | InterestMaskSet::SINK, |_| ());
+        }
+        State::Failed => {
+            log::error!("failed to connect to pulseaudio server");
+            VOLUME_STATE.write().default_sink_name = None;
+        }
+        State::Terminated => {
+            log::warn!("connection to pulseaudio server terminated");
+        }
+        _ => {}
+    }
+}
+
+fn on_server_info(server_info: &ServerInfo, context: &Arc<Mutex<Context>>) {
+    let default_sink_name = server_info
+        .default_sink_name
+        .as_ref()
+        .map(ToString::to_string);
+
+    {
+        let mut data_guard = VOLUME_STATE.write();
+        data_guard.default_sink_name = default_sink_name.clone();
+    }
+
+    // get sink info for the default sink
+    if let Some(ref sink_name) = default_sink_name {
+        let introspect = context.lock().unwrap().introspect();
+        introspect.get_sink_info_by_name(sink_name, on_sink_info);
+    }
+}
+
+fn on_sink_info(sink_info: ListResult<&SinkInfo>) {
+    let ListResult::Item(info) = sink_info else {
+        return;
+    };
+
+    let volume_percent = volume_to_percent(&info.volume);
+
+    let mut data_guard = VOLUME_STATE.write();
+    data_guard.volume = volume_percent;
+    data_guard.muted = info.mute;
+}
+
+fn on_event(context: &Arc<Mutex<Context>>, facility: Option<Facility>, _op: Option<Operation>) {
+    let Some(facility) = facility else {
+        return;
+    };
+
+    match facility {
+        Facility::Server => {
+            let introspect = context.lock().unwrap().introspect();
+            introspect.get_server_info({
+                let context = context.clone();
+
+                move |server_info| on_server_info(server_info, &context)
             });
         }
-    }
-
-    fn on_sink_info(sink_info: ListResult<&SinkInfo>) {
-        let ListResult::Item(info) = sink_info else {
-            return;
-        };
-
-        let volume_percent = Self::volume_to_percent(&info.volume);
-
-        let mut data_guard = VOLUME_STATE.write();
-        data_guard.volume = volume_percent;
-        data_guard.muted = info.mute;
-    }
-
-    fn on_event(context: &Arc<Mutex<Context>>, facility: Option<Facility>, _op: Option<Operation>) {
-        let Some(facility) = facility else {
-            return;
-        };
-
-        match facility {
-            Facility::Server => {
+        Facility::Sink => {
+            // update default sink info
+            if let Some(sink_name) = VOLUME_STATE.read().default_sink_name.clone() {
                 let introspect = context.lock().unwrap().introspect();
-                introspect.get_server_info({
-                    let context = context.clone();
-
-                    move |server_info| Self::on_server_info(server_info, &context)
+                introspect.get_sink_info_by_name(&sink_name, {
+                    move |sink_info| on_sink_info(sink_info)
                 });
             }
-            Facility::Sink => {
-                // update default sink info
-                if let Some(sink_name) = VOLUME_STATE.read().default_sink_name.clone() {
-                    let introspect = context.lock().unwrap().introspect();
-                    introspect.get_sink_info_by_name(&sink_name, {
-                        move |sink_info| Self::on_sink_info(sink_info)
-                    });
-                }
-            }
-            _ => {}
         }
+        _ => {}
+    }
+}
+
+fn volume_to_percent(channel_volumes: &ChannelVolumes) -> f64 {
+    if channel_volumes.len() == 0 {
+        return 0.0;
     }
 
-    fn volume_to_percent(channel_volumes: &ChannelVolumes) -> f64 {
-        if channel_volumes.len() == 0 {
-            return 0.0;
-        }
+    let avg: u32 =
+        channel_volumes.get().iter().map(|v| v.0).sum::<u32>() / channel_volumes.len() as u32;
+    let base_delta = (Volume::NORMAL.0 - Volume::MUTED.0) as f64 / 100.0;
 
-        let avg: u32 =
-            channel_volumes.get().iter().map(|v| v.0).sum::<u32>() / channel_volumes.len() as u32;
-        let base_delta = (Volume::NORMAL.0 - Volume::MUTED.0) as f64 / 100.0;
+    ((avg - Volume::MUTED.0) as f64 / base_delta)
+        .round()
+        .max(0.0)
+}
 
-        ((avg - Volume::MUTED.0) as f64 / base_delta)
-            .round()
-            .max(0.0)
-    }
+fn _percent_to_volume(target_percent: f64) -> u32 {
+    let base_delta = (Volume::NORMAL.0 as f32 - Volume::MUTED.0 as f32) / 100.0;
 
-    fn percent_to_volume(target_percent: f64) -> u32 {
-        let base_delta = (Volume::NORMAL.0 as f32 - Volume::MUTED.0 as f32) / 100.0;
-
-        if target_percent < 0.0 {
-            Volume::MUTED.0
-        } else if target_percent == 100.0 {
-            Volume::NORMAL.0
-        } else if target_percent >= 150.0 {
-            (Volume::NORMAL.0 as f32 * 1.5) as u32
-        } else if target_percent < 100.0 {
-            Volume::MUTED.0 + (target_percent * base_delta as f64) as u32
-        } else {
-            Volume::NORMAL.0 + ((target_percent - 100.0) * base_delta as f64) as u32
-        }
+    if target_percent < 0.0 {
+        Volume::MUTED.0
+    } else if target_percent == 100.0 {
+        Volume::NORMAL.0
+    } else if target_percent >= 150.0 {
+        (Volume::NORMAL.0 as f32 * 1.5) as u32
+    } else if target_percent < 100.0 {
+        Volume::MUTED.0 + (target_percent * base_delta as f64) as u32
+    } else {
+        Volume::NORMAL.0 + ((target_percent - 100.0) * base_delta as f64) as u32
     }
 }
