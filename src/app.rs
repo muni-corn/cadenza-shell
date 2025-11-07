@@ -6,6 +6,7 @@ use relm4::prelude::*;
 use tokio::sync::Mutex;
 
 use crate::{
+    battery::start_battery_watcher,
     brightness::start_brightness_watcher,
     niri,
     services::{mpris::run_mpris_service, pulseaudio::run_pulseaudio_loop},
@@ -58,6 +59,13 @@ impl AsyncComponent for CadenzaShellModel {
             .inspect_err(|e| log::error!("couldn't setup tray client: {}", e))
             .ok()
             .map(|c| Arc::new(Mutex::new(c)));
+
+        // start battery watching
+        sender.command(|_, shutdown| {
+            shutdown
+                .register(start_battery_watcher())
+                .drop_on_shutdown()
+        });
 
         // start brightness watching
         sender.command(|_, shutdown| {
