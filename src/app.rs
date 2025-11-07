@@ -6,6 +6,7 @@ use relm4::prelude::*;
 use tokio::sync::Mutex;
 
 use crate::{
+    brightness::start_brightness_watcher,
     niri,
     services::{mpris::run_mpris_service, pulseaudio::run_pulseaudio_loop},
     weather::start_weather_polling,
@@ -57,6 +58,13 @@ impl AsyncComponent for CadenzaShellModel {
             .inspect_err(|e| log::error!("couldn't setup tray client: {}", e))
             .ok()
             .map(|c| Arc::new(Mutex::new(c)));
+
+        // start brightness watching
+        sender.command(|_, shutdown| {
+            shutdown
+                .register(start_brightness_watcher())
+                .drop_on_shutdown()
+        });
 
         // start weather watching
         sender.command(|_, shutdown| {

@@ -10,12 +10,11 @@ use crate::{
 #[derive(Debug)]
 pub struct BrightnessTile {
     progress_tile: Controller<ProgressTile>,
-    brightness_value: Option<f64>,
 }
 
 impl SimpleComponent for BrightnessTile {
     type Init = ();
-    type Input = Option<f64>;
+    type Input = ();
     type Output = ();
     type Root = gtk::Box;
     type Widgets = Self::Root;
@@ -25,7 +24,7 @@ impl SimpleComponent for BrightnessTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        BRIGHTNESS_STATE.subscribe(sender.input_sender(), |state| state.0);
+        BRIGHTNESS_STATE.subscribe(sender.input_sender(), |_| ());
 
         // initialize the progress tile component
         let progress_tile = ProgressTile::builder()
@@ -37,10 +36,11 @@ impl SimpleComponent for BrightnessTile {
 
         root.append(progress_tile.widget());
 
-        let model = BrightnessTile {
-            progress_tile,
-            brightness_value: None,
-        };
+        let model = BrightnessTile { progress_tile };
+
+        // inits the tile in case it missed the initialization from the
+        // BrightnessService
+        sender.input(());
 
         ComponentParts {
             model,
@@ -48,12 +48,10 @@ impl SimpleComponent for BrightnessTile {
         }
     }
 
-    fn update(&mut self, new_value: Self::Input, _sender: ComponentSender<Self>) {
-        self.brightness_value = new_value;
-    }
+    fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>) {}
 
     fn update_view(&self, root: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        if let Some(p) = self.brightness_value {
+        if let Some(p) = *BRIGHTNESS_STATE.read() {
             // update the progress tile with new data
             self.progress_tile
                 .emit(ProgressTileMsg::SetIcon(Some(self.get_icon().to_string())));
@@ -75,7 +73,8 @@ impl SimpleComponent for BrightnessTile {
 impl BrightnessTile {
     /// Gets the icon for this tile, using a logarithmic curve for brightness.
     fn get_icon(&self) -> &str {
-        self.brightness_value
+        BRIGHTNESS_STATE
+            .read()
             .as_ref()
             .map(|p| {
                 let log_brightness = to_logarithmic(*p);
