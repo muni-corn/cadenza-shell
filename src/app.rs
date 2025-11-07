@@ -2,12 +2,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use gdk4::Display;
 use gtk4::prelude::*;
-use relm4::{WorkerHandle, prelude::*};
+use relm4::prelude::*;
 use tokio::sync::Mutex;
 
 use crate::{
     niri,
-    services::{mpris::MprisService, pulseaudio::run_pulseaudio_loop},
+    services::{mpris::run_mpris_service, pulseaudio::run_pulseaudio_loop},
     weather::start_weather_polling,
     widgets::{
         bar::{Bar, BarInit, BarMsg, BarOutput},
@@ -20,7 +20,6 @@ pub(crate) struct CadenzaShellModel {
     tray_client: Option<Arc<Mutex<TrayClient>>>,
 
     _display: Display,
-    _mpris_service: WorkerHandle<MprisService>,
 }
 
 #[derive(Debug)]
@@ -66,6 +65,9 @@ impl AsyncComponent for CadenzaShellModel {
                 .drop_on_shutdown()
         });
 
+        // start mpris service
+        sender.command(|_, shutdown| shutdown.register(run_mpris_service()).drop_on_shutdown());
+
         // start niri event watching
         sender.command(|_, shutdown| {
             shutdown
@@ -108,7 +110,6 @@ impl AsyncComponent for CadenzaShellModel {
             tray_client,
 
             _display: display.clone(),
-            _mpris_service: MprisService::builder().detach_worker(()),
         };
 
         // set up monitor detection

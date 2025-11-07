@@ -1,6 +1,6 @@
 use anyhow::Result;
 use mpris::{Event, PlaybackStatus, Player, PlayerFinder};
-use relm4::{SharedState, Worker};
+use relm4::SharedState;
 
 pub static MPRIS_STATE: SharedState<Option<MprisState>> = SharedState::new();
 
@@ -11,87 +11,63 @@ pub struct MprisState {
     pub status: PlaybackStatus,
 }
 
-#[derive(Debug)]
-pub struct MprisService;
+pub async fn run_mpris_service() {
+    loop {
+        // find an active player
+        match find_active_player() {
+            Ok(player) => {
+                // emit initial state
+                let current_state = get_player_state(&player);
+                if current_state != *MPRIS_STATE.read() {
+                    *MPRIS_STATE.write() = current_state.clone();
+                }
 
-impl Worker for MprisService {
-    type Init = ();
-    type Input = ();
-    type Output = ();
+                // subscribe to player events
+                match player.events() {
+                    Ok(events) => {
+                        // listen for events from this player
+                        for event in events {
+                            match event {
+                                Ok(event) => {
+                                    // update state based on event
+                                    let new_state =
+                                        handle_player_event(&event, MPRIS_STATE.read().clone());
 
-    fn init(_init: Self::Init, _sender: relm4::ComponentSender<Self>) -> Self {
-        // spawn blocking thread for event-driven mpris monitoring
-        // we need to use std::thread because MPRIS Player is not Send + Sync
-        std::thread::spawn(move || {
-            loop {
-                // find an active player
-                match find_active_player() {
-                    Ok(player) => {
-                        // emit initial state
-                        let current_state = get_player_state(&player);
-                        if current_state != *MPRIS_STATE.read() {
-                            *MPRIS_STATE.write() = current_state.clone();
-                        }
+                                    if new_state != *MPRIS_STATE.read() {
+                                        *MPRIS_STATE.write() = new_state;
+                                    }
 
-                        // subscribe to player events
-                        match player.events() {
-                            Ok(events) => {
-                                // listen for events from this player
-                                for event in events {
-                                    match event {
-                                        Ok(event) => {
-                                            // update state based on event
-                                            let new_state = handle_player_event(
-                                                &event,
-                                                MPRIS_STATE.read().clone(),
-                                            );
-
-                                            if new_state != *MPRIS_STATE.read() {
-                                                *MPRIS_STATE.write() = new_state;
-                                            }
-
-                                            // if player shuts down, break out of event loop to find
-                                            // a new player
-                                            if matches!(event, Event::PlayerShutDown) {
-                                                break;
-                                            }
-                                        }
-                                        Err(e) => {
-                                            // error getting event - player may have disconnected
-                                            log::error!(
-                                                "error receiving event for mpris player: {}",
-                                                e
-                                            );
-                                            break;
-                                        }
+                                    // if player shuts down, break out of event loop to find
+                                    // a new player
+                                    if matches!(event, Event::PlayerShutDown) {
+                                        break;
                                     }
                                 }
-                            }
-                            Err(e) => {
-                                // failed to get events - player may not support it or be
-                                // disconnected wait a bit before
-                                // trying to find another player
-                                log::error!("error starting event stream for mpris player: {}", e);
-                                std::thread::sleep(std::time::Duration::from_secs(2));
+                                Err(e) => {
+                                    // error getting event - player may have disconnected
+                                    log::error!("error receiving event for mpris player: {}", e);
+                                    break;
+                                }
                             }
                         }
                     }
-                    Err(_) => {
-                        // no players found - silently emit no-player state and wait before retrying
-                        if MPRIS_STATE.read().is_some() {
-                            *MPRIS_STATE.write() = None;
-                        }
-                        std::thread::sleep(std::time::Duration::from_secs(3));
+                    Err(e) => {
+                        // failed to get events - player may not support it or be
+                        // disconnected wait a bit before
+                        // trying to find another player
+                        log::error!("error starting event stream for mpris player: {}", e);
+                        std::thread::sleep(std::time::Duration::from_secs(2));
                     }
                 }
             }
-        });
-
-        Self
-    }
-
-    fn update(&mut self, _message: Self::Input, _sender: relm4::ComponentSender<Self>) {
-        // no inputs to handle
+            Err(_) => {
+                // no players found - silently emit no-player state and wait before retrying
+                if MPRIS_STATE.read().is_some() {
+                    *MPRIS_STATE.write() = None;
+                }
+                std::thread::sleep(std::time::Duration::from_secs(3));
+            }
+        }
     }
 }
 
