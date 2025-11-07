@@ -134,6 +134,7 @@
                           "fix"
                           "perf"
                           "refactor"
+                          "revert"
                           "style"
                           "test"
                         ];
