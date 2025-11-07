@@ -7,7 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     niri,
-    services::{mpris::MprisService, pulseaudio::PulseAudioService},
+    services::mpris::MprisService,
     weather::start_weather_polling,
     widgets::{
         bar::{Bar, BarInit, BarMsg, BarOutput},
@@ -20,7 +20,6 @@ pub(crate) struct CadenzaShellModel {
     tray_client: Option<Arc<Mutex<TrayClient>>>,
 
     _display: Display,
-    _pulseaudio_service: WorkerHandle<PulseAudioService>,
     _mpris_service: WorkerHandle<MprisService>,
 }
 
@@ -106,7 +105,6 @@ impl AsyncComponent for CadenzaShellModel {
             tray_client,
 
             _display: display.clone(),
-            _pulseaudio_service: PulseAudioService::builder().detach_worker(()),
             _mpris_service: MprisService::builder().detach_worker(()),
         };
 
