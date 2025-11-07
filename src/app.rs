@@ -8,6 +8,7 @@ use tokio::sync::Mutex;
 use crate::{
     battery::start_battery_watcher,
     brightness::start_brightness_watcher,
+    network::run_network_service,
     niri,
     services::{mpris::run_mpris_service, pulseaudio::run_pulseaudio_loop},
     weather::start_weather_polling,
@@ -73,6 +74,9 @@ impl AsyncComponent for CadenzaShellModel {
                 .register(start_brightness_watcher())
                 .drop_on_shutdown()
         });
+
+        // start network service
+        sender.command(|_, shutdown| shutdown.register(run_network_service()).drop_on_shutdown());
 
         // start weather watching
         sender.command(|_, shutdown| {

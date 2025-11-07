@@ -2,7 +2,8 @@ pub mod dbus;
 pub mod types;
 
 use futures_lite::StreamExt;
-use relm4::{AsyncReducer, AsyncReducible};
+use relm4::SharedState;
+use tokio::sync::mpsc::{self, UnboundedReceiver};
 use zbus::zvariant::OwnedObjectPath;
 
 use crate::network::{
@@ -13,7 +14,7 @@ use crate::network::{
     types::{ConnectivityState, DeviceType, State},
 };
 
-pub static NETWORK_STATE: AsyncReducer<NetworkInfo> = AsyncReducer::new();
+pub static NETWORK_STATE: SharedState<NetworkInfo> = SharedState::new();
 
 #[derive(Debug, Clone)]
 pub struct NetworkInfo {
@@ -41,56 +42,51 @@ pub enum SpecificNetworkInfo {
     Wired,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum NetworkPropertyChange {
     State(State),
     Connectivity(ConnectivityState),
     Primary(OwnedObjectPath),
 }
 
-impl AsyncReducible for NetworkInfo {
-    type Input = NetworkPropertyChange;
-
-    async fn init() -> Self {
-        start_network_watcher().await;
-
-        Default::default()
-    }
-
-    async fn reduce(&mut self, input: Self::Input) -> bool {
-        log::debug!("new network update: {:?}", input);
-
-        match input {
-            NetworkPropertyChange::State(state) => self.connection_state = state,
-            NetworkPropertyChange::Connectivity(connectivity) => self.connectivity = connectivity,
-            NetworkPropertyChange::Primary(path) => match fetch_network_info(path).await {
-                Ok(new_info) => {
-                    log::debug!("fetched new network info: {:?}", new_info);
-                    *self = new_info;
-                }
-                Err(e) => {
-                    log::error!("couldn't fetch new network info: {e}");
-                    return false;
-                }
-            },
-        }
-
-        true
-    }
-}
-
-pub async fn start_network_watcher() {
+pub async fn run_network_service() {
     // setup property watching
-    if let Err(e) = setup_property_watching().await {
-        log::error!("failed to setup network property watching: {}", e);
+    match setup_property_watching().await {
+        Ok(mut event_rx) => {
+            while let Some(event) = event_rx.recv().await {
+                match event {
+                    NetworkPropertyChange::State(state) => {
+                        NETWORK_STATE.write().connection_state = state
+                    }
+                    NetworkPropertyChange::Connectivity(connectivity) => {
+                        NETWORK_STATE.write().connectivity = connectivity
+                    }
+                    NetworkPropertyChange::Primary(path) => match fetch_network_info(path).await {
+                        Ok(new_info) => {
+                            log::debug!("fetched new network info: {:?}", new_info);
+                            *NETWORK_STATE.write() = new_info;
+                        }
+                        Err(e) => {
+                            log::error!("couldn't fetch new network info: {e}");
+                        }
+                    },
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("failed to setup network property watching: {}", e);
+        }
     }
 }
 
-async fn setup_property_watching() -> anyhow::Result<()> {
+async fn setup_property_watching() -> anyhow::Result<UnboundedReceiver<NetworkPropertyChange>> {
     let conn = zbus::Connection::system().await?;
     let nm_proxy = NetworkManagerProxy::new(&conn).await?;
 
+    let (event_tx, event_rx) = mpsc::unbounded_channel::<NetworkPropertyChange>();
+
     // watch for state changes
+    let event_tx_clone = event_tx.clone();
     let mut state_stream = nm_proxy.receive_state_changed().await;
     relm4::spawn(async move {
         while let Some(change) = state_stream.next().await {
@@ -99,13 +95,17 @@ async fn setup_property_watching() -> anyhow::Result<()> {
                 .await
                 .inspect_err(|e| log::error!("couldn't get network state change value: {e}"))
             {
-                NETWORK_STATE.emit(NetworkPropertyChange::State(new_state));
+                event_tx_clone
+                    .clone()
+                    .send(NetworkPropertyChange::State(new_state))
+                    .unwrap_or_else(|e| log::error!("couldn't send state change: {e}"));
             }
         }
     });
 
     // watch for connectivity changes
     let mut connectivity_stream = nm_proxy.receive_connectivity_changed().await;
+    let event_tx_clone = event_tx.clone();
     relm4::spawn(async move {
         while let Some(change) = connectivity_stream.next().await {
             if let Ok(new_connectivity) = change
@@ -113,7 +113,9 @@ async fn setup_property_watching() -> anyhow::Result<()> {
                 .await
                 .inspect_err(|e| log::error!("couldn't get network connectivity change value: {e}"))
             {
-                NETWORK_STATE.emit(NetworkPropertyChange::Connectivity(new_connectivity));
+                event_tx_clone
+                    .send(NetworkPropertyChange::Connectivity(new_connectivity))
+                    .unwrap_or_else(|e| log::error!("couldn't send connectivity change: {e}"));
             }
         }
     });
@@ -127,12 +129,16 @@ async fn setup_property_watching() -> anyhow::Result<()> {
                 .await
                 .inspect_err(|e| log::error!("couldn't get primary connection change value: {e}"))
             {
-                NETWORK_STATE.emit(NetworkPropertyChange::Primary(new_primary_connection_path));
+                event_tx
+                    .send(NetworkPropertyChange::Primary(new_primary_connection_path))
+                    .unwrap_or_else(|e| {
+                        log::error!("couldn't send primary connection path change: {e}")
+                    });
             }
         }
     });
 
-    Ok(())
+    Ok(event_rx)
 }
 
 async fn fetch_network_info(
