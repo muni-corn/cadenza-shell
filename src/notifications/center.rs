@@ -5,14 +5,10 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, LayerShell};
 use relm4::{factory::FactoryVecDeque, prelude::*};
 
-use crate::{
-    notifications::{
-        card::{NotificationCard, NotificationCardOutput},
-        types::Notification,
-    },
-    services::notifications::{
-        NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
-    },
+use crate::notifications::{
+    NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
+    card::{NotificationCard, NotificationCardOutput},
+    types::Notification,
 };
 
 #[derive(Debug)]

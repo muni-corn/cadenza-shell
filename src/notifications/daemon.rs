@@ -8,11 +8,9 @@ use relm4::ComponentSender;
 use tokio::sync::Mutex;
 use zbus::{interface, object_server::SignalEmitter};
 
-use crate::{
-    notifications::types::{Notification, NotificationUrgency},
-    services::notifications::{
-        NotificationHints, NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
-    },
+use crate::notifications::{
+    NotificationHints, NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
+    types::{Notification, NotificationUrgency},
 };
 
 static NOTIFICATION_ID: AtomicU32 = AtomicU32::new(1);
