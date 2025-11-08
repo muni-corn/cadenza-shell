@@ -3,7 +3,7 @@ use relm4::prelude::*;
 
 use crate::{
     icon_names::{MUSIC_NOTE_1_REGULAR, PAUSE_REGULAR},
-    services::mpris::{MPRIS_STATE, MprisState},
+    mpris::{MPRIS_STATE, MprisState},
     widgets::tile::{Tile, TileMsg},
 };
 

@@ -9,9 +9,10 @@ use crate::{
     battery::start_battery_watcher,
     bluetooth::run_bluetooth_service,
     brightness::start_brightness_watcher,
+    mpris::run_mpris_service,
     network::run_network_service,
     niri,
-    services::{mpris::run_mpris_service, pulseaudio::run_pulseaudio_loop},
+    pulseaudio::run_pulseaudio_loop,
     weather::start_weather_polling,
     widgets::{
         bar::{Bar, BarInit, BarMsg, BarOutput},

@@ -2,7 +2,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    services::pulseaudio::{PulseAudioData, VOLUME_STATE},
+    pulseaudio::{PulseAudioData, VOLUME_STATE},
     utils::icons::{VOLUME_ICONS, VOLUME_MUTED, VOLUME_ZERO, percentage_to_icon_from_list},
     widgets::progress_tile::{ProgressTile, ProgressTileInit, ProgressTileMsg, ProgressTileOutput},
 };
