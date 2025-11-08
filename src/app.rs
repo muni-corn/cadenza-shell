@@ -7,6 +7,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     battery::start_battery_watcher,
+    bluetooth::run_bluetooth_service,
     brightness::start_brightness_watcher,
     network::run_network_service,
     niri,
@@ -65,6 +66,13 @@ impl AsyncComponent for CadenzaShellModel {
         sender.command(|_, shutdown| {
             shutdown
                 .register(start_battery_watcher())
+                .drop_on_shutdown()
+        });
+
+        // start bluetooth watching
+        sender.command(|_, shutdown| {
+            shutdown
+                .register(run_bluetooth_service())
                 .drop_on_shutdown()
         });
 

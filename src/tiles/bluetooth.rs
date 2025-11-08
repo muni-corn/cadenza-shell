@@ -2,7 +2,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    bluetooth::{BLUETOOTH_REDUCER, BluetoothState},
+    bluetooth::{BLUETOOTH_STATE, BluetoothState},
     icon_names::{BLUETOOTH_CONNECTED_REGULAR, BLUETOOTH_DISABLED_REGULAR, BLUETOOTH_REGULAR},
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
@@ -30,7 +30,7 @@ impl SimpleComponent for BluetoothTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        BLUETOOTH_REDUCER.subscribe_optional(sender.input_sender(), |info| info.state().cloned());
+        BLUETOOTH_STATE.subscribe_optional(sender.input_sender(), |state| state.to_owned());
 
         // initialize the tile component
         let tile = Tile::builder().launch(Default::default()).detach();
