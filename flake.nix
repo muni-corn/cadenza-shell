@@ -40,7 +40,7 @@
     };
 
     devenv-root = {
-      url = ./.devenv/root;
+      url = "file+file:///dev/null";
       flake = false;
     };
   };
