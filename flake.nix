@@ -15,7 +15,7 @@
     };
 
     musicaloft-style = {
-      url = "git+https://git.musicaloft.com/municorn/musicaloft-style";
+      url = "github:musicaloft/musicaloft-style";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -57,7 +57,6 @@
 
       imports = [
         inputs.git-hooks-nix.flakeModule
-        inputs.devenv.flakeModule
         inputs.rust-flake.flakeModules.default
         inputs.rust-flake.flakeModules.nixpkgs
         inputs.musicaloft-style.flakeModule
