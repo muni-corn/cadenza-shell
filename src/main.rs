@@ -11,7 +11,6 @@ mod network;
 mod niri;
 mod notifications;
 mod pulseaudio;
-mod services;
 mod settings;
 mod style;
 mod tiles;
