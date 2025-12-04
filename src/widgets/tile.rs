@@ -131,11 +131,14 @@ impl SimpleComponent for Tile {
             sender_clone.input(TileMsg::Click);
         });
 
-        let widgets = TileWidgets {
+        let mut widgets = TileWidgets {
             icon,
             primary_label,
             secondary_label,
         };
+
+        // update all the widgets so they have the correct initial information
+        SimpleComponent::update_view(&model, &mut widgets, sender);
 
         ComponentParts { model, widgets }
     }
