@@ -8,9 +8,9 @@ use crate::{
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct NetworkTile {
-    current_state: Option<NetworkInfo>,
+    current_state: NetworkInfo,
 }
 
 #[derive(Debug)]
@@ -36,6 +36,8 @@ impl SimpleComponent for NetworkTile {
             NetworkTileMsg::Update(state.clone())
         });
 
+        let current_state = NETWORK_STATE.read().clone();
+
         // initialize the Tile component
         let tile =
             Tile::builder()
@@ -48,7 +50,7 @@ impl SimpleComponent for NetworkTile {
         root.append(tile.widget());
 
         ComponentParts {
-            model: Default::default(),
+            model: NetworkTile { current_state },
             widgets: tile,
         }
     }
@@ -56,21 +58,17 @@ impl SimpleComponent for NetworkTile {
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         log::debug!("network tile received update: {msg:?}");
         if let NetworkTileMsg::Update(new_info) = msg {
-            self.current_state = Some(new_info);
+            self.current_state = new_info;
         }
     }
 
     fn update_view(&self, tile: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        let Some(ref info) = self.current_state else {
-            return;
-        };
-
-        let icon = get_icon(info);
+        let icon = get_icon(&self.current_state);
 
         tile.emit(TileMsg::SetIcon(Some(icon.to_string())));
         tile.emit(TileMsg::SetPrimary(None));
         tile.emit(TileMsg::SetSecondary(
-            get_secondary_text(info).map(String::from),
+            get_secondary_text(&self.current_state).map(String::from),
         ));
     }
 
