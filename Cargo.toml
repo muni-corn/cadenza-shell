@@ -15,7 +15,7 @@ gdk4 = { version = "0.10", features = ["v4_14"] }
 gio = "0.21"
 glib = "0.21"
 gtk4 = { version = "0.10", features = ["v4_14"] }
-gtk4-layer-shell = "0.6"
+gtk4-layer-shell = "0.7"
 inotify = "0.11"
 log = "0.4"
 mpris = "2.0.1"
