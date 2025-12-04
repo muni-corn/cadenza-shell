@@ -5,7 +5,7 @@ use crate::{
     icon_names::{self, *},
     network::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, types::State},
     utils::icons::{NETWORK_WIFI_ICON_NAMES, percentage_to_icon_from_list},
-    widgets::tile::{Tile, TileMsg, TileOutput},
+    widgets::tile::{Tile, TileInit, TileMsg, TileOutput},
 };
 
 #[derive(Debug)]
@@ -39,13 +39,16 @@ impl SimpleComponent for NetworkTile {
         let current_state = NETWORK_STATE.read().clone();
 
         // initialize the Tile component
-        let tile =
-            Tile::builder()
-                .launch(Default::default())
-                .forward(sender.input_sender(), |output| match output {
-                    TileOutput::Clicked => NetworkTileMsg::Click,
-                    _ => NetworkTileMsg::Nothing,
-                });
+        let tile = Tile::builder()
+            .launch(TileInit {
+                icon_name: Some(get_icon(&current_state).to_string()),
+                secondary: get_secondary_text(&current_state).map(String::from),
+                ..Default::default()
+            })
+            .forward(sender.input_sender(), |output| match output {
+                TileOutput::Clicked => NetworkTileMsg::Click,
+                _ => NetworkTileMsg::Nothing,
+            });
 
         root.append(tile.widget());
 
