@@ -165,6 +165,8 @@ impl SimpleComponent for NotificationsTile {
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        widgets.root.set_visible(true);
+
         // update tile appearance based on notification count
         let icon = if self.notification_count > 0 {
             ALERT_BADGE_REGULAR
