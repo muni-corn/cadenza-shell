@@ -170,7 +170,9 @@ impl FactoryComponent for TrayItem {
         root.set_tooltip_text(Some(&tooltip_text));
 
         // Create image or label for the button
-        if let Some(icon_name) = &self.inner.icon_name {
+        if let Some(icon_name) = &self.inner.icon_name
+            && !icon_name.is_empty()
+        {
             let image = gtk::Image::from_icon_name(icon_name);
             image.set_pixel_size(16);
             image.set_halign(gtk::Align::Center);
