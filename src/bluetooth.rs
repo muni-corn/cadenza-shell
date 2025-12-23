@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, hash_map};
 
 use bluer::{Adapter, AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, Session};
 use futures_lite::StreamExt;
@@ -22,6 +22,12 @@ pub struct BluetoothState {
 
     pub powered: bool,
     pub connected_device_count: u8,
+}
+
+impl BluetoothState {
+    pub fn devices(&self) -> hash_map::Values<'_, Address, Device> {
+        self.devices.values()
+    }
 }
 
 pub async fn run_bluetooth_service() {
