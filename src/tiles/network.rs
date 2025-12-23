@@ -43,6 +43,7 @@ impl SimpleComponent for NetworkTile {
             .launch(TileInit {
                 icon_name: Some(get_icon(&current_state).to_string()),
                 secondary: get_secondary_text(&current_state).map(String::from),
+                tooltip: Some(get_tooltip_text(&current_state)),
                 ..Default::default()
             })
             .forward(sender.input_sender(), |output| match output {
@@ -73,6 +74,9 @@ impl SimpleComponent for NetworkTile {
         tile.emit(TileMsg::SetSecondary(
             get_secondary_text(&self.current_state).map(String::from),
         ));
+        tile.emit(TileMsg::SetTooltip(Some(get_tooltip_text(
+            &self.current_state,
+        ))));
     }
 
     fn init_root() -> Self::Root {
@@ -112,4 +116,27 @@ fn get_secondary_text(info: &NetworkInfo) -> Option<&str> {
         State::Disconnecting => "Disconnecting",
         State::Connecting => "Connecting",
     })
+}
+
+fn get_tooltip_text(info: &NetworkInfo) -> String {
+    // get the connection state text
+    let state_text = match info.connection_state {
+        State::Unknown => "Unknown",
+        State::Asleep => "Asleep",
+        State::Disconnected => "Disconnected",
+        State::Disconnecting => "Disconnecting",
+        State::Connecting => "Connecting",
+        State::ConnectedLocal => "Connected (local only)",
+        State::ConnectedSite => "Connected (limited)",
+        State::ConnectedGlobal => "Connected",
+    };
+
+    // add specific network info if available
+    match &info.specific_info {
+        Some(SpecificNetworkInfo::WiFi { wifi_ssid, .. }) => {
+            format!("{}\n{}", state_text, wifi_ssid)
+        }
+        Some(SpecificNetworkInfo::Wired) => format!("{}\nWired connection", state_text),
+        None => state_text.to_string(),
+    }
 }
