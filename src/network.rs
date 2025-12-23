@@ -72,6 +72,7 @@ pub async fn run_network_service() {
                     },
                 }
             }
+            log::warn!("network service has stopped receiving events");
         }
         Err(e) => {
             log::error!("failed to setup network property watching: {}", e);
@@ -101,6 +102,7 @@ async fn setup_property_watching() -> anyhow::Result<UnboundedReceiver<NetworkPr
                     .unwrap_or_else(|e| log::error!("couldn't send state change: {e}"));
             }
         }
+        log::warn!("stream for network state changes has closed");
     });
 
     // watch for connectivity changes
@@ -118,6 +120,7 @@ async fn setup_property_watching() -> anyhow::Result<UnboundedReceiver<NetworkPr
                     .unwrap_or_else(|e| log::error!("couldn't send connectivity change: {e}"));
             }
         }
+        log::warn!("stream for connectivity state changes has closed");
     });
 
     // watch for primary connection changes
@@ -136,6 +139,7 @@ async fn setup_property_watching() -> anyhow::Result<UnboundedReceiver<NetworkPr
                     });
             }
         }
+        log::warn!("stream for primary connection state changes has closed");
     });
 
     Ok(event_rx)
