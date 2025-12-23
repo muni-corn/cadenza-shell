@@ -27,7 +27,7 @@ pub struct RightGroup {
 pub struct RightWidgets {
     _brightness: Controller<BrightnessTile>,
     _volume: Controller<PulseAudioTile>,
-    _bluetooth: Controller<BluetoothTile>,
+    _bluetooth: AsyncController<BluetoothTile>,
 
     _network: Controller<NetworkTile>,
     _battery: Controller<BatteryTile>,
