@@ -161,13 +161,19 @@ impl FactoryComponent for TrayItem {
             _ => {} // default styling
         }
 
-        // Create enhanced tooltip with more information
-        let tooltip_text = if let Some(tooltip) = &self.inner.tool_tip {
-            format!("{:?}\n{}", self.inner.title, tooltip.description)
+        let mut tooltip_text = if let Some(title) = &self.inner.title
+            && !title.is_empty()
+        {
+            String::from(title)
         } else {
-            format!("{:?}\n{}", self.inner.title, self.inner.id)
+            String::new()
         };
-        root.set_tooltip_text(Some(&tooltip_text));
+
+        // Create enhanced tooltip with more information
+        if let Some(tooltip) = &self.inner.tool_tip {
+            tooltip_text.push_str(&format!("\n{}", tooltip.description));
+        };
+        root.set_tooltip_text(Some(tooltip_text.trim_start()));
 
         // Create image or label for the button
         if let Some(icon_name) = &self.inner.icon_name
