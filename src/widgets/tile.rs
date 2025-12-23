@@ -9,6 +9,7 @@ pub struct Tile {
     primary: Option<String>,
     secondary: Option<String>,
     attention: Attention,
+    tooltip: Option<String>,
 }
 
 #[derive(Debug)]
@@ -18,6 +19,7 @@ pub enum TileMsg {
     SetPrimary(Option<String>),
     SetSecondary(Option<String>),
     SetAttention(Attention),
+    SetTooltip(Option<String>),
 }
 
 // Tile-specific messages
@@ -55,6 +57,7 @@ pub enum TileOutput {
 
 #[derive(Debug)]
 pub struct TileWidgets {
+    root: gtk::Button,
     icon: gtk::Image,
     primary_label: gtk::Label,
     secondary_label: gtk::Label,
@@ -65,6 +68,7 @@ pub struct TileInit {
     pub primary: Option<String>,
     pub secondary: Option<String>,
     pub attention: Attention,
+    pub tooltip: Option<String>,
 }
 
 impl Default for TileInit {
@@ -74,6 +78,7 @@ impl Default for TileInit {
             primary: None,
             secondary: None,
             attention: Attention::Normal,
+            tooltip: None,
         }
     }
 }
@@ -95,6 +100,7 @@ impl SimpleComponent for Tile {
             primary: init.primary,
             secondary: init.secondary,
             attention: init.attention,
+            tooltip: init.tooltip,
         };
 
         // create container
@@ -132,6 +138,7 @@ impl SimpleComponent for Tile {
         });
 
         let mut widgets = TileWidgets {
+            root: root.clone(),
             icon,
             primary_label,
             secondary_label,
@@ -159,6 +166,9 @@ impl SimpleComponent for Tile {
             }
             TileMsg::SetAttention(attention) => {
                 self.attention = attention;
+            }
+            TileMsg::SetTooltip(tooltip) => {
+                self.tooltip = tooltip;
             }
         }
     }
@@ -197,6 +207,9 @@ impl SimpleComponent for Tile {
         } else {
             widgets.secondary_label.set_visible(false);
         }
+
+        // update tooltip
+        widgets.root.set_tooltip_text(self.tooltip.as_deref());
     }
 
     fn init_root() -> Self::Root {
