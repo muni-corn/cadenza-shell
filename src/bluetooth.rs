@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 
-use bluer::{
-    Adapter, AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, DeviceProperty, Session,
-};
+use bluer::{Adapter, AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, Session};
 use futures_lite::StreamExt;
 use relm4::SharedState;
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
@@ -90,6 +88,7 @@ async fn start_event_listening(
                 .send(BluetoothEvent::Adapter(event))
                 .unwrap_or_else(|e| log::error!("couldn't send adapter bluetooth event: {e}"));
         }
+        log::error!("bluetooth service has stopped receiving adapter events");
     });
 
     // start device discovery
@@ -101,6 +100,7 @@ async fn start_event_listening(
                 .send(BluetoothEvent::Adapter(event))
                 .unwrap_or_else(|e| log::error!("couldn't send discovery bluetooth event: {e}"));
         }
+        log::error!("bluetooth service has stopped receiving discovery events");
     });
 
     // monitor existing devices for connection status changes
@@ -118,6 +118,10 @@ async fn start_event_listening(
                             log::error!("couldn't send device bluetooth event: {e}")
                         });
                 }
+                log::warn!(
+                    "bluetooth service has stopped receiving events for device address {}",
+                    addr
+                );
             });
         }
     }
@@ -155,53 +159,15 @@ async fn update_from_event(input: BluetoothEvent) {
                 AdapterProperty::Discovering(d) => {
                     state.discovering = d;
                 }
-                AdapterProperty::Address(_)
-                | AdapterProperty::AddressType(_)
-                | AdapterProperty::SystemName(_)
-                | AdapterProperty::Alias(_)
-                | AdapterProperty::Class(_)
-                | AdapterProperty::Discoverable(_)
-                | AdapterProperty::Pairable(_)
-                | AdapterProperty::PairableTimeout(_)
-                | AdapterProperty::DiscoverableTimeout(_)
-                | AdapterProperty::Uuids(_)
-                | AdapterProperty::Modalias(_)
-                | AdapterProperty::ActiveAdvertisingInstances(_)
-                | AdapterProperty::SupportedAdvertisingInstances(_)
-                | AdapterProperty::SupportedAdvertisingSystemIncludes(_)
-                | AdapterProperty::SupportedAdvertisingSecondaryChannels(_)
-                | AdapterProperty::SupportedAdvertisingCapabilities(_)
-                | AdapterProperty::SupportedAdvertisingFeatures(_)
-                | _ => (),
+                p => log::warn!("unhandled AdapterProperty event: {p:?}"),
             },
         },
-        BluetoothEvent::Device(_address, device_event) => match device_event {
-            DeviceEvent::PropertyChanged(device_property) => match device_property {
-                DeviceProperty::Connected(_)
-                | DeviceProperty::Name(_)
-                | DeviceProperty::RemoteAddress(_)
-                | DeviceProperty::AddressType(_)
-                | DeviceProperty::Icon(_)
-                | DeviceProperty::Class(_)
-                | DeviceProperty::Appearance(_)
-                | DeviceProperty::Uuids(_)
-                | DeviceProperty::Paired(_)
-                | DeviceProperty::Trusted(_)
-                | DeviceProperty::Blocked(_)
-                | DeviceProperty::WakeAllowed(_)
-                | DeviceProperty::Alias(_)
-                | DeviceProperty::LegacyPairing(_)
-                | DeviceProperty::Modalias(_)
-                | DeviceProperty::Rssi(_)
-                | DeviceProperty::TxPower(_)
-                | DeviceProperty::ManufacturerData(_)
-                | DeviceProperty::ServiceData(_)
-                | DeviceProperty::ServicesResolved(_)
-                | DeviceProperty::AdvertisingFlags(_)
-                | DeviceProperty::AdvertisingData(_)
-                | DeviceProperty::BatteryPercentage(_)
-                | _ => (),
-            },
+        BluetoothEvent::Device(address, device_event) => match device_event {
+            DeviceEvent::PropertyChanged(device_property) => {
+                log::warn!(
+                    "unhandled ProperyChanged event for device {address}: {device_property:?}"
+                )
+            }
         },
     }
 }
