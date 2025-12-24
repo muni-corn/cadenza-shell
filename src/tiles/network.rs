@@ -3,7 +3,7 @@ use relm4::prelude::*;
 
 use crate::{
     icon_names::{self, *},
-    network::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, types::State},
+    network::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, get_icon, types::State},
     utils::icons::{NETWORK_WIFI_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Tile, TileInit, TileMsg, TileOutput},
 };
@@ -81,23 +81,6 @@ impl SimpleComponent for NetworkTile {
 
     fn init_root() -> Self::Root {
         gtk::Box::builder().build()
-    }
-}
-
-fn get_icon(info: &NetworkInfo) -> &str {
-    if let State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown =
-        info.connection_state
-    {
-        return icon_names::GLOBE_OFF_REGULAR;
-    }
-
-    match info.specific_info {
-        Some(SpecificNetworkInfo::WiFi { wifi_strength, .. }) => {
-            let strength = wifi_strength as f64 / 100.;
-            percentage_to_icon_from_list(strength, NETWORK_WIFI_ICON_NAMES)
-        }
-        Some(_) => EARTH_REGULAR,
-        None => GLOBE_OFF_REGULAR,
     }
 }
 

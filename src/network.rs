@@ -251,3 +251,21 @@ async fn get_wifi_info(
 
     Ok((ssid, strength))
 }
+
+/// Returns an appropriate icon name for the current networking state.
+pub fn get_icon(info: &NetworkInfo) -> &str {
+    if let State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown =
+        info.connection_state
+    {
+        return GLOBE_OFF_REGULAR;
+    }
+
+    match info.specific_info {
+        Some(SpecificNetworkInfo::WiFi { wifi_strength, .. }) => {
+            let strength = wifi_strength as f64 / 100.;
+            percentage_to_icon_from_list(strength, NETWORK_WIFI_ICON_NAMES)
+        }
+        Some(_) => NETWORK_WIRED_CONNECTED,
+        None => NETWORK_WIFI_DISABLED,
+    }
+}
