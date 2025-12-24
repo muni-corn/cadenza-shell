@@ -20,12 +20,18 @@ pub const BATTERY_ICON_NAMES: &[&str] = &[
     BATTERY_10_REGULAR,
 ];
 
+pub const NETWORK_WIFI: &str = WIFI_1_REGULAR;
 pub const NETWORK_WIFI_ICON_NAMES: &[&str] = &[
     WIFI_4_REGULAR,
     WIFI_3_REGULAR,
     WIFI_2_REGULAR,
     WIFI_1_REGULAR,
 ];
+pub const NETWORK_WIFI_DISABLED: &str = WIFI_OFF_REGULAR;
+pub const NETWORK_WIFI_DISCONNECTED: &str = WIFI_WARNING_REGULAR;
+pub const NETWORK_WIRED_DISABLED: &str = GLOBE_OFF_REGULAR;
+pub const NETWORK_WIRED_CONNECTED: &str = EARTH_REGULAR;
+pub const NETWORK_WIRED_UNREACHABLE: &str = GLOBE_ERROR_REGULAR;
 
 /// Get an icon from a list based on a percentage value from 0.0 to 1.0.
 pub fn percentage_to_icon_from_list<'a>(percentage: f64, icons: &'a [&'a str]) -> &'a str {
