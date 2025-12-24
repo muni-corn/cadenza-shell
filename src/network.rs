@@ -33,6 +33,20 @@ impl Default for NetworkInfo {
     }
 }
 
+impl NetworkInfo {
+    pub fn is_asleep(&self) -> bool {
+        self.connection_state == State::Asleep
+    }
+
+    pub fn wifi_ssid(&self) -> Option<String> {
+        if let Some(SpecificNetworkInfo::WiFi { ref wifi_ssid, .. }) = self.specific_info {
+            Some(wifi_ssid.clone())
+        } else {
+            None
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub enum SpecificNetworkInfo {
     WiFi {
