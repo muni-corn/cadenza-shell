@@ -6,12 +6,18 @@ use relm4::SharedState;
 use tokio::sync::mpsc::{self, UnboundedReceiver};
 use zbus::zvariant::OwnedObjectPath;
 
-use crate::network::{
-    dbus::{
-        AccessPointProxy, ActiveConnectionProxy, NetworkDeviceProxy, NetworkManagerProxy,
-        WirelessDeviceProxy,
+use crate::{
+    network::{
+        dbus::{
+            AccessPointProxy, ActiveConnectionProxy, NetworkDeviceProxy, NetworkManagerProxy,
+            WirelessDeviceProxy,
+        },
+        types::{ConnectivityState, DeviceType, State},
     },
-    types::{ConnectivityState, DeviceType, State},
+    utils::icons::{
+        NETWORK_WIFI_DISABLED, NETWORK_WIFI_ICON_NAMES, NETWORK_WIRED_CONNECTED,
+        NETWORK_WIRED_DISABLED, percentage_to_icon_from_list,
+    },
 };
 
 pub static NETWORK_STATE: SharedState<NetworkInfo> = SharedState::new();
@@ -271,15 +277,16 @@ pub fn get_icon(info: &NetworkInfo) -> &str {
     if let State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown =
         info.connection_state
     {
-        return GLOBE_OFF_REGULAR;
+        return NETWORK_WIRED_DISABLED;
     }
 
     match info.specific_info {
-        Some(SpecificNetworkInfo::WiFi { wifi_strength, .. }) => {
-            let strength = wifi_strength as f64 / 100.;
-            percentage_to_icon_from_list(strength, NETWORK_WIFI_ICON_NAMES)
-        }
+        Some(SpecificNetworkInfo::WiFi { wifi_strength, .. }) => get_strength_icon(wifi_strength),
         Some(_) => NETWORK_WIRED_CONNECTED,
         None => NETWORK_WIFI_DISABLED,
     }
+}
+
+pub fn get_strength_icon(strength: u8) -> &'static str {
+    percentage_to_icon_from_list(strength as f64 / 100., NETWORK_WIFI_ICON_NAMES)
 }
