@@ -1,3 +1,5 @@
+use std::fmt;
+
 use zbus::zvariant::OwnedValue;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
@@ -67,6 +69,25 @@ impl From<OwnedValue> for State {
             .downcast_ref::<u32>()
             .map(Self::from)
             .unwrap_or_default()
+    }
+}
+
+impl fmt::Display for State {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Asleep => "Asleep",
+                Self::ConnectedGlobal => "Global access",
+                Self::ConnectedLocal => "Local access only",
+                Self::ConnectedSite => "Site access only",
+                Self::Connecting => "Connecting",
+                Self::Disconnected => "Disconnected",
+                Self::Disconnecting => "Disconnecting",
+                Self::Unknown => "State unknown",
+            }
+        )
     }
 }
 
@@ -795,5 +816,21 @@ impl From<OwnedValue> for ConnectivityState {
             .downcast_ref::<u32>()
             .map(Self::from)
             .unwrap_or_default()
+    }
+}
+
+impl fmt::Display for ConnectivityState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                ConnectivityState::Full => "Full connectivity",
+                ConnectivityState::Limited => "Limited connectivity",
+                ConnectivityState::None => "No connectivity",
+                ConnectivityState::Portal => "Sign-in needed",
+                ConnectivityState::Unknown => "Connectivity unknown",
+            }
+        )
     }
 }

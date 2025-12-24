@@ -101,35 +101,16 @@ fn get_icon(info: &NetworkInfo) -> &str {
     }
 }
 
-fn get_secondary_text(info: &NetworkInfo) -> Option<&str> {
-    if let State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown =
-        info.connection_state
-    {
-        return Some("Disconnected");
-    }
-
+fn get_secondary_text(info: &NetworkInfo) -> Option<String> {
     Some(match info.connection_state {
-        State::ConnectedLocal | State::ConnectedGlobal | State::ConnectedSite => return None,
-        State::Unknown => "State unknown",
-        State::Asleep => "Asleep",
-        State::Disconnected => "Disconnected",
-        State::Disconnecting => "Disconnecting",
-        State::Connecting => "Connecting",
+        State::ConnectedGlobal => return None,
+        c => c.to_string(),
     })
 }
 
 fn get_tooltip_text(info: &NetworkInfo) -> String {
     // get the connection state text
-    let state_text = match info.connection_state {
-        State::Unknown => "Unknown",
-        State::Asleep => "Asleep",
-        State::Disconnected => "Disconnected",
-        State::Disconnecting => "Disconnecting",
-        State::Connecting => "Connecting",
-        State::ConnectedLocal => "Connected (local only)",
-        State::ConnectedSite => "Connected (limited)",
-        State::ConnectedGlobal => "Connected",
-    };
+    let state_text = info.connection_state.to_string();
 
     // add specific network info if available
     match &info.specific_info {
@@ -137,6 +118,6 @@ fn get_tooltip_text(info: &NetworkInfo) -> String {
             format!("{}\n{}", state_text, wifi_ssid)
         }
         Some(SpecificNetworkInfo::Wired) => format!("{}\nWired connection", state_text),
-        None => state_text.to_string(),
+        None => state_text,
     }
 }
