@@ -8,6 +8,7 @@ mod brightness;
 mod commands;
 mod mpris;
 mod network;
+mod network_menu;
 mod niri;
 mod notifications;
 mod pulseaudio;
@@ -17,7 +18,6 @@ mod tiles;
 mod utils;
 mod weather;
 mod widgets;
-mod wifi_menu;
 
 mod icon_names {
     pub use shipped::*; // Include all shipped icons by default
