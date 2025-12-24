@@ -1,134 +1,40 @@
 use gtk4::prelude::*;
-use relm4::{factory::FactoryVecDeque, prelude::*};
+use relm4::prelude::*;
 
-#[derive(Debug, Clone)]
-pub struct AccessPoint {
-    pub ssid: String,
-    pub strength: u32, // 0-100
-    pub requires_password: bool,
-    pub frequency: u32, // in MHz
-    pub is_active: bool,
-}
-
-#[derive(Debug, Clone)]
-pub struct WifiState {
-    pub enabled: bool,
-    pub connected_ssid: Option<String>,
-    pub connectivity: WifiConnectivity,
-    pub state: WifiNetworkState,
-    pub access_points: Vec<AccessPoint>,
-    pub scanning: bool,
-}
-
-#[derive(Debug, Clone)]
-pub enum WifiConnectivity {
-    Full,
-    Limited,
-    None,
-    Portal,
-    Unknown,
-}
-
-#[derive(Debug, Clone)]
-pub enum WifiNetworkState {
-    Asleep,
-    ConnectedGlobal,
-    ConnectedLocal,
-    ConnectedSite,
-    Connecting,
-    Disconnected,
-    Disconnecting,
-    Unknown,
-}
-
-impl Default for WifiState {
-    fn default() -> Self {
-        Self {
-            enabled: false,
-            connected_ssid: None,
-            connectivity: WifiConnectivity::Unknown,
-            state: WifiNetworkState::Unknown,
-            access_points: Vec::new(),
-            scanning: false,
-        }
-    }
-}
+use crate::network::{NETWORK_STATE, NetworkInfo, dbus::AccessPointProxy, get_icon};
 
 #[derive(Debug)]
-struct WiFiMenu {
-    wifi_state: WifiState,
+pub struct NetworkMenu {
+    network_state: NetworkInfo,
     show_password_dialog: Option<String>, // SSID requiring password
-    access_points: FactoryVecDeque<AccessPointWidget>,
+    access_points: AsyncFactoryVecDeque<AccessPointWidget>,
+    scanning: bool,
 }
 
 #[derive(Debug)]
-pub enum WiFiMenuMsg {
+pub enum NetworkMenuMsg {
     ToggleWifi(bool),
     ScanNetworks,
     ConnectToNetwork(String),   // SSID
     ShowPasswordDialog(String), // SSID
     HidePasswordDialog,
     ConnectWithPassword(String, String), // SSID, Password
-    UpdateState(WifiState),
+    UpdateState(NetworkInfo),
 }
 
-impl WiFiMenu {
-    fn connectivity_text(&self) -> &'static str {
-        match self.wifi_state.connectivity {
-            WifiConnectivity::Full => "Full connectivity",
-            WifiConnectivity::Limited => "Limited connectivity",
-            WifiConnectivity::None => "No connectivity",
-            WifiConnectivity::Portal => "Sign-in needed",
-            WifiConnectivity::Unknown => "Connectivity unknown",
-        }
-    }
-
-    fn state_text(&self) -> &'static str {
-        match self.wifi_state.state {
-            WifiNetworkState::Asleep => "Sleeping",
-            WifiNetworkState::ConnectedGlobal => "Global access",
-            WifiNetworkState::ConnectedLocal => "Local access only",
-            WifiNetworkState::ConnectedSite => "Site access only",
-            WifiNetworkState::Connecting => "Connecting",
-            WifiNetworkState::Disconnected => "Disconnected",
-            WifiNetworkState::Disconnecting => "Disconnecting",
-            WifiNetworkState::Unknown => "State unknown",
-        }
-    }
-
-    fn get_network_icon(&self) -> String {
-        use crate::utils::icons::NETWORK_WIFI_ICON_NAMES;
-
-        if !self.wifi_state.enabled {
-            return "󰤮".to_string(); // disabled icon
-        }
-
-        if self.wifi_state.connected_ssid.is_some() {
-            // find the connected access point and show strength-based icon
-            if let Some(ap) = self.wifi_state.access_points.iter().find(|ap| ap.is_active) {
-                let icons = NETWORK_WIFI_ICON_NAMES;
-                let index =
-                    ((ap.strength as f64 / 100.0) * (icons.len() - 1) as f64).round() as usize;
-                return icons.get(index).unwrap_or(&"󰤟").to_string();
-            }
-        }
-
-        "󰤯".to_string() // disconnected icon
-    }
-}
-
-#[relm4::component]
-impl SimpleComponent for WiFiMenu {
-    type Init = WifiState;
-    type Input = WiFiMenuMsg;
+#[relm4::component(pub)]
+impl SimpleComponent for NetworkMenu {
+    type Init = ();
+    type Input = NetworkMenuMsg;
     type Output = ();
 
     view! {
         #[root]
-        main_box = gtk::Box {
+        gtk::Box {
             set_orientation: gtk::Orientation::Vertical,
             set_spacing: 16,
             set_vexpand: true,
+            set_width_request: 256,
 
             // header with wifi toggle
             gtk::Box {
@@ -137,25 +43,22 @@ impl SimpleComponent for WiFiMenu {
                 set_hexpand: true,
                 add_css_class: "content-title",
 
-                gtk::Label {
+                gtk::Image {
                     #[watch]
-                    set_label: &model.get_network_icon(),
-                },
-
-                gtk::Label {
-                    set_label: "WiFi",
-                    set_halign: gtk::Align::Start,
+                    set_icon_name: Some(get_icon(&model.network_state)),
+                    set_icon_size: gtk4::IconSize::Large,
                     set_hexpand: true,
+                    set_halign: gtk::Align::Start,
                 },
 
                 gtk::Switch {
                     #[watch]
-                    set_active: model.wifi_state.enabled,
+                    set_active: !model.network_state.is_asleep(),
                     set_halign: gtk::Align::End,
                     set_valign: gtk::Align::End,
 
                     connect_state_set[sender] => move |_, state| {
-                        sender.input(WiFiMenuMsg::ToggleWifi(state));
+                        sender.input(NetworkMenuMsg::ToggleWifi(state));
                         glib::Propagation::Proceed
                     },
                 },
@@ -179,10 +82,9 @@ impl SimpleComponent for WiFiMenu {
                         gtk::Label {
                             set_halign: gtk::Align::Start,
                             #[watch]
-                            set_visible: model.wifi_state.connected_ssid.is_some(),
+                            set_visible: model.network_state.wifi_ssid().is_some(),
                             #[watch]
-                            set_label: &model.wifi_state.connected_ssid
-                                .as_ref()
+                            set_label: &model.network_state.wifi_ssid()
                                 .map(|ssid| format!("Connected to {}", ssid))
                                 .unwrap_or_default(),
                         },
@@ -190,13 +92,13 @@ impl SimpleComponent for WiFiMenu {
                         gtk::Label {
                             set_halign: gtk::Align::Start,
                             #[watch]
-                            set_label: model.connectivity_text(),
+                            set_label: &model.network_state.connectivity.to_string(),
                         },
 
                         gtk::Label {
                             set_halign: gtk::Align::Start,
                             #[watch]
-                            set_label: model.state_text(),
+                            set_label: &model.network_state.connection_state.to_string(),
                         },
                     },
 
@@ -224,7 +126,7 @@ impl SimpleComponent for WiFiMenu {
                                 gtk::Button {
                                     set_label: "Cancel",
                                     connect_clicked[sender] => move |_| {
-                                        sender.input(WiFiMenuMsg::HidePasswordDialog);
+                                        sender.input(NetworkMenuMsg::HidePasswordDialog);
                                     },
                                 },
 
@@ -236,47 +138,6 @@ impl SimpleComponent for WiFiMenu {
                         }
                     } else {
                         gtk::Box {
-                            set_orientation: gtk::Orientation::Vertical,
-                            set_spacing: 8,
-                            set_vexpand: true,
-
-                            // available networks header
-                            gtk::Box {
-                                set_hexpand: true,
-
-                                gtk::Label {
-                                    set_label: "Available networks",
-                                    add_css_class: "bold",
-                                    set_halign: gtk::Align::Start,
-                                    set_hexpand: true,
-                                },
-
-                                gtk::Button {
-                                    #[watch]
-                                    set_sensitive: !model.wifi_state.scanning,
-                                    set_halign: gtk::Align::End,
-                                    connect_clicked[sender] => move |_| {
-                                        sender.input(WiFiMenuMsg::ScanNetworks);
-                                    },
-
-                                    if model.wifi_state.scanning {
-                                        gtk::Spinner {
-                                            set_spinning: true,
-                                        }
-                                    } else {
-                                        gtk::Image {
-                                            set_icon_name: Some("view-refresh"),
-                                        }
-                                    },
-                                },
-                            },
-
-                            // access points list
-                            #[local_ref]
-                            access_points_box -> gtk::Box {
-                                set_orientation: gtk::Orientation::Vertical,
-                                set_spacing: 4,
-                            },
                         }
                     },
                 },
@@ -285,77 +146,79 @@ impl SimpleComponent for WiFiMenu {
     }
 
     fn init(
-        init: Self::Init,
+        _init: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let access_points = FactoryVecDeque::builder()
+        let access_points = AsyncFactoryVecDeque::builder()
             .launch(gtk::Box::default())
             .forward(sender.input_sender(), |output| match output {
-                AccessPointOutput::Connect(ssid) => WiFiMenuMsg::ConnectToNetwork(ssid),
-                AccessPointOutput::RequestPassword(ssid) => WiFiMenuMsg::ShowPasswordDialog(ssid),
+                AccessPointOutput::Connect(ssid) => NetworkMenuMsg::ConnectToNetwork(ssid),
+                AccessPointOutput::RequestPassword(ssid) => {
+                    NetworkMenuMsg::ShowPasswordDialog(ssid)
+                }
             });
 
-        let model = WiFiMenu {
-            wifi_state: init,
+        NETWORK_STATE.subscribe(sender.input_sender(), |state| {
+            NetworkMenuMsg::UpdateState(state.clone())
+        });
+
+        let current_state = NETWORK_STATE.read().clone();
+
+        let model = NetworkMenu {
+            network_state: current_state,
             show_password_dialog: None,
             access_points,
+            scanning: false,
         };
 
-        let access_points_box = model.access_points.widget();
+        // let access_points_box = model.access_points.widget();
         let widgets = view_output!();
 
-        // setup connect button click handler
-        widgets.connect_button.connect_clicked({
-            let sender = sender.clone();
-            let password_entry = widgets.password_entry.clone();
-            move |_| {
-                let password = password_entry.text().to_string();
-                // get SSID from the dialog state (simplified for now)
-                sender.input(WiFiMenuMsg::ConnectWithPassword(
-                    "current_ssid".to_string(),
-                    password,
-                ));
-            }
-        });
+        // // setup connect button click handler
+        // widgets.connect_button.connect_clicked({
+        //     let sender = sender.clone();
+        //     let password_entry = widgets.password_entry.clone();
+        //     move |_| {
+        //         let password = password_entry.text().to_string();
+        //         // get SSID from the dialog state (simplified for now)
+        //         sender.input(NetworkMenuMsg::ConnectWithPassword(
+        //             "current_ssid".to_string(),
+        //             password,
+        //         ));
+        //     }
+        // });
 
         ComponentParts { model, widgets }
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            WiFiMenuMsg::UpdateState(state) => {
-                self.wifi_state = state;
-
-                // update access points factory
-                let mut guard = self.access_points.guard();
-                guard.clear();
-                for ap in &self.wifi_state.access_points {
-                    guard.push_back(ap.clone());
-                }
+            NetworkMenuMsg::UpdateState(state) => {
+                self.network_state = state;
             }
-            WiFiMenuMsg::ToggleWifi(enabled) => {
+            NetworkMenuMsg::ToggleWifi(enabled) => {
                 // TODO: implement actual wifi toggle
-                log::info!("toggle wifi: {}", enabled);
+                todo!("toggle wifi: {}", enabled);
             }
-            WiFiMenuMsg::ScanNetworks => {
+            NetworkMenuMsg::ScanNetworks => {
                 // TODO: implement network scan
-                log::info!("scanning for networks");
+                todo!("scanning for networks");
             }
-            WiFiMenuMsg::ConnectToNetwork(ssid) => {
+            NetworkMenuMsg::ConnectToNetwork(ssid) => {
                 // TODO: implement connection logic
-                log::info!("connecting to network: {}", ssid);
+                todo!("connecting to network: {}", ssid);
             }
-            WiFiMenuMsg::ShowPasswordDialog(ssid) => {
+            NetworkMenuMsg::ShowPasswordDialog(ssid) => {
                 self.show_password_dialog = Some(ssid);
             }
-            WiFiMenuMsg::HidePasswordDialog => {
+            NetworkMenuMsg::HidePasswordDialog => {
                 self.show_password_dialog = None;
             }
-            WiFiMenuMsg::ConnectWithPassword(ssid, _password) => {
+            NetworkMenuMsg::ConnectWithPassword(ssid, _password) => {
                 // TODO: implement password connection
-                log::info!("connecting to {} with password", ssid);
                 self.show_password_dialog = None;
+                todo!("connecting to {} with password", ssid);
             }
         }
     }
@@ -364,7 +227,7 @@ impl SimpleComponent for WiFiMenu {
 // factory for individual access point items
 #[derive(Debug)]
 struct AccessPointWidget {
-    access_point: AccessPoint,
+    access_point_proxy: AccessPointProxy<'static>,
 }
 
 #[derive(Debug)]
@@ -378,76 +241,79 @@ pub enum AccessPointOutput {
     RequestPassword(String), // SSID
 }
 
-#[relm4::factory]
-impl FactoryComponent for AccessPointWidget {
+pub struct AccessPointWidgetWidgets {
+    main_box: gtk::Box,
+    strength_icon: gtk::Image,
+    ssid_label: gtk::Label,
+    frequency_label: gtk::Label,
+}
+
+impl AsyncFactoryComponent for AccessPointWidget {
     type CommandOutput = ();
-    type Init = AccessPoint;
+    type Init = AccessPointProxy<'static>;
     type Input = AccessPointMsg;
     type Output = AccessPointOutput;
     type ParentWidget = gtk::Box;
+    type Root = gtk::Button;
+    type Widgets = AccessPointWidgetWidgets;
 
-    view! {
-        gtk::Button {
-            connect_clicked[sender] => move |_| {
-                sender.input(AccessPointMsg::Connect);
-            },
-
-            gtk::Box {
-                set_spacing: 8,
-                set_halign: gtk::Align::Start,
-                set_hexpand: true,
-
-                gtk::Label {
-                    #[watch]
-                    set_label: &self.get_strength_icon(),
-                    set_width_request: 32,
-                },
-
-                gtk::Label {
-                    #[watch]
-                    set_label: &self.access_point.ssid,
-                },
-
-                gtk::Label {
-                    add_css_class: "dim",
-                    add_css_class: "access-point-frequency",
-                    #[watch]
-                    set_label: &format!("{:.1} GHz", self.access_point.frequency as f64 / 1000.0),
-                    set_hexpand: true,
-                    set_halign: gtk::Align::Start,
-                },
-            },
+    async fn init_model(
+        init: Self::Init,
+        _index: &DynamicIndex,
+        _sender: AsyncFactorySender<Self>,
+    ) -> Self {
+        Self {
+            access_point_proxy: init,
         }
     }
 
-    fn init_model(init: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        Self { access_point: init }
-    }
-
-    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
+    async fn update(&mut self, msg: Self::Input, sender: AsyncFactorySender<Self>) {
         match msg {
             AccessPointMsg::Connect => {
-                if self.access_point.requires_password {
-                    let _ = sender.output(AccessPointOutput::RequestPassword(
-                        self.access_point.ssid.clone(),
-                    ));
-                } else {
-                    let _ =
-                        sender.output(AccessPointOutput::Connect(self.access_point.ssid.clone()));
+                if let Ok(ssid_bytes) = self.access_point_proxy.ssid().await {
+                    let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();
+                    let _ = sender.output(AccessPointOutput::RequestPassword(ssid));
                 }
             }
         }
     }
-}
 
-impl AccessPointWidget {
-    fn get_strength_icon(&self) -> String {
-        use crate::utils::icons::NETWORK_WIFI_ICON_NAMES;
+    fn init_root() -> Self::Root {
+        gtk::Button::builder().build()
+    }
 
-        let icons = NETWORK_WIFI_ICON_NAMES;
-        let strength_ratio = self.access_point.strength as f64 / 100.0;
-        let index = (strength_ratio * (icons.len() - 1) as f64).round() as usize;
+    fn init_widgets(
+        &mut self,
+        _index: &DynamicIndex,
+        root: Self::Root,
+        _returned_widget: &<Self::ParentWidget as relm4::factory::FactoryView>::ReturnedWidget,
+        sender: AsyncFactorySender<Self>,
+    ) -> Self::Widgets {
+        root.connect_clicked(move |_| sender.input(AccessPointMsg::Connect));
 
-        icons.get(index).unwrap_or(&"󰤟").to_string()
+        let main_box = gtk::Box::builder()
+            .spacing(8)
+            .halign(gtk::Align::Start)
+            .hexpand(true)
+            .build();
+
+        let strength_icon = gtk::Image::builder().width_request(32).build();
+
+        let ssid_label = gtk::Label::new(None);
+
+        let frequency_label = gtk::Label::builder()
+            .css_classes(["dim", "access-point-frequency"])
+            .build();
+
+        main_box.append(&strength_icon);
+        main_box.append(&ssid_label);
+        main_box.append(&frequency_label);
+
+        AccessPointWidgetWidgets {
+            main_box,
+            strength_icon,
+            ssid_label,
+            frequency_label,
+        }
     }
 }

@@ -2,9 +2,8 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    icon_names::{self, *},
     network::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, get_icon, types::State},
-    utils::icons::{NETWORK_WIFI_ICON_NAMES, percentage_to_icon_from_list},
+    network_menu::NetworkMenu,
     widgets::tile::{Tile, TileInit, TileMsg, TileOutput},
 };
 
@@ -15,9 +14,13 @@ pub struct NetworkTile {
 
 #[derive(Debug)]
 pub enum NetworkTileMsg {
-    Click,
     Update(NetworkInfo),
-    Nothing,
+}
+
+#[derive(Debug)]
+pub struct NetworkTileWidgets {
+    tile: Controller<Tile>,
+    _popover: gtk::Popover,
 }
 
 impl SimpleComponent for NetworkTile {
@@ -25,7 +28,7 @@ impl SimpleComponent for NetworkTile {
     type Input = NetworkTileMsg;
     type Output = TileOutput;
     type Root = gtk::Box;
-    type Widgets = Controller<Tile>;
+    type Widgets = NetworkTileWidgets;
 
     fn init(
         _init: Self::Init,
@@ -37,44 +40,64 @@ impl SimpleComponent for NetworkTile {
         });
 
         let current_state = NETWORK_STATE.read().clone();
-
         // initialize the Tile component
         let tile = Tile::builder()
             .launch(TileInit {
                 icon_name: Some(get_icon(&current_state).to_string()),
-                secondary: get_secondary_text(&current_state).map(String::from),
+                secondary: get_secondary_text(&current_state),
                 tooltip: Some(get_tooltip_text(&current_state)),
                 ..Default::default()
             })
-            .forward(sender.input_sender(), |output| match output {
-                TileOutput::Clicked => NetworkTileMsg::Click,
-                _ => NetworkTileMsg::Nothing,
-            });
+            .detach();
+
+        // initialize the network menu component
+        let network_menu = NetworkMenu::builder().launch(()).detach();
+
+        // create the popover
+        let popover = gtk::Popover::builder()
+            .child(network_menu.widget())
+            .width_request(384)
+            .height_request(256)
+            .autohide(true)
+            .build();
+        popover.set_parent(tile.widget());
+
+        // connect click handler to show popover
+        let popover_clone = popover.clone();
+        tile.widget().connect_clicked(move |_| {
+            if popover_clone.is_visible() {
+                popover_clone.popdown();
+            } else {
+                popover_clone.popup();
+            }
+        });
 
         root.append(tile.widget());
 
         ComponentParts {
             model: NetworkTile { current_state },
-            widgets: tile,
+            widgets: NetworkTileWidgets {
+                tile,
+                _popover: popover,
+            },
         }
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         log::debug!("network tile received update: {msg:?}");
-        if let NetworkTileMsg::Update(new_info) = msg {
-            self.current_state = new_info;
-        }
+        let NetworkTileMsg::Update(new_info) = msg;
+        self.current_state = new_info.clone();
     }
 
-    fn update_view(&self, tile: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         let icon = get_icon(&self.current_state);
 
-        tile.emit(TileMsg::SetIcon(Some(icon.to_string())));
-        tile.emit(TileMsg::SetPrimary(None));
-        tile.emit(TileMsg::SetSecondary(
-            get_secondary_text(&self.current_state).map(String::from),
-        ));
-        tile.emit(TileMsg::SetTooltip(Some(get_tooltip_text(
+        widgets.tile.emit(TileMsg::SetIcon(Some(icon.to_string())));
+        widgets.tile.emit(TileMsg::SetPrimary(None));
+        widgets.tile.emit(TileMsg::SetSecondary(get_secondary_text(
+            &self.current_state,
+        )));
+        widgets.tile.emit(TileMsg::SetTooltip(Some(get_tooltip_text(
             &self.current_state,
         ))));
     }

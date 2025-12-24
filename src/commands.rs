@@ -130,8 +130,8 @@ pub enum AppCommand {
     ToggleNotificationCenter,
     /// Dismiss a specific notification
     DismissNotification(u32),
-    /// Toggle wifi menu
-    ToggleWifiMenu,
+    /// Toggle network menu
+    ToggleNetworkMenu,
     /// Switch to workspace
     SwitchWorkspace(u32),
     /// Adjust volume
@@ -156,8 +156,8 @@ impl Command for AppCommand {
                 // in a real implementation, this would interact with the notification service
                 Ok(())
             }
-            AppCommand::ToggleWifiMenu => {
-                log::info!("toggling WiFi menu");
+            AppCommand::ToggleNetworkMenu => {
+                log::info!("toggling network menu");
                 Ok(())
             }
             AppCommand::SwitchWorkspace(workspace) => {
@@ -207,7 +207,7 @@ impl Command for AppCommand {
         match self {
             AppCommand::ToggleNotificationCenter => "toggle notification center".to_string(),
             AppCommand::DismissNotification(id) => format!("dismiss notification {}", id),
-            AppCommand::ToggleWifiMenu => "toggle wifi menu".to_string(),
+            AppCommand::ToggleNetworkMenu => "toggle network menu".to_string(),
             AppCommand::SwitchWorkspace(ws) => format!("switch to workspace {}", ws),
             AppCommand::SetVolume(vol) => format!("set volume to {:.0}%", vol * 100.0),
             AppCommand::SetBrightness(br) => format!("set brightness to {:.0}%", br * 100.0),
