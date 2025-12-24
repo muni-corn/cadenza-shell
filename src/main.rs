@@ -1,4 +1,5 @@
 #![feature(trait_alias)]
+#![feature(result_option_map_or_default)]
 
 mod analog_clock;
 mod app;

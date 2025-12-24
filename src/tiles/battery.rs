@@ -8,10 +8,10 @@ use crate::{
     icon_names::{BATTERY_CHARGE_REGULAR, BATTERY_CHECKMARK_REGULAR},
     tiles::Attention,
     utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
-    widgets::tile::{Tile, TileMsg},
+    widgets::tile::{Tile, TileInit, TileMsg},
 };
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct BatteryTile {
     available: bool,
 
@@ -43,20 +43,34 @@ impl SimpleComponent for BatteryTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = BatteryTile {
-            available: false,
-
-            current_percentage: 0.,
-            charging: false,
-            time_remaining: Duration::ZERO,
-        };
-
-        let tile = Tile::builder().launch(Default::default()).detach();
-        root.append(tile.widget());
-
+        // subscribe to the global battery state
         BATTERY_STATE.subscribe(sender.input_sender(), |new_state| {
             BatteryMsg::StateUpdate(*new_state)
         });
+
+        // initialize model
+        let model = BATTERY_STATE.read().map_or_default(|s| BatteryTile {
+            available: true,
+
+            current_percentage: s.percentage,
+            charging: s.charging,
+            time_remaining: s.time_remaining,
+        });
+
+        // hide the entire tile if battery isn't available
+        root.set_visible(model.available);
+
+        // setup tile
+        let tile = Tile::builder()
+            .launch(TileInit {
+                icon_name: Some(model.get_icon().to_string()),
+                primary: Some(model.get_text()),
+                secondary: Some(model.get_readable_time()),
+                attention: model.get_attention(),
+                tooltip: None,
+            })
+            .detach();
+        root.append(tile.widget());
 
         ComponentParts {
             model,
@@ -96,13 +110,7 @@ impl SimpleComponent for BatteryTile {
                 .emit(TileMsg::SetSecondary(Some(self.get_readable_time())));
 
             // update attention state
-            let attention = if self.is_critical() {
-                Attention::Alarm
-            } else if self.is_low() {
-                Attention::Warning
-            } else {
-                Attention::Normal
-            };
+            let attention = self.get_attention();
 
             // update visibility and attention
             widgets.tile.emit(TileMsg::SetAttention(attention));
@@ -110,7 +118,7 @@ impl SimpleComponent for BatteryTile {
     }
 
     fn init_root() -> Self::Root {
-        gtk::Box::builder().visible(false).build()
+        gtk::Box::default()
     }
 }
 
@@ -170,6 +178,16 @@ impl BatteryTile {
                     format!("Until {}", formatted)
                 }
             }
+        }
+    }
+
+    fn get_attention(&self) -> Attention {
+        if self.is_critical() {
+            Attention::Alarm
+        } else if self.is_low() {
+            Attention::Warning
+        } else {
+            Attention::Normal
         }
     }
 }
