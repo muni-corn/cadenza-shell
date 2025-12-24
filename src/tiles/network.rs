@@ -4,6 +4,7 @@ use relm4::prelude::*;
 use crate::{
     network::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, get_icon, types::State},
     network_menu::NetworkMenu,
+    tiles::Attention,
     widgets::tile::{Tile, TileInit, TileMsg, TileOutput},
 };
 
@@ -100,6 +101,9 @@ impl SimpleComponent for NetworkTile {
         widgets.tile.emit(TileMsg::SetTooltip(Some(get_tooltip_text(
             &self.current_state,
         ))));
+        widgets
+            .tile
+            .emit(TileMsg::SetAttention(get_attention(&self.current_state)))
     }
 
     fn init_root() -> Self::Root {
@@ -125,5 +129,16 @@ fn get_tooltip_text(info: &NetworkInfo) -> String {
         }
         Some(SpecificNetworkInfo::Wired) => format!("{}\nWired connection", state_text),
         None => state_text,
+    }
+}
+
+fn get_attention(info: &NetworkInfo) -> Attention {
+    if matches!(
+        info.connection_state,
+        State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown
+    ) {
+        Attention::Dim
+    } else {
+        Attention::Normal
     }
 }
