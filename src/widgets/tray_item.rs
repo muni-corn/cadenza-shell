@@ -66,7 +66,7 @@ impl FactoryComponent for TrayItem {
         index: &DynamicIndex,
         _sender: FactorySender<Self>,
     ) -> Self {
-        log::info!(
+        log::debug!(
             "initializing tray item: address={}, has_menu={}",
             address,
             menu.is_some()
@@ -106,7 +106,7 @@ impl FactoryComponent for TrayItem {
                     }
                 }
                 UpdateEvent::MenuConnect(menu_path) => {
-                    log::info!(
+                    log::debug!(
                         "menu connected for tray item '{}': menu_path='{}', has_menu={}",
                         self.address,
                         menu_path,
@@ -128,7 +128,7 @@ impl FactoryComponent for TrayItem {
         let (menu_model, action_group) = if let Some(ref menu) = self.menu
             && let Some(ref menu_path) = self.inner.menu
         {
-            log::info!(
+            log::debug!(
                 "initializing menu with actions for '{}': menu_path='{}'",
                 self.address,
                 menu_path
@@ -351,7 +351,7 @@ fn create_menu_from_items(
                     let submenu_id = item.id;
 
                     action.connect_activate(move |_, _| {
-                        log::info!(
+                        log::debug!(
                             "menu item activated: address='{}', menu_path='{}', submenu_id={}",
                             address_clone,
                             menu_path_clone,

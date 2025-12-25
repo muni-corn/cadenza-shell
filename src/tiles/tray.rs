@@ -139,7 +139,7 @@ impl SimpleComponent for TrayWidget {
                         .map(|item| item.index().current_index());
 
                     if let Some(index) = index_opt {
-                        log::info!("removing tray item found for {address}");
+                        log::debug!("removing tray item found for {address}");
                         self.items.guard().remove(index);
                     } else {
                         log::warn!("couldn't find tray item for {address}");
