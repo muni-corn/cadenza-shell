@@ -105,6 +105,7 @@
             packages = [
               pkgs.bacon
               pkgs.cargo-outdated
+              pkgs.zbus-xmlgen
             ]
             ++ buildInputs
             ++ nativeBuildInputs;
