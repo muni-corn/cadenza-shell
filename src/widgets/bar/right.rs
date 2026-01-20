@@ -102,10 +102,10 @@ impl SimpleComponent for RightGroup {
         root.append(bluetooth.widget());
         root.append(network.widget());
         root.append(battery.widget());
-        root.append(notifications.widget());
         if let Some(tray) = &tray_opt {
             root.append(tray.widget());
         }
+        root.append(notifications.widget());
 
         ComponentParts {
             model: RightGroup { tray: tray_opt },
