@@ -11,7 +11,7 @@ use crate::{
         types::Notification,
     },
     tiles::Attention,
-    widgets::tile::{Tile, TileMsg, TileOutput},
+    widgets::tile::{Tile, TileInit, TileMsg, TileOutput},
 };
 
 #[derive(Debug)]
@@ -65,13 +65,15 @@ impl SimpleComponent for NotificationsTile {
 
         let widgets = NotificationsTileWidgets {
             root,
-            tile: Tile::builder().launch(Default::default()).forward(
-                sender.input_sender(),
-                |msg| match msg {
+            tile: Tile::builder()
+                .launch(TileInit {
+                    icon_name: Some(ALERT_REGULAR.to_string()),
+                    ..Default::default()
+                })
+                .forward(sender.input_sender(), |msg| match msg {
                     TileOutput::Clicked => NotificationsTileMsg::TileClicked,
                     _ => NotificationsTileMsg::Nothing,
-                },
-            ),
+                }),
         };
 
         let model = NotificationsTile {
@@ -165,8 +167,6 @@ impl SimpleComponent for NotificationsTile {
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        widgets.root.set_visible(true);
-
         // update tile appearance based on notification count
         let icon = if self.notification_count > 0 {
             ALERT_BADGE_REGULAR
@@ -192,6 +192,6 @@ impl SimpleComponent for NotificationsTile {
     }
 
     fn init_root() -> Self::Root {
-        gtk::Box::builder().visible(false).build()
+        gtk::Box::builder().visible(true).build()
     }
 }
