@@ -16,9 +16,9 @@ pub enum BluetoothEvent {
 #[derive(Clone, Debug)]
 pub struct BluetoothState {
     _session: Session,
-    adapter: Adapter,
+    pub adapter: Adapter,
     devices: HashMap<Address, Device>,
-    discovering: bool,
+    pub discovering: bool,
 
     pub powered: bool,
     pub connected_device_count: u8,
