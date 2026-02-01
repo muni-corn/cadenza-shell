@@ -28,6 +28,10 @@ impl BluetoothState {
     pub fn devices(&self) -> hash_map::Values<'_, Address, Device> {
         self.devices.values()
     }
+
+    pub fn get_device(&self, address: &Address) -> Option<&Device> {
+        self.devices.get(address)
+    }
 }
 
 pub async fn run_bluetooth_service() {
