@@ -116,7 +116,6 @@ impl SimpleComponent for TrayWidget {
                     }
                 }
                 TrayEvent::Update(address, update_event) => {
-                    log::debug!("tray item {} updated: {:?}", address, update_event);
                     let index_opt = self
                         .items
                         .iter()
@@ -124,7 +123,6 @@ impl SimpleComponent for TrayWidget {
                         .map(|item| item.index().current_index());
 
                     if let Some(index_to_update) = index_opt {
-                        log::debug!("sending update to tray item at index {}", index_to_update);
                         self.items
                             .send(index_to_update, TrayItemInput::DataUpdate(update_event));
                     } else {
@@ -139,7 +137,6 @@ impl SimpleComponent for TrayWidget {
                         .map(|item| item.index().current_index());
 
                     if let Some(index) = index_opt {
-                        log::debug!("removing tray item found for {address}");
                         self.items.guard().remove(index);
                     } else {
                         log::warn!("couldn't find tray item for {address}");

@@ -117,7 +117,6 @@ impl AsyncComponent for CadenzaShellModel {
                         loop {
                             match rx.recv().await {
                                 Ok(event) => {
-                                    log::debug!("tray event received: {:?}", event);
                                     out.send(CadenzaShellCommandOutput::TrayEvent(event))
                                         .unwrap_or_else(|_| {
                                             log::error!(

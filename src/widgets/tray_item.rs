@@ -66,12 +66,6 @@ impl FactoryComponent for TrayItem {
         index: &DynamicIndex,
         _sender: FactorySender<Self>,
     ) -> Self {
-        log::debug!(
-            "initializing tray item: address={}, has_menu={}",
-            address,
-            menu.is_some()
-        );
-
         Self {
             address,
             index: index.clone(),
@@ -106,12 +100,6 @@ impl FactoryComponent for TrayItem {
                     }
                 }
                 UpdateEvent::MenuConnect(menu_path) => {
-                    log::debug!(
-                        "menu connected for tray item '{}': menu_path='{}', has_menu={}",
-                        self.address,
-                        menu_path,
-                        self.menu.is_some()
-                    );
                     self.inner.menu = Some(menu_path.clone());
                 }
             },
@@ -128,11 +116,6 @@ impl FactoryComponent for TrayItem {
         let (menu_model, action_group) = if let Some(ref menu) = self.menu
             && let Some(ref menu_path) = self.inner.menu
         {
-            log::debug!(
-                "initializing menu with actions for '{}': menu_path='{}'",
-                self.address,
-                menu_path
-            );
             menu.as_menu_with_actions(&sender, &self.address, menu_path)
         } else {
             log::warn!(
@@ -205,7 +188,6 @@ impl FactoryComponent for TrayItem {
         let address_clone = self.address.clone();
         let sender_clone = sender.clone();
         root.connect_clicked(move |_| {
-            log::debug!("tray activate requested: {}", address_clone.clone());
             sender_clone
                 .output(TrayItemOutput::Activate(ActivateRequest::Default {
                     address: address_clone.clone(),
@@ -245,11 +227,6 @@ impl FactoryComponent for TrayItem {
         if let Some(ref menu) = self.menu
             && let Some(ref menu_path) = self.inner.menu
         {
-            log::debug!(
-                "updating menu view for '{}': menu_path='{}'",
-                self.address,
-                menu_path
-            );
             let (menu_model, new_action_group) =
                 menu.as_menu_with_actions(&sender, &self.address, menu_path);
             widgets.popover.set_menu_model(Some(&menu_model));
@@ -260,12 +237,6 @@ impl FactoryComponent for TrayItem {
             }
             widgets.action_group = new_action_group;
         } else {
-            log::debug!(
-                "update_view called for '{}' but menu not ready (has_menu={}, has_menu_path={})",
-                self.address,
-                self.menu.is_some(),
-                self.inner.menu.is_some()
-            );
             widgets.popover.set_menu_model(None::<&gio::Menu>);
         }
     }
@@ -305,12 +276,6 @@ fn create_menu_from_items(
     address: &str,
     menu_path: &str,
 ) -> (gio::Menu, gio::SimpleActionGroup) {
-    log::debug!(
-        "creating menu for address='{}', menu_path='{}', item_count={}",
-        address,
-        menu_path,
-        items.len()
-    );
     let action_group = gio::SimpleActionGroup::new();
     let menu = gio::Menu::new();
 
@@ -351,12 +316,6 @@ fn create_menu_from_items(
                     let submenu_id = item.id;
 
                     action.connect_activate(move |_, _| {
-                        log::debug!(
-                            "menu item activated: address='{}', menu_path='{}', submenu_id={}",
-                            address_clone,
-                            menu_path_clone,
-                            submenu_id
-                        );
                         sender_clone
                             .output(TrayItemOutput::Activate(ActivateRequest::MenuItem {
                                 address: address_clone.clone(),
