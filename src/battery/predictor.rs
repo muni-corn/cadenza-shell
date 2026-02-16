@@ -9,13 +9,13 @@ use super::{
 #[derive(Debug, Clone)]
 pub struct BatteryPredictor {
     /// Recursive Least Squares model.
-    rls_model: RlsModel,
+    pub(super) rls_model: RlsModel,
     /// Historical usage profile.
-    usage_profile: UsageProfile,
+    pub(super) usage_profile: UsageProfile,
     /// Exponentially-weighted moving average of power draw.
-    ewma_power: Option<f64>,
+    pub(super) ewma_power: Option<f64>,
     /// EWMA smoothing factor.
-    ewma_alpha: f64,
+    pub(super) ewma_alpha: f64,
 }
 
 impl BatteryPredictor {

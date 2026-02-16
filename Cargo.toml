@@ -9,6 +9,7 @@ anyhow = "1"
 async-channel = "2.3"
 bluer = { version = "0.17", features = ["full"] }
 chrono = "0.4"
+dirs = "6.0.0"
 env_logger = "0.11"
 futures-lite = { version = "2", default-features = false }
 gdk4 = { version = "0.10", features = ["v4_14"] }

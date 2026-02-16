@@ -5,13 +5,13 @@
 #[derive(Debug, Clone)]
 pub struct RlsModel {
     /// Weight vector (8 elements).
-    weights: Vec<f64>,
+    pub(super) weights: Vec<f64>,
     /// Inverse covariance matrix (8×8, stored as flattened row-major).
-    p_matrix: Vec<f64>,
+    pub(super) p_matrix: Vec<f64>,
     /// Forgetting factor (0.95-0.995). lower = faster adaptation.
-    lambda: f64,
+    pub(super) lambda: f64,
     /// Number of samples seen.
-    sample_count: u32,
+    pub(super) sample_count: u32,
 }
 
 impl RlsModel {

@@ -8,11 +8,11 @@ use chrono::{Datelike, Local, Timelike};
 pub struct UsageProfile {
     /// Average power draw (watts) for each 30-min slot (336 total).
     /// Index = (day_of_week * 48) + (hour * 2) + (minute >= 30 ? 1 : 0)
-    slots: Vec<f64>,
+    pub(super) slots: Vec<f64>,
     /// Sample counts for each slot (for confidence).
-    counts: Vec<u32>,
+    pub(super) counts: Vec<u32>,
     /// Smoothing factor for EWMA (0.0-1.0).
-    alpha: f64,
+    pub(super) alpha: f64,
 }
 
 impl UsageProfile {
