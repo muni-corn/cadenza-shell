@@ -22,127 +22,32 @@ pub enum NetworkMenuMsg {
     UpdateState(NetworkInfo),
 }
 
-#[relm4::component(pub)]
+pub struct NetworkMenuWidgets {
+    wifi_icon: gtk::Image,
+    wifi_switch: gtk::Switch,
+    ssid_label: gtk::Label,
+    connectivity_label: gtk::Label,
+    connection_state_label: gtk::Label,
+    password_dialog_box: gtk::Box,
+    password_dialog_label: gtk::Label,
+    password_entry: gtk::Entry,
+    connect_button: gtk::Button,
+}
+
 impl SimpleComponent for NetworkMenu {
     type Init = ();
     type Input = NetworkMenuMsg;
     type Output = ();
+    type Root = gtk::Box;
+    type Widgets = NetworkMenuWidgets;
 
-    view! {
-        #[root]
-        gtk::Box {
-            set_orientation: gtk::Orientation::Vertical,
-            set_spacing: 16,
-            set_vexpand: true,
-            set_width_request: 256,
-
-            // header with wifi toggle
-            gtk::Box {
-                set_orientation: gtk::Orientation::Horizontal,
-                set_spacing: 20,
-                set_hexpand: true,
-                add_css_class: "content-title",
-
-                gtk::Image {
-                    #[watch]
-                    set_icon_name: Some(get_icon(&model.network_state)),
-                    set_icon_size: gtk4::IconSize::Large,
-                    set_hexpand: true,
-                    set_halign: gtk::Align::Start,
-                },
-
-                gtk::Switch {
-                    #[watch]
-                    set_active: !model.network_state.is_asleep(),
-                    set_halign: gtk::Align::End,
-                    set_valign: gtk::Align::End,
-
-                    connect_state_set[sender] => move |_, state| {
-                        sender.input(NetworkMenuMsg::ToggleWifi(state));
-                        glib::Propagation::Proceed
-                    },
-                },
-            },
-
-            // scrollable content
-            gtk::ScrolledWindow {
-                set_vscrollbar_policy: gtk::PolicyType::Automatic,
-                set_hscrollbar_policy: gtk::PolicyType::Never,
-                set_vexpand: true,
-
-                gtk::Box {
-                    set_orientation: gtk::Orientation::Vertical,
-                    set_spacing: 16,
-
-                    // status information
-                    gtk::Box {
-                        set_orientation: gtk::Orientation::Vertical,
-                        set_spacing: 4,
-
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            #[watch]
-                            set_visible: model.network_state.wifi_ssid().is_some(),
-                            #[watch]
-                            set_label: &model.network_state.wifi_ssid()
-                                .map(|ssid| format!("Connected to {}", ssid))
-                                .unwrap_or_default(),
-                        },
-
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            #[watch]
-                            set_label: &model.network_state.connectivity.to_string(),
-                        },
-
-                        gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            #[watch]
-                            set_label: &model.network_state.connection_state.to_string(),
-                        },
-                    },
-
-                    if model.show_password_dialog.is_some() {
-                        #[name = "password_dialog"]
-                        gtk::Box {
-                            set_orientation: gtk::Orientation::Vertical,
-                            set_spacing: 8,
-
-                            gtk::Label {
-                                #[watch]
-                                set_label: &format!("Enter password for {}",
-                                    model.show_password_dialog.as_ref().unwrap()),
-                            },
-
-                            #[name = "password_entry"]
-                            gtk::Entry {
-                                set_visibility: false,
-                                set_placeholder_text: Some("Password"),
-                            },
-
-                            gtk::Box {
-                                set_spacing: 8,
-
-                                gtk::Button {
-                                    set_label: "Cancel",
-                                    connect_clicked[sender] => move |_| {
-                                        sender.input(NetworkMenuMsg::HidePasswordDialog);
-                                    },
-                                },
-
-                                #[name = "connect_button"]
-                                gtk::Button {
-                                    set_label: "Connect",
-                                },
-                            },
-                        }
-                    } else {
-                        gtk::Box {
-                        }
-                    },
-                },
-            },
-        }
+    fn init_root() -> Self::Root {
+        gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(16)
+            .vexpand(true)
+            .width_request(256)
+            .build()
     }
 
     fn init(
@@ -165,6 +70,134 @@ impl SimpleComponent for NetworkMenu {
 
         let current_state = NETWORK_STATE.read().clone();
 
+        // header with wifi toggle
+        let header_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Horizontal)
+            .spacing(20)
+            .hexpand(true)
+            .build();
+        header_box.add_css_class("content-title");
+
+        let wifi_icon = gtk::Image::builder()
+            .icon_name(get_icon(&current_state))
+            .icon_size(gtk4::IconSize::Large)
+            .hexpand(true)
+            .halign(gtk::Align::Start)
+            .build();
+
+        let wifi_switch = gtk::Switch::builder()
+            .active(!current_state.is_asleep())
+            .halign(gtk::Align::End)
+            .valign(gtk::Align::End)
+            .build();
+
+        wifi_switch.connect_state_set({
+            let sender = sender.clone();
+            move |_, state| {
+                sender.input(NetworkMenuMsg::ToggleWifi(state));
+                glib::Propagation::Proceed
+            }
+        });
+
+        header_box.append(&wifi_icon);
+        header_box.append(&wifi_switch);
+
+        // scrollable content
+        let scrolled_window = gtk::ScrolledWindow::builder()
+            .vscrollbar_policy(gtk::PolicyType::Automatic)
+            .hscrollbar_policy(gtk::PolicyType::Never)
+            .vexpand(true)
+            .build();
+
+        let content_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(16)
+            .build();
+
+        // status information
+        let status_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(4)
+            .build();
+
+        let ssid_label = gtk::Label::builder()
+            .halign(gtk::Align::Start)
+            .visible(current_state.wifi_ssid().is_some())
+            .label(
+                &current_state
+                    .wifi_ssid()
+                    .map(|ssid| format!("Connected to {}", ssid))
+                    .unwrap_or_default(),
+            )
+            .build();
+
+        let connectivity_label = gtk::Label::builder()
+            .halign(gtk::Align::Start)
+            .label(&current_state.connectivity.to_string())
+            .build();
+
+        let connection_state_label = gtk::Label::builder()
+            .halign(gtk::Align::Start)
+            .label(&current_state.connection_state.to_string())
+            .build();
+
+        status_box.append(&ssid_label);
+        status_box.append(&connectivity_label);
+        status_box.append(&connection_state_label);
+
+        // password dialog box (initially hidden)
+        let password_dialog_box = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
+            .spacing(8)
+            .visible(false)
+            .build();
+
+        let password_dialog_label = gtk::Label::new(None);
+
+        let password_entry = gtk::Entry::builder()
+            .visibility(false)
+            .placeholder_text("Password")
+            .build();
+
+        let dialog_buttons_box = gtk::Box::builder().spacing(8).build();
+
+        let cancel_button = gtk::Button::builder().label("Cancel").build();
+        cancel_button.connect_clicked({
+            let sender = sender.clone();
+            move |_| {
+                sender.input(NetworkMenuMsg::HidePasswordDialog);
+            }
+        });
+
+        let connect_button = gtk::Button::builder().label("Connect").build();
+        connect_button.connect_clicked({
+            let sender = sender.clone();
+            let password_entry = password_entry.clone();
+            move |_| {
+                let password = password_entry.text().to_string();
+                // TODO: need to get SSID from model state
+                sender.input(NetworkMenuMsg::ConnectWithPassword(
+                    "current_ssid".to_string(),
+                    password,
+                ));
+            }
+        });
+
+        dialog_buttons_box.append(&cancel_button);
+        dialog_buttons_box.append(&connect_button);
+
+        password_dialog_box.append(&password_dialog_label);
+        password_dialog_box.append(&password_entry);
+        password_dialog_box.append(&dialog_buttons_box);
+
+        content_box.append(&status_box);
+        content_box.append(&password_dialog_box);
+
+        scrolled_window.set_child(Some(&content_box));
+
+        root.append(&header_box);
+        root.append(&scrolled_window);
+
         let model = NetworkMenu {
             network_state: current_state,
             show_password_dialog: None,
@@ -172,22 +205,17 @@ impl SimpleComponent for NetworkMenu {
             scanning: false,
         };
 
-        // let access_points_box = model.access_points.widget();
-        let widgets = view_output!();
-
-        // // setup connect button click handler
-        // widgets.connect_button.connect_clicked({
-        //     let sender = sender.clone();
-        //     let password_entry = widgets.password_entry.clone();
-        //     move |_| {
-        //         let password = password_entry.text().to_string();
-        //         // get SSID from the dialog state (simplified for now)
-        //         sender.input(NetworkMenuMsg::ConnectWithPassword(
-        //             "current_ssid".to_string(),
-        //             password,
-        //         ));
-        //     }
-        // });
+        let widgets = NetworkMenuWidgets {
+            wifi_icon,
+            wifi_switch,
+            ssid_label,
+            connectivity_label,
+            connection_state_label,
+            password_dialog_box,
+            password_dialog_label,
+            password_entry,
+            connect_button,
+        };
 
         ComponentParts { model, widgets }
     }
@@ -220,6 +248,44 @@ impl SimpleComponent for NetworkMenu {
                 self.show_password_dialog = None;
                 todo!("connecting to {} with password", ssid);
             }
+        }
+    }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        widgets
+            .wifi_icon
+            .set_icon_name(Some(get_icon(&self.network_state)));
+        widgets
+            .wifi_switch
+            .set_active(!self.network_state.is_asleep());
+
+        widgets
+            .ssid_label
+            .set_visible(self.network_state.wifi_ssid().is_some());
+        widgets.ssid_label.set_label(
+            &self
+                .network_state
+                .wifi_ssid()
+                .map(|ssid| format!("Connected to {}", ssid))
+                .unwrap_or_default(),
+        );
+
+        widgets
+            .connectivity_label
+            .set_label(&self.network_state.connectivity.to_string());
+        widgets
+            .connection_state_label
+            .set_label(&self.network_state.connection_state.to_string());
+
+        // update password dialog visibility
+        if let Some(ssid) = &self.show_password_dialog {
+            widgets.password_dialog_box.set_visible(true);
+            widgets
+                .password_dialog_label
+                .set_label(&format!("Enter password for {}", ssid));
+        } else {
+            widgets.password_dialog_box.set_visible(false);
+            widgets.password_entry.set_text("");
         }
     }
 }
