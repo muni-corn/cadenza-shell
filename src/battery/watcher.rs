@@ -4,7 +4,8 @@ use anyhow::Result;
 use notify::{RecursiveMode, Watcher};
 use systemstat::{Platform, System};
 
-use super::{BATTERY_STATE, BatteryState};
+use super::{BATTERY_STATE, BatteryPredictor, BatteryState, load_predictor, save_predictor};
+use crate::battery::sysfs::read_battery_sysfs;
 
 pub async fn start_battery_watcher() {
     // detect battery interface
@@ -15,6 +16,18 @@ pub async fn start_battery_watcher() {
 
     let system = System::new();
 
+    // load or create predictor
+    let mut predictor = match load_predictor() {
+        Ok(p) => {
+            log::info!("loaded battery predictor from previous session");
+            p
+        }
+        Err(e) => {
+            log::info!("creating new battery predictor: {}", e);
+            BatteryPredictor::new()
+        }
+    };
+
     // read initial battery properties. if any fail, we will not consider the
     // service available.
     let Ok((percentage, charging, time_remaining)) = read_battery_state(&system)
@@ -23,13 +36,17 @@ pub async fn start_battery_watcher() {
         return;
     };
 
-    // send initial update
+    // send initial update with prediction
+    let (smart_time_remaining, confidence) = read_battery_sysfs()
+        .and_then(|reading| predictor.predict_time_remaining(&reading))
+        .unwrap_or((time_remaining, 0.0));
+
     *BATTERY_STATE.write() = Some(BatteryState {
         percentage,
         charging,
         time_remaining,
-        smart_time_remaining: time_remaining, // temp: use kernel estimate
-        confidence: 0.0,                      // temp: no confidence yet
+        smart_time_remaining,
+        confidence,
     });
 
     let (tx, rx) = mpsc::channel();
@@ -52,6 +69,8 @@ pub async fn start_battery_watcher() {
     }
 
     let mut has_watcher = true;
+    let mut update_count = 0u32;
+
     loop {
         // waits on file changes, or polls every 30 seconds
         if has_watcher
@@ -67,13 +86,40 @@ pub async fn start_battery_watcher() {
 
         match read_battery_state(&system) {
             Ok((percentage, charging, time_remaining)) => {
-                *BATTERY_STATE.write() = Some(BatteryState {
-                    percentage,
-                    charging,
-                    time_remaining,
-                    smart_time_remaining: time_remaining, // temp: use kernel estimate
-                    confidence: 0.0,                      // temp: no confidence yet
-                });
+                // update predictor if sysfs data available
+                if let Some(reading) = read_battery_sysfs() {
+                    predictor.update(&reading);
+
+                    // get smart prediction
+                    let (smart_time_remaining, confidence) = predictor
+                        .predict_time_remaining(&reading)
+                        .unwrap_or((time_remaining, 0.0));
+
+                    *BATTERY_STATE.write() = Some(BatteryState {
+                        percentage,
+                        charging,
+                        time_remaining,
+                        smart_time_remaining,
+                        confidence,
+                    });
+                } else {
+                    // sysfs unavailable, fall back to kernel estimates
+                    *BATTERY_STATE.write() = Some(BatteryState {
+                        percentage,
+                        charging,
+                        time_remaining,
+                        smart_time_remaining: time_remaining,
+                        confidence: 0.0,
+                    });
+                }
+
+                // save predictor state every 10 updates (~5 minutes)
+                update_count += 1;
+                if update_count.is_multiple_of(10)
+                    && let Err(e) = save_predictor(&predictor)
+                {
+                    log::warn!("couldn't save battery predictor: {}", e);
+                }
             }
             Err(e) => {
                 log::error!("couldn't read battery state: {}", e);
