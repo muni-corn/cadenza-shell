@@ -4,14 +4,14 @@ use relm4::SharedState;
 
 mod features;
 mod model;
+mod predictor;
 mod profile;
 mod sysfs;
 mod watcher;
 
 pub use features::{extract_features, project_features_forward};
 pub use model::RlsModel;
-pub use profile::UsageProfile;
-pub use sysfs::{ChargingStatus, SysfsReading, read_battery_sysfs};
+pub use predictor::BatteryPredictor;
 pub use watcher::start_battery_watcher;
 
 pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
