@@ -55,6 +55,7 @@ impl SimpleComponent for BatteryTile {
             current_percentage: s.percentage,
             charging: s.charging,
             time_remaining: s.time_remaining,
+            // note: smart_time_remaining and confidence not used in tile yet
         });
 
         // hide the entire tile if battery isn't available
@@ -83,6 +84,8 @@ impl SimpleComponent for BatteryTile {
             percentage,
             charging,
             time_remaining,
+            smart_time_remaining: _,
+            confidence: _,
         }) = o
         {
             self.current_percentage = percentage;
