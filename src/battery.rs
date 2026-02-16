@@ -4,11 +4,13 @@ use relm4::SharedState;
 
 mod features;
 mod model;
+mod profile;
 mod sysfs;
 mod watcher;
 
 pub use features::{extract_features, project_features_forward};
 pub use model::RlsModel;
+pub use profile::UsageProfile;
 pub use sysfs::{ChargingStatus, SysfsReading, read_battery_sysfs};
 pub use watcher::start_battery_watcher;
 
