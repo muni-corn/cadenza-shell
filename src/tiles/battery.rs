@@ -17,7 +17,9 @@ pub struct BatteryTile {
 
     current_percentage: f32,
     charging: bool,
-    time_remaining: Duration,
+    time_remaining: Duration,       // kernel estimate (for reference)
+    smart_time_remaining: Duration, // ml-enhanced estimate
+    confidence: f32,                // 0.0-1.0
 }
 
 #[derive(Debug)]
@@ -55,7 +57,6 @@ impl SimpleComponent for BatteryTile {
             current_percentage: s.percentage,
             charging: s.charging,
             time_remaining: s.time_remaining,
-            // note: smart_time_remaining and confidence not used in tile yet
         });
 
         // hide the entire tile if battery isn't available
@@ -84,8 +85,6 @@ impl SimpleComponent for BatteryTile {
             percentage,
             charging,
             time_remaining,
-            smart_time_remaining: _,
-            confidence: _,
         }) = o
         {
             self.current_percentage = percentage;
@@ -164,7 +163,8 @@ impl BatteryTile {
         if self.charging && self.current_percentage > 0.99 {
             "Plugged in".to_string()
         } else {
-            let time_remaining = self.time_remaining.as_secs();
+            let time_remaining = self.smart_time_remaining.as_secs();
+
             if time_remaining < 30 * 60 {
                 format!("{} min left", time_remaining / 60)
             } else {
