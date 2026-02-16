@@ -2,9 +2,11 @@ use std::time::Duration;
 
 use relm4::SharedState;
 
+mod model;
 mod sysfs;
 mod watcher;
 
+pub use model::RlsModel;
 pub use sysfs::{ChargingStatus, SysfsReading, read_battery_sysfs};
 pub use watcher::start_battery_watcher;
 
