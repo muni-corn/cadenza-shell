@@ -17,6 +17,9 @@ pub use watcher::start_battery_watcher;
 
 pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
 
+/// Minimum confidence threshold to use smart prediction over kernel estimate.
+pub const MIN_SMART_PREDICTION_CONFIDENCE: f32 = 0.3;
+
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct BatteryState {
     pub percentage: f32,

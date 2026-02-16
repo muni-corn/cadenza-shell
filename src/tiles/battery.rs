@@ -4,7 +4,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    battery::{BATTERY_STATE, BatteryState},
+    battery::{BATTERY_STATE, BatteryState, MIN_SMART_PREDICTION_CONFIDENCE},
     icon_names::{BATTERY_CHARGE_REGULAR, BATTERY_CHECKMARK_REGULAR},
     tiles::Attention,
     utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
@@ -154,7 +154,7 @@ impl BatteryTile {
     fn is_low(&self) -> bool {
         // use smart prediction if confidence is high enough, otherwise fall back to
         // kernel estimate
-        let time_remaining_secs = if self.confidence >= 0.3 {
+        let time_remaining_secs = if self.confidence >= MIN_SMART_PREDICTION_CONFIDENCE {
             self.smart_time_remaining.as_secs()
         } else {
             self.time_remaining.as_secs()
@@ -166,7 +166,7 @@ impl BatteryTile {
     fn is_critical(&self) -> bool {
         // use smart prediction if confidence is high enough, otherwise fall back to
         // kernel estimate
-        let time_remaining_secs = if self.confidence >= 0.3 {
+        let time_remaining_secs = if self.confidence >= MIN_SMART_PREDICTION_CONFIDENCE {
             self.smart_time_remaining.as_secs()
         } else {
             self.time_remaining.as_secs()
@@ -181,8 +181,8 @@ impl BatteryTile {
         if self.charging && self.current_percentage > 0.99 {
             "Plugged in".to_string()
         } else {
-            // use smart prediction if confidence is high enough (>= 0.3)
-            let time_remaining = if self.confidence >= 0.3 {
+            // use smart prediction if confidence is high enough
+            let time_remaining = if self.confidence >= MIN_SMART_PREDICTION_CONFIDENCE {
                 self.smart_time_remaining.as_secs()
             } else {
                 self.time_remaining.as_secs()
