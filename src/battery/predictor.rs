@@ -111,14 +111,18 @@ impl BatteryPredictor {
         const TIME_STEP: u64 = 900; // 15-minute steps
         const MAX_ITERATIONS: u32 = 4 * 24 * 7; // 1 week max
 
+        let capacity_wh = remaining_wh / current_features[7]; // total capacity from current percentage
         let mut energy_remaining = remaining_wh;
         let mut total_seconds = 0u64;
 
-        for i in 0..MAX_ITERATIONS {
-            let seconds_ahead = total_seconds + TIME_STEP;
+        for _ in 0..MAX_ITERATIONS {
+            total_seconds += TIME_STEP;
 
             // project features forward
-            let future_features = project_features_forward(current_features, seconds_ahead);
+            let mut future_features = project_features_forward(current_features, total_seconds);
+
+            // update percentage based on remaining energy
+            future_features[7] = (energy_remaining / capacity_wh).clamp(0.0, 1.0);
 
             // predict power draw
             let predicted_power = self.rls_model.predict(&future_features).max(0.5);
@@ -128,7 +132,6 @@ impl BatteryPredictor {
             let energy_consumed = predicted_power * hours;
 
             energy_remaining -= energy_consumed;
-            total_seconds = seconds_ahead;
 
             if energy_remaining <= 0.0 {
                 // battery depleted - interpolate for accuracy
