@@ -136,7 +136,11 @@ impl BatteryPredictor {
             if energy_remaining <= 0.0 {
                 // battery depleted - interpolate for accuracy
                 let overshoot = -energy_remaining;
-                let fraction = 1.0 - (overshoot / energy_consumed);
+                let fraction = if energy_consumed > 0.0 {
+                    1.0 - (overshoot / energy_consumed)
+                } else {
+                    0.0
+                };
                 let final_seconds =
                     total_seconds - TIME_STEP + (TIME_STEP as f64 * fraction) as u64;
 
