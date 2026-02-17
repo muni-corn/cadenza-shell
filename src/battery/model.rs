@@ -1,3 +1,5 @@
+pub const NUM_FEATURES: usize = 8;
+
 /// Recursive Least Squares (RLS) model for battery drain prediction.
 ///
 /// Uses exponentially-weighted forgetting factor to adapt to changing
@@ -6,10 +8,13 @@
 pub struct RlsModel {
     /// Weight vector (8 elements).
     pub(super) weights: Vec<f64>,
+
     /// Inverse covariance matrix (8×8, stored as flattened row-major).
     pub(super) p_matrix: Vec<f64>,
+
     /// Forgetting factor (0.95-0.995). lower = faster adaptation.
     pub(super) lambda: f64,
+
     /// Number of samples seen.
     pub(super) sample_count: u32,
 }
@@ -23,15 +28,13 @@ impl RlsModel {
     /// - `initial_variance`: initial uncertainty (1.0-10.0). higher = faster
     ///   initial learning.
     pub fn new(lambda: f64, initial_variance: f64) -> Self {
-        let n = 8; // number of features
-
         // initialize weights to zero
-        let weights = vec![0.0; n];
+        let weights = vec![0.0; NUM_FEATURES];
 
         // initialize P matrix as identity × initial_variance
-        let mut p_matrix = vec![0.0; n * n];
-        for i in 0..n {
-            p_matrix[i * n + i] = initial_variance;
+        let mut p_matrix = vec![0.0; NUM_FEATURES * NUM_FEATURES];
+        for i in 0..NUM_FEATURES {
+            p_matrix[i * NUM_FEATURES + i] = initial_variance;
         }
 
         Self {
@@ -48,28 +51,26 @@ impl RlsModel {
     /// - `features`: 8-element feature vector
     /// - `target`: observed battery drain rate (watts)
     pub fn update(&mut self, features: &[f64; 8], target: f64) {
-        let n = 8;
-
         // compute P × features
-        let mut p_phi = vec![0.0; n];
-        for (i, item) in p_phi.iter_mut().enumerate().take(n) {
+        let mut p_phi = [0.0; NUM_FEATURES];
+        for (i, item) in p_phi.iter_mut().enumerate().take(NUM_FEATURES) {
             let mut sum = 0.0;
-            for (j, feature) in features.iter().enumerate().take(n) {
-                sum += self.p_matrix[i * n + j] * feature;
+            for (j, feature) in features.iter().enumerate().take(NUM_FEATURES) {
+                sum += self.p_matrix[i * NUM_FEATURES + j] * feature;
             }
             *item = sum;
         }
 
         // compute features^T × P × features
         let mut phi_p_phi = 0.0;
-        for i in 0..n {
+        for i in 0..NUM_FEATURES {
             phi_p_phi += features[i] * p_phi[i];
         }
 
         // compute gain: k = P × features / (lambda + features^T × P × features)
         let denominator = self.lambda + phi_p_phi;
-        let mut gain = vec![0.0; n];
-        for i in 0..n {
+        let mut gain = [0.0; NUM_FEATURES];
+        for i in 0..NUM_FEATURES {
             gain[i] = p_phi[i] / denominator;
         }
 
@@ -78,19 +79,20 @@ impl RlsModel {
         let error = target - prediction;
 
         // update weights: w = w + k × error
-        for (i, item) in gain.iter().enumerate().take(n) {
+        for (i, item) in gain.iter().enumerate().take(NUM_FEATURES) {
             self.weights[i] += item * error;
         }
 
         // update P matrix: P = (P - k × features^T × P) / lambda
-        let mut new_p = vec![0.0; n * n];
-        for i in 0..n {
-            for j in 0..n {
+        let mut new_p = vec![0.0; NUM_FEATURES * NUM_FEATURES];
+        for i in 0..NUM_FEATURES {
+            for j in 0..NUM_FEATURES {
                 let mut kg_phi_p = 0.0;
-                for (k, feature) in features.iter().enumerate().take(n) {
-                    kg_phi_p += gain[i] * feature * self.p_matrix[k * n + j];
+                for (k, feature) in features.iter().enumerate().take(NUM_FEATURES) {
+                    kg_phi_p += gain[i] * feature * self.p_matrix[k * NUM_FEATURES + j];
                 }
-                new_p[i * n + j] = (self.p_matrix[i * n + j] - kg_phi_p) / self.lambda;
+                new_p[i * NUM_FEATURES + j] =
+                    (self.p_matrix[i * NUM_FEATURES + j] - kg_phi_p) / self.lambda;
             }
         }
         self.p_matrix = new_p;
