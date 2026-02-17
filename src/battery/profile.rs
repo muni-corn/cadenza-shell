@@ -15,6 +15,9 @@ pub struct UsageProfile {
     pub(super) alpha: f64,
 }
 
+pub const NUM_PROFILE_SLOTS_PER_DAY: usize = 48; // 48 half-hour slots
+pub const NUM_USAGE_PROFILE_SLOTS: usize = NUM_PROFILE_SLOTS_PER_DAY * 7; // 48 half-hours slots × 7 days
+
 impl UsageProfile {
     /// Create a new usage profile.
     ///
@@ -23,11 +26,9 @@ impl UsageProfile {
     ///   adaptation.
     /// - `default_power`: initial power estimate for all slots (watts).
     pub fn new(alpha: f64, default_power: f64) -> Self {
-        const NUM_SLOTS: usize = 336; // 48 half-hours × 7 days
-
         Self {
-            slots: vec![default_power; NUM_SLOTS],
-            counts: vec![0; NUM_SLOTS],
+            slots: vec![default_power; NUM_USAGE_PROFILE_SLOTS],
+            counts: vec![0; NUM_USAGE_PROFILE_SLOTS],
             alpha,
         }
     }
