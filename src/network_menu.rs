@@ -124,7 +124,7 @@ impl SimpleComponent for NetworkMenu {
             .halign(gtk::Align::Start)
             .visible(current_state.wifi_ssid().is_some())
             .label(
-                &current_state
+                current_state
                     .wifi_ssid()
                     .map(|ssid| format!("Connected to {}", ssid))
                     .unwrap_or_default(),
@@ -133,12 +133,12 @@ impl SimpleComponent for NetworkMenu {
 
         let connectivity_label = gtk::Label::builder()
             .halign(gtk::Align::Start)
-            .label(&current_state.connectivity.to_string())
+            .label(current_state.connectivity.to_string())
             .build();
 
         let connection_state_label = gtk::Label::builder()
             .halign(gtk::Align::Start)
-            .label(&current_state.connection_state.to_string())
+            .label(current_state.connection_state.to_string())
             .build();
 
         status_box.append(&ssid_label);
