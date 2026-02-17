@@ -34,8 +34,56 @@ impl PredictorState {
         }
     }
 
-    fn to_predictor(&self) -> BatteryPredictor {
-        BatteryPredictor {
+    fn to_predictor(&self) -> Result<BatteryPredictor> {
+        // validate RLS dimensions
+        if self.rls_weights.len() != 8 {
+            anyhow::bail!(
+                "invalid rls_weights length: expected 8, got {}",
+                self.rls_weights.len()
+            );
+        }
+        if self.rls_p_matrix.len() != 64 {
+            anyhow::bail!(
+                "invalid rls_p_matrix length: expected 64, got {}",
+                self.rls_p_matrix.len()
+            );
+        }
+
+        // validate profile dimensions
+        if self.profile_slots.len() != 336 {
+            anyhow::bail!(
+                "invalid profile_slots length: expected 336, got {}",
+                self.profile_slots.len()
+            );
+        }
+        if self.profile_counts.len() != 336 {
+            anyhow::bail!(
+                "invalid profile_counts length: expected 336, got {}",
+                self.profile_counts.len()
+            );
+        }
+
+        // validate ranges
+        if !(0.0..=1.0).contains(&self.rls_lambda) {
+            anyhow::bail!(
+                "invalid rls_lambda: expected 0.0-1.0, got {}",
+                self.rls_lambda
+            );
+        }
+        if !(0.0..=1.0).contains(&self.profile_alpha) {
+            anyhow::bail!(
+                "invalid profile_alpha: expected 0.0-1.0, got {}",
+                self.profile_alpha
+            );
+        }
+        if !(0.0..=1.0).contains(&self.ewma_alpha) {
+            anyhow::bail!(
+                "invalid ewma_alpha: expected 0.0-1.0, got {}",
+                self.ewma_alpha
+            );
+        }
+
+        Ok(BatteryPredictor {
             rls_model: RlsModel {
                 weights: self.rls_weights.clone(),
                 p_matrix: self.rls_p_matrix.clone(),
@@ -49,7 +97,7 @@ impl PredictorState {
             },
             ewma_power: self.ewma_power,
             ewma_alpha: self.ewma_alpha,
-        }
+        })
     }
 }
 
@@ -84,7 +132,7 @@ pub fn load_predictor() -> Result<BatteryPredictor> {
     let state: PredictorState = serde_json::from_str(&json)?;
 
     log::debug!("loaded battery predictor state from {:?}", path);
-    Ok(state.to_predictor())
+    state.to_predictor().context("invalid predictor state data")
 }
 
 #[cfg(test)]
@@ -97,7 +145,7 @@ mod tests {
 
         // convert to state and back
         let state = PredictorState::from_predictor(&predictor);
-        let restored = state.to_predictor();
+        let restored = state.to_predictor().unwrap();
 
         // check that key fields match
         assert_eq!(
