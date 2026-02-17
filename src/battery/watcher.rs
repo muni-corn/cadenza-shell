@@ -73,12 +73,13 @@ pub async fn start_battery_watcher() {
 
     loop {
         // waits on file changes, or polls every 30 seconds
-        if has_watcher
-            && let Err(mpsc::RecvTimeoutError::Disconnected) =
+        if has_watcher {
+            if let Err(mpsc::RecvTimeoutError::Disconnected) =
                 rx.recv_timeout(Duration::from_secs(30))
-        {
-            log::error!("battery status watcher has died");
-            has_watcher = false;
+            {
+                log::error!("battery status watcher has died");
+                has_watcher = false;
+            }
         } else {
             // just poll every 30 seconds without a watcher
             tokio::time::sleep(Duration::from_secs(30)).await
