@@ -4,6 +4,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use super::{model::RlsModel, predictor::BatteryPredictor, profile::UsageProfile};
+use crate::battery::{model::NUM_FEATURES, profile::NUM_USAGE_PROFILE_SLOTS};
 
 /// Serializable state for BatteryPredictor.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -36,29 +37,30 @@ impl PredictorState {
 
     fn to_predictor(&self) -> Result<BatteryPredictor> {
         // validate RLS dimensions
-        if self.rls_weights.len() != 8 {
+        if self.rls_weights.len() != NUM_FEATURES {
             anyhow::bail!(
-                "invalid rls_weights length: expected 8, got {}",
+                "invalid rls_weights length: expected {NUM_FEATURES}, got {}",
                 self.rls_weights.len()
             );
         }
-        if self.rls_p_matrix.len() != 64 {
+        if self.rls_p_matrix.len() != NUM_FEATURES * NUM_FEATURES {
             anyhow::bail!(
-                "invalid rls_p_matrix length: expected 64, got {}",
+                "invalid rls_p_matrix length: expected {}, got {}",
+                NUM_FEATURES * NUM_FEATURES,
                 self.rls_p_matrix.len()
             );
         }
 
         // validate profile dimensions
-        if self.profile_slots.len() != 336 {
+        if self.profile_slots.len() != NUM_USAGE_PROFILE_SLOTS {
             anyhow::bail!(
-                "invalid profile_slots length: expected 336, got {}",
+                "invalid profile_slots length: expected {NUM_USAGE_PROFILE_SLOTS}, got {}",
                 self.profile_slots.len()
             );
         }
-        if self.profile_counts.len() != 336 {
+        if self.profile_counts.len() != NUM_USAGE_PROFILE_SLOTS {
             anyhow::bail!(
-                "invalid profile_counts length: expected 336, got {}",
+                "invalid profile_counts length: expected {NUM_USAGE_PROFILE_SLOTS}, got {}",
                 self.profile_counts.len()
             );
         }
