@@ -1,6 +1,6 @@
 use std::{fs, path::Path};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use inotify::{Inotify, WatchMask};
 use relm4::SharedState;
 
@@ -9,18 +9,7 @@ pub static BRIGHTNESS_STATE: SharedState<Option<f64>> = SharedState::new();
 pub async fn start_brightness_watcher() {
     // read initial backlight properties. if any fail, we will not consider the
     // service available.
-    let Ok((interface, max_val, current_brightness)) = detect_interface()
-        .map_err(|e| log::error!("couldn't detect brightness interface: {}", e))
-        .and_then(|interface| {
-            read_max_brightness(&interface)
-                .map_err(|e| log::error!("couldn't read max brightness value: {}", e))
-                .and_then(|max_val| {
-                    read_current_brightness_percentage(&interface, max_val)
-                        .map_err(|e| log::error!("couldn't read current brightness value: {}", e))
-                        .map(|brightness| (interface, max_val, brightness))
-                })
-        })
-    else {
+    let Ok((interface, max_val, current_brightness)) = read_all() else {
         return;
     };
 
@@ -90,4 +79,15 @@ fn read_current_brightness_percentage(interface: &str, max_val: u32) -> Result<f
     let content = fs::read_to_string(path)?;
     let raw: u32 = content.trim().parse()?;
     Ok(raw as f64 / max_val as f64)
+}
+
+/// Detects, reads, and returns the backlight interface, the max brightness
+/// value, and the current brightness value.
+fn read_all() -> Result<(String, u32, f64)> {
+    let interface = detect_interface().context("couldn't detect brightness interface")?;
+    let max_val = read_max_brightness(&interface).context("couldn't read max brightness value")?;
+    let brightness = read_current_brightness_percentage(&interface, max_val)
+        .context("couldn't read current brightness value")?;
+
+    Ok((interface, max_val, brightness))
 }
