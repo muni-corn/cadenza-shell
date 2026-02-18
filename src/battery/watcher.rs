@@ -72,7 +72,7 @@ pub async fn start_battery_watcher() {
     }
 
     let mut has_watcher = true;
-    let mut last_save: Option<Instant> = None;
+    let mut update_count = 0u32;
 
     loop {
         if has_watcher {
