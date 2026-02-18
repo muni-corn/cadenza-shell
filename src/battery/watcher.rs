@@ -7,6 +7,12 @@ use systemstat::{Platform, System};
 use super::{BATTERY_STATE, BatteryPredictor, BatteryState, load_predictor, save_predictor};
 use crate::battery::sysfs::read_battery_sysfs;
 
+/// Maximum time between battery information and status fetches.
+const MAX_BATTERY_POLL_TIME: Duration = Duration::from_secs(30);
+
+/// How often to persist predictor state to disk.
+const SAVE_INTERVAL: Duration = Duration::from_secs(300);
+
 pub async fn start_battery_watcher() {
     // detect battery interface
     let Some(battery_interface) = detect_battery_interface() else {
@@ -69,20 +75,39 @@ pub async fn start_battery_watcher() {
     }
 
     let mut has_watcher = true;
-    let mut update_count = 0u32;
+    let mut last_save: Option<Instant> = None;
 
     loop {
-        // waits on file changes, or polls every 30 seconds
         if has_watcher {
-            if let Err(mpsc::RecvTimeoutError::Disconnected) =
-                rx.recv_timeout(Duration::from_secs(30))
-            {
-                log::error!("battery status watcher has died");
-                has_watcher = false;
+            // additional reads of sysfs may have occurred during last iteration, so drain
+            // events before waiting again
+            while rx.try_recv().is_ok() {}
+
+            // now wait for a file change event or poll timeout
+            match rx.recv_timeout(MAX_BATTERY_POLL_TIME) {
+                Ok(Err(e)) => {
+                    // i'm not sure what this case is supposed to handle
+                    log::error!("{e}");
+
+                    // so we won't react to this errant event; continue instead
+                    continue;
+                }
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    // normal poll interval elapsed, proceed with update
+                    log::debug!(
+                        "no battery event received for {MAX_BATTERY_POLL_TIME:?}, fetching battery info now"
+                    );
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    // no longer sending or receiving events
+                    log::error!("battery status watcher has died");
+                    has_watcher = false;
+                }
+                _ => (),
             }
         } else {
-            // just poll every 30 seconds without a watcher
-            tokio::time::sleep(Duration::from_secs(30)).await
+            // just poll without a watcher
+            tokio::time::sleep(MAX_BATTERY_POLL_TIME).await;
         }
 
         match read_battery_state(&system) {
