@@ -1,6 +1,6 @@
 use std::{fs, path::Path, sync::mpsc, time::Duration};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use notify::{RecursiveMode, Watcher};
 use systemstat::{Platform, System};
 
@@ -33,8 +33,8 @@ pub async fn start_battery_watcher() {
 
     // read initial battery properties. if any fail, we will not consider the
     // service available.
-    let Ok((percentage, charging, time_remaining)) = read_battery_state(&system)
-        .map_err(|e| log::error!("couldn't read initial battery state: {}", e))
+    let Ok((percentage, charging, time_remaining)) =
+        read_battery_state(&system).context("couldn't read initial battery state")
     else {
         return;
     };
