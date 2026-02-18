@@ -168,7 +168,7 @@ fn detect_battery_interface() -> Option<String> {
             if type_path.exists() {
                 // read the type file
                 let type_content = fs::read_to_string(&type_path).ok()?;
-                if type_content.trim() == "Battery" {
+                if type_content.trim().eq_ignore_ascii_case("battery") {
                     // found a battery device, return its name
                     Some(entry.file_name().to_string_lossy().to_string())
                 } else {
