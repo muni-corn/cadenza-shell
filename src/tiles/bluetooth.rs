@@ -18,6 +18,11 @@ pub struct BluetoothTile {
 pub struct BluetoothWidgets {}
 
 #[derive(Debug)]
+pub enum BluetoothTileMsg {
+    Update(Option<BluetoothState>),
+}
+
+#[derive(Debug)]
 pub enum BluetoothTileCommandOutput {
     TooltipText(String),
 }
@@ -25,7 +30,7 @@ pub enum BluetoothTileCommandOutput {
 impl Component for BluetoothTile {
     type CommandOutput = BluetoothTileCommandOutput;
     type Init = ();
-    type Input = BluetoothState;
+    type Input = BluetoothTileMsg;
     type Output = TileOutput;
     type Root = gtk::Box;
     type Widgets = BluetoothWidgets;
@@ -35,7 +40,9 @@ impl Component for BluetoothTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        BLUETOOTH_STATE.subscribe_optional(sender.input_sender(), |state| state.to_owned());
+        BLUETOOTH_STATE.subscribe_optional(sender.input_sender(), |state| {
+            Some(BluetoothTileMsg::Update(state.to_owned()))
+        });
 
         // initialize the tile component
         let tile = Tile::builder().launch(Default::default()).detach();
@@ -52,14 +59,22 @@ impl Component for BluetoothTile {
         }
     }
 
-    fn update(&mut self, info: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
-        self.bluetooth_info = Some(info.clone());
-        self.tile
-            .emit(TileMsg::SetIcon(Some(get_bluetooth_icon(&info))));
-        sender.oneshot_command(async move {
-            let text = get_tooltip_text(&info).await;
-            BluetoothTileCommandOutput::TooltipText(text)
-        });
+    fn update(
+        &mut self,
+        BluetoothTileMsg::Update(info): Self::Input,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        self.bluetooth_info = info.clone();
+
+        if let Some(state) = info {
+            self.tile
+                .emit(TileMsg::SetIcon(Some(get_bluetooth_icon(&state))));
+            sender.oneshot_command(async move {
+                let text = get_tooltip_text(&state).await;
+                BluetoothTileCommandOutput::TooltipText(text)
+            });
+        }
     }
 
     fn update_cmd(
