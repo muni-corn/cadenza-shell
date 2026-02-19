@@ -179,31 +179,38 @@ impl BatteryTile {
         use chrono::Local;
 
         if self.charging && self.current_percentage > 0.99 {
-            "Plugged in".to_string()
-        } else {
-            // use smart prediction if confidence is high enough
-            let time_remaining = if self.confidence >= MIN_SMART_PREDICTION_CONFIDENCE {
-                self.smart_time_remaining.as_secs()
-            } else {
-                self.time_remaining.as_secs()
-            };
+            return "Plugged in".to_string();
+        }
 
-            if time_remaining < 30 * 60 {
-                format!("{} min left", time_remaining / 60)
-            } else {
-                // calculate actual completion time
-                let now = Local::now();
-                let completion_time = now + chrono::Duration::seconds(time_remaining as i64);
-
-                // format as "h:mm am/pm"
-                let formatted = completion_time.format("%-I:%M %P").to_string();
-
-                if self.charging {
-                    format!("Full at {}", formatted)
-                } else {
-                    format!("Until {}", formatted)
-                }
+        if self.charging {
+            // while charging, only the smart prediction gives a meaningful
+            // time-to-full value. the kernel estimate is a time-to-empty,
+            // which is not useful here. if confidence is too low, show
+            // nothing rather than a misleading time.
+            if self.confidence < MIN_SMART_PREDICTION_CONFIDENCE {
+                return "Charging".to_string();
             }
+
+            let secs = self.smart_time_remaining.as_secs();
+            let now = Local::now();
+            let full_at = now + chrono::Duration::seconds(secs as i64);
+            return format!("Full at {}", full_at.format("%-I:%M %P"));
+        }
+
+        // discharging: prefer smart prediction when confident enough, fall
+        // back to kernel estimate otherwise
+        let time_remaining = if self.confidence >= MIN_SMART_PREDICTION_CONFIDENCE {
+            self.smart_time_remaining.as_secs()
+        } else {
+            self.time_remaining.as_secs()
+        };
+
+        if time_remaining < 30 * 60 {
+            format!("{} min left", time_remaining / 60)
+        } else {
+            let now = Local::now();
+            let empty_at = now + chrono::Duration::seconds(time_remaining as i64);
+            format!("Until {}", empty_at.format("%-I:%M %P"))
         }
     }
 
