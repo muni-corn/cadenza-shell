@@ -1,6 +1,6 @@
 use chrono::{Datelike, Local, Timelike};
 
-use super::sysfs::{ChargingStatus, SysfsReading};
+use super::sysfs::SysfsReading;
 
 /// Extract 12 context-only features from battery state for RLS model.
 ///
@@ -135,6 +135,7 @@ pub fn project_features_forward(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::battery::sysfs::ChargingStatus;
 
     fn make_reading() -> SysfsReading {
         SysfsReading {
