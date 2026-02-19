@@ -21,6 +21,11 @@ pub struct BatteryPredictor {
     pub(super) ewma_power: Option<f64>,
     /// EWMA smoothing factor.
     pub(super) ewma_alpha: f64,
+    /// EWMA-smoothed battery voltage in microvolts.
+    ///
+    /// Instantaneous voltage fluctuates with load; a heavily-smoothed value
+    /// gives more stable Wh capacity estimates.
+    pub(super) ewma_voltage: Option<f64>,
     /// Most recent cpu_load reading (normalized 0.0-1.0).
     pub(super) cpu_load: f64,
     /// Most recent brightness reading (normalized 0.0-1.0).
@@ -34,6 +39,7 @@ impl BatteryPredictor {
             rls_charge: RlsModel::default(),
             ewma_power: None,
             ewma_alpha: 0.3,
+            ewma_voltage: None,
             cpu_load: 0.0,
             brightness: 0.5,
         }
@@ -51,6 +57,17 @@ impl BatteryPredictor {
             Some(p) => p,
             None => return,
         };
+
+        // update smoothed voltage (alpha=0.1 for heavy smoothing; voltage
+        // fluctuates with load so we want a stable long-run average)
+        const VOLTAGE_ALPHA: f64 = 0.1;
+        if let Some(v) = reading.voltage_now {
+            let v = v as f64;
+            self.ewma_voltage = Some(match self.ewma_voltage {
+                Some(prev) => VOLTAGE_ALPHA * v + (1.0 - VOLTAGE_ALPHA) * prev,
+                None => v,
+            });
+        }
 
         // outlier detection: if the new reading is more than 3× the current
         // EWMA, it is likely a transient spike. apply a dampened alpha so the
@@ -274,9 +291,17 @@ impl BatteryPredictor {
     }
 
     /// Estimate battery capacity in watt-hours from sysfs readings.
+    ///
+    /// Prefers the EWMA-smoothed voltage over the instantaneous reading to
+    /// reduce noise from load-induced voltage sag. Falls back to instantaneous
+    /// voltage if no smoothed value is available yet (first reading).
     fn estimate_capacity_wh(&self, reading: &SysfsReading) -> Option<f64> {
         let charge_full = reading.charge_full? as f64; // µAh
-        let voltage = reading.voltage_now? as f64; // µV
+
+        // prefer smoothed voltage; fall back to instantaneous if not yet warmed up
+        let voltage = self
+            .ewma_voltage
+            .or_else(|| reading.voltage_now.map(|v| v as f64))?; // µV
 
         // (µAh × µV) / 1e12 = Wh
         let wh = (charge_full * voltage) / 1_000_000_000_000.0;
