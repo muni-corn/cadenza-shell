@@ -44,6 +44,8 @@ impl Component for BluetoothTile {
             Some(BluetoothTileMsg::Update(state.to_owned()))
         });
 
+        let current_state = BLUETOOTH_STATE.read().clone();
+
         // initialize the tile component
         let tile = Tile::builder().launch(Default::default()).detach();
 
@@ -52,7 +54,7 @@ impl Component for BluetoothTile {
         ComponentParts {
             model: Self {
                 tile,
-                bluetooth_info: None,
+                bluetooth_info: current_state,
                 tooltip_text: String::new(),
             },
             widgets: BluetoothWidgets {},
