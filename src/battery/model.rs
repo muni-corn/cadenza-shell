@@ -97,7 +97,48 @@ impl RlsModel {
         }
         self.p_matrix = new_p;
 
+        // condition P matrix to prevent long-run numerical drift:
+        // 1. enforce symmetry by averaging P[i][j] and P[j][i]
+        // 2. if trace exceeds threshold, scale down proportionally
+        self.condition_p_matrix();
+
         self.sample_count += 1;
+    }
+
+    /// Enforce P-matrix symmetry and bound its trace.
+    ///
+    /// With exponential forgetting (lambda < 1) over many samples, the P
+    /// matrix can accumulate asymmetry and grow unboundedly. This can cause
+    /// numerically unstable gain vectors and degraded predictions, especially
+    /// when state is reloaded from disk across sessions.
+    ///
+    /// Symmetry enforcement: P = (P + Pᵀ) / 2
+    /// Trace bounding: if tr(P) > threshold, scale P down so tr(P) = threshold
+    fn condition_p_matrix(&mut self) {
+        const TRACE_LIMIT: f64 = 1000.0 * NUM_FEATURES as f64;
+
+        // enforce symmetry
+        for i in 0..NUM_FEATURES {
+            for j in (i + 1)..NUM_FEATURES {
+                let avg = (self.p_matrix[i * NUM_FEATURES + j]
+                    + self.p_matrix[j * NUM_FEATURES + i])
+                    / 2.0;
+                self.p_matrix[i * NUM_FEATURES + j] = avg;
+                self.p_matrix[j * NUM_FEATURES + i] = avg;
+            }
+        }
+
+        // bound trace
+        let trace: f64 = (0..NUM_FEATURES)
+            .map(|i| self.p_matrix[i * NUM_FEATURES + i])
+            .sum();
+
+        if trace > TRACE_LIMIT {
+            let scale = TRACE_LIMIT / trace;
+            for v in self.p_matrix.iter_mut() {
+                *v *= scale;
+            }
+        }
     }
 
     /// Predict battery drain rate from features.
