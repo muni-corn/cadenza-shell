@@ -15,9 +15,7 @@ pub struct BluetoothTile {
 }
 
 #[derive(Debug)]
-pub struct BluetoothWidgets {
-    root: gtk::Box,
-}
+pub struct BluetoothWidgets {}
 
 #[derive(Debug)]
 pub enum BluetoothTileCommandOutput {
@@ -50,7 +48,7 @@ impl Component for BluetoothTile {
                 bluetooth_info: None,
                 tooltip_text: String::new(),
             },
-            widgets: BluetoothWidgets { root },
+            widgets: BluetoothWidgets {},
         }
     }
 
