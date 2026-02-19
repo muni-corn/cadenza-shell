@@ -3,103 +3,114 @@ use std::{fs, path::PathBuf};
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
-use super::{model::RlsModel, predictor::BatteryPredictor, profile::UsageProfile};
-use crate::battery::{model::NUM_FEATURES, profile::NUM_USAGE_PROFILE_SLOTS};
+use super::{model::RlsModel, predictor::BatteryPredictor};
+use crate::battery::model::NUM_FEATURES;
+
+/// Serialization format version. Increment when the format changes
+/// incompatibly so that old files are gracefully discarded rather than
+/// causing a deserialization error.
+const STATE_VERSION: u32 = 2;
+
+/// Serializable state for a single RLS model.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct RlsState {
+    weights: Vec<f64>,
+    p_matrix: Vec<f64>,
+    lambda: f64,
+    sample_count: u32,
+}
+
+impl RlsState {
+    fn from_model(model: &RlsModel) -> Self {
+        Self {
+            weights: model.weights.clone(),
+            p_matrix: model.p_matrix.clone(),
+            lambda: model.lambda,
+            sample_count: model.sample_count,
+        }
+    }
+
+    fn to_model(&self) -> Option<RlsModel> {
+        if self.weights.len() != NUM_FEATURES {
+            log::warn!(
+                "invalid rls weights length: expected {NUM_FEATURES}, got {}",
+                self.weights.len()
+            );
+            return None;
+        }
+        if self.p_matrix.len() != NUM_FEATURES * NUM_FEATURES {
+            log::warn!(
+                "invalid rls p_matrix length: expected {}, got {}",
+                NUM_FEATURES * NUM_FEATURES,
+                self.p_matrix.len()
+            );
+            return None;
+        }
+        if !(0.0..=1.0).contains(&self.lambda) {
+            log::warn!("invalid rls lambda: {}", self.lambda);
+            return None;
+        }
+
+        Some(RlsModel {
+            weights: self.weights.clone(),
+            p_matrix: self.p_matrix.clone(),
+            lambda: self.lambda,
+            sample_count: self.sample_count,
+        })
+    }
+}
 
 /// Serializable state for BatteryPredictor.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct PredictorState {
-    rls_weights: Vec<f64>,
-    rls_p_matrix: Vec<f64>,
-    rls_lambda: f64,
-    rls_sample_count: u32,
-    profile_slots: Vec<f64>,
-    profile_counts: Vec<u32>,
-    profile_alpha: f64,
+    /// Format version -- used to discard incompatible saved states.
+    version: u32,
+    rls_discharge: RlsState,
+    rls_charge: RlsState,
     ewma_power: Option<f64>,
     ewma_alpha: f64,
+    ewma_voltage: Option<f64>,
 }
 
 impl PredictorState {
     fn from_predictor(predictor: &BatteryPredictor) -> Self {
         Self {
-            rls_weights: predictor.rls_model.weights.clone(),
-            rls_p_matrix: predictor.rls_model.p_matrix.clone(),
-            rls_lambda: predictor.rls_model.lambda,
-            rls_sample_count: predictor.rls_model.sample_count,
-            profile_slots: predictor.usage_profile.slots.clone(),
-            profile_counts: predictor.usage_profile.counts.clone(),
-            profile_alpha: predictor.usage_profile.alpha,
+            version: STATE_VERSION,
+            rls_discharge: RlsState::from_model(&predictor.rls_discharge),
+            rls_charge: RlsState::from_model(&predictor.rls_charge),
             ewma_power: predictor.ewma_power,
             ewma_alpha: predictor.ewma_alpha,
+            ewma_voltage: predictor.ewma_voltage,
         }
     }
 
-    fn to_predictor(&self) -> BatteryPredictor {
-        // validate RLS dimensions
-        if self.rls_weights.len() != NUM_FEATURES {
-            log::warn!(
-                "invalid rls_weights length: expected {NUM_FEATURES}, got {}",
-                self.rls_weights.len()
+    fn to_predictor(&self) -> Option<BatteryPredictor> {
+        if self.version != STATE_VERSION {
+            log::info!(
+                "battery predictor state version mismatch (got {}, want {}), starting fresh",
+                self.version,
+                STATE_VERSION
             );
-        }
-        if self.rls_p_matrix.len() != NUM_FEATURES * NUM_FEATURES {
-            log::warn!(
-                "invalid rls_p_matrix length: expected {}, got {}",
-                NUM_FEATURES * NUM_FEATURES,
-                self.rls_p_matrix.len()
-            );
+            return None;
         }
 
-        // validate profile dimensions
-        if self.profile_slots.len() != NUM_USAGE_PROFILE_SLOTS {
-            log::warn!(
-                "invalid profile_slots length: expected {NUM_USAGE_PROFILE_SLOTS}, got {}",
-                self.profile_slots.len()
-            );
-        }
-        if self.profile_counts.len() != NUM_USAGE_PROFILE_SLOTS {
-            log::warn!(
-                "invalid profile_counts length: expected {NUM_USAGE_PROFILE_SLOTS}, got {}",
-                self.profile_counts.len()
-            );
-        }
-
-        // validate ranges
-        if !(0.0..=1.0).contains(&self.rls_lambda) {
-            log::warn!(
-                "invalid rls_lambda: expected 0.0-1.0, got {}",
-                self.rls_lambda
-            );
-        }
-        if !(0.0..=1.0).contains(&self.profile_alpha) {
-            log::warn!(
-                "invalid profile_alpha: expected 0.0-1.0, got {}",
-                self.profile_alpha
-            );
-        }
         if !(0.0..=1.0).contains(&self.ewma_alpha) {
-            log::warn!(
-                "invalid ewma_alpha: expected 0.0-1.0, got {}",
-                self.ewma_alpha
-            );
+            log::warn!("invalid ewma_alpha: {}", self.ewma_alpha);
+            return None;
         }
 
-        BatteryPredictor {
-            rls_model: RlsModel {
-                weights: self.rls_weights.clone(),
-                p_matrix: self.rls_p_matrix.clone(),
-                lambda: self.rls_lambda,
-                sample_count: self.rls_sample_count,
-            },
-            usage_profile: UsageProfile {
-                slots: self.profile_slots.clone(),
-                counts: self.profile_counts.clone(),
-                alpha: self.profile_alpha,
-            },
+        let rls_discharge = self.rls_discharge.to_model()?;
+        let rls_charge = self.rls_charge.to_model()?;
+
+        Some(BatteryPredictor {
+            rls_discharge,
+            rls_charge,
             ewma_power: self.ewma_power,
             ewma_alpha: self.ewma_alpha,
-        }
+            ewma_voltage: self.ewma_voltage,
+            cpu_load: 0.0,
+            brightness: 0.5,
+        })
     }
 }
 
@@ -128,14 +139,17 @@ pub fn save_predictor(predictor: &BatteryPredictor) -> Result<()> {
 }
 
 /// Load predictor state from disk.
+///
+/// Returns a fresh predictor if the file is missing, corrupt, or from
+/// an incompatible version.
 pub fn load_predictor() -> Result<BatteryPredictor> {
     let path = get_state_path()?;
     let json = fs::read_to_string(&path).context("couldn't read predictor state")?;
     let state: PredictorState = serde_json::from_str(&json)?;
 
-    log::debug!("loaded battery predictor state from {:?}", path);
-
-    Ok(state.to_predictor())
+    state.to_predictor().ok_or_else(|| {
+        anyhow::anyhow!("predictor state was invalid or incompatible, starting fresh")
+    })
 }
 
 #[cfg(test)]
@@ -146,33 +160,52 @@ mod tests {
     fn test_state_roundtrip() {
         let predictor = BatteryPredictor::new();
 
-        // convert to state and back
         let state = PredictorState::from_predictor(&predictor);
-        let restored = state.to_predictor();
+        let restored = state.to_predictor().expect("roundtrip should succeed");
 
-        // check that key fields match
         assert_eq!(
-            restored.rls_model.sample_count,
-            predictor.rls_model.sample_count
+            restored.rls_discharge.sample_count,
+            predictor.rls_discharge.sample_count
+        );
+        assert_eq!(
+            restored.rls_charge.sample_count,
+            predictor.rls_charge.sample_count
         );
         assert_eq!(restored.ewma_power, predictor.ewma_power);
+        assert_eq!(restored.ewma_alpha, predictor.ewma_alpha);
+    }
+
+    #[test]
+    fn test_serialization_roundtrip() {
+        let predictor = BatteryPredictor::new();
+        let state = PredictorState::from_predictor(&predictor);
+
+        let json = serde_json::to_string(&state).unwrap();
+        assert!(!json.is_empty());
+
+        let restored: PredictorState = serde_json::from_str(&json).unwrap();
+        assert_eq!(restored.version, STATE_VERSION);
         assert_eq!(
-            restored.usage_profile.slots.len(),
-            predictor.usage_profile.slots.len()
+            restored.rls_discharge.sample_count,
+            state.rls_discharge.sample_count
         );
     }
 
     #[test]
-    fn test_serialization() {
+    fn test_version_mismatch_returns_none() {
         let predictor = BatteryPredictor::new();
-        let state = PredictorState::from_predictor(&predictor);
+        let mut state = PredictorState::from_predictor(&predictor);
+        state.version = 99; // wrong version
 
-        // should serialize without error
-        let json = serde_json::to_string(&state).unwrap();
-        assert!(!json.is_empty());
+        assert!(state.to_predictor().is_none());
+    }
 
-        // should deserialize back
-        let restored: PredictorState = serde_json::from_str(&json).unwrap();
-        assert_eq!(restored.rls_sample_count, state.rls_sample_count);
+    #[test]
+    fn test_invalid_ewma_alpha_returns_none() {
+        let predictor = BatteryPredictor::new();
+        let mut state = PredictorState::from_predictor(&predictor);
+        state.ewma_alpha = 1.5; // out of range
+
+        assert!(state.to_predictor().is_none());
     }
 }
