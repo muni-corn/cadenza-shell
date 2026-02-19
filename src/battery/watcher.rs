@@ -7,7 +7,7 @@ use systemstat::{Platform, System};
 use super::{
     BATTERY_STATE, BatteryPredictor, BatteryState, load_predictor, read_cpu_load, save_predictor,
 };
-use crate::battery::sysfs::read_battery_sysfs;
+use crate::{battery::sysfs::read_battery_sysfs, brightness::BRIGHTNESS_STATE};
 
 /// Maximum time between battery information and status fetches.
 const MAX_BATTERY_POLL_TIME: Duration = Duration::from_secs(30);
@@ -43,7 +43,8 @@ pub async fn start_battery_watcher() {
 
     // seed initial context before first prediction
     let initial_cpu = read_cpu_load().unwrap_or(0.0);
-    predictor.set_context(initial_cpu, predictor.brightness);
+    let initial_brightness = BRIGHTNESS_STATE.read().unwrap_or(0.5);
+    predictor.set_context(initial_cpu, initial_brightness);
 
     // send initial update with prediction
     let (smart_time_remaining, confidence) = read_battery_sysfs()
@@ -119,7 +120,8 @@ pub async fn start_battery_watcher() {
                 if let Some(reading) = read_battery_sysfs() {
                     // refresh context (cpu_load, brightness) before updating
                     let cpu_load = read_cpu_load().unwrap_or(0.0);
-                    predictor.set_context(cpu_load, predictor.brightness);
+                    let brightness = BRIGHTNESS_STATE.read().unwrap_or(0.5);
+                    predictor.set_context(cpu_load, brightness);
                     predictor.update(&reading);
 
                     // get smart prediction
