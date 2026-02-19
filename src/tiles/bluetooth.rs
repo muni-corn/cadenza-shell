@@ -65,8 +65,9 @@ impl Component for BluetoothTile {
         &mut self,
         BluetoothTileMsg::Update(info): Self::Input,
         sender: ComponentSender<Self>,
-        _root: &Self::Root,
+        root: &Self::Root,
     ) {
+        root.set_visible(info.is_some());
         self.bluetooth_info = info.clone();
 
         if let Some(state) = info {
