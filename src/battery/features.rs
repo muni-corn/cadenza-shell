@@ -37,7 +37,7 @@ pub fn extract_features(
     let hour_cos = hour_rad.cos();
 
     // features 2-3: weekly cycle
-    let day_of_week = now.weekday().num_days_from_monday() as f64;
+    let day_of_week = now.weekday().num_days_from_monday() as f64 + hour_frac / 24.0;
     let dow_rad = 2.0 * std::f64::consts::PI * day_of_week / 7.0;
     let day_sin = dow_rad.sin();
     let day_cos = dow_rad.cos();
