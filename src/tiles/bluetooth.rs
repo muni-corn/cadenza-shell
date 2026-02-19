@@ -19,18 +19,24 @@ pub struct BluetoothWidgets {
     tile: Controller<Tile>,
 }
 
-impl SimpleAsyncComponent for BluetoothTile {
+#[derive(Debug)]
+pub enum BluetoothTileCommandOutput {
+    TooltipText(String),
+}
+
+impl Component for BluetoothTile {
+    type CommandOutput = BluetoothTileCommandOutput;
     type Init = ();
     type Input = BluetoothState;
     type Output = TileOutput;
     type Root = gtk::Box;
     type Widgets = BluetoothWidgets;
 
-    async fn init(
+    fn init(
         _init: Self::Init,
         root: Self::Root,
-        sender: AsyncComponentSender<Self>,
-    ) -> AsyncComponentParts<Self> {
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
         BLUETOOTH_STATE.subscribe_optional(sender.input_sender(), |state| state.to_owned());
 
         // initialize the tile component
@@ -38,7 +44,7 @@ impl SimpleAsyncComponent for BluetoothTile {
 
         root.append(tile.widget());
 
-        AsyncComponentParts {
+        ComponentParts {
             model: Self {
                 bluetooth_info: None,
                 tooltip_text: String::new(),
@@ -47,12 +53,24 @@ impl SimpleAsyncComponent for BluetoothTile {
         }
     }
 
-    async fn update(&mut self, info: Self::Input, _sender: AsyncComponentSender<Self>) {
-        self.tooltip_text = get_tooltip_text(&info).await;
-        self.bluetooth_info = Some(info);
+    fn update(&mut self, info: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        self.bluetooth_info = Some(info.clone());
+        sender.oneshot_command(async move {
+            let text = get_tooltip_text(&info).await;
+            BluetoothTileCommandOutput::TooltipText(text)
+        });
     }
 
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: AsyncComponentSender<Self>) {
+    fn update_cmd(
+        &mut self,
+        BluetoothTileCommandOutput::TooltipText(text): Self::CommandOutput,
+        _sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        self.tooltip_text = text;
+    }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         if let Some(ref state) = self.bluetooth_info {
             widgets.root.set_visible(true);
             widgets
