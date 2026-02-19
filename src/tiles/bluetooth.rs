@@ -3,6 +3,7 @@ use relm4::prelude::*;
 
 use crate::{
     bluetooth::{BLUETOOTH_STATE, BluetoothState},
+    bluetooth_menu::BluetoothMenu,
     icon_names::{BLUETOOTH_CONNECTED_REGULAR, BLUETOOTH_DISABLED_REGULAR, BLUETOOTH_REGULAR},
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
@@ -15,7 +16,10 @@ pub struct BluetoothTile {
 }
 
 #[derive(Debug)]
-pub struct BluetoothWidgets {}
+pub struct BluetoothWidgets {
+    _popover: gtk::Popover,
+    _menu: Controller<BluetoothMenu>,
+}
 
 #[derive(Debug)]
 pub enum BluetoothTileMsg {
@@ -49,6 +53,28 @@ impl Component for BluetoothTile {
         // initialize the tile component
         let tile = Tile::builder().launch(Default::default()).detach();
 
+        // initialize the bluetooth menu component
+        let bluetooth_menu = BluetoothMenu::builder().launch(()).detach();
+
+        // create the popover
+        let popover = gtk::Popover::builder()
+            .child(bluetooth_menu.widget())
+            .width_request(384)
+            .height_request(256)
+            .autohide(true)
+            .build();
+        popover.set_parent(tile.widget());
+
+        // connect click handler to toggle popover
+        let popover_clone = popover.clone();
+        tile.widget().connect_clicked(move |_| {
+            if popover_clone.is_visible() {
+                popover_clone.popdown();
+            } else {
+                popover_clone.popup();
+            }
+        });
+
         root.append(tile.widget());
 
         ComponentParts {
@@ -57,7 +83,10 @@ impl Component for BluetoothTile {
                 bluetooth_info: current_state,
                 tooltip_text: String::new(),
             },
-            widgets: BluetoothWidgets {},
+            widgets: BluetoothWidgets {
+                _popover: popover,
+                _menu: bluetooth_menu,
+            },
         }
     }
 
