@@ -9,6 +9,7 @@ use crate::{
 
 #[derive(Debug)]
 pub struct BluetoothTile {
+    tile: Controller<Tile>,
     bluetooth_info: Option<BluetoothState>,
     tooltip_text: String,
 }
@@ -16,7 +17,6 @@ pub struct BluetoothTile {
 #[derive(Debug)]
 pub struct BluetoothWidgets {
     root: gtk::Box,
-    tile: Controller<Tile>,
 }
 
 #[derive(Debug)]
@@ -46,15 +46,18 @@ impl Component for BluetoothTile {
 
         ComponentParts {
             model: Self {
+                tile,
                 bluetooth_info: None,
                 tooltip_text: String::new(),
             },
-            widgets: BluetoothWidgets { root, tile },
+            widgets: BluetoothWidgets { root },
         }
     }
 
     fn update(&mut self, info: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.bluetooth_info = Some(info.clone());
+        self.tile
+            .emit(TileMsg::SetIcon(Some(get_bluetooth_icon(&info))));
         sender.oneshot_command(async move {
             let text = get_tooltip_text(&info).await;
             BluetoothTileCommandOutput::TooltipText(text)
@@ -68,20 +71,8 @@ impl Component for BluetoothTile {
         _root: &Self::Root,
     ) {
         self.tooltip_text = text;
-    }
-
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        if let Some(ref state) = self.bluetooth_info {
-            widgets.root.set_visible(true);
-            widgets
-                .tile
-                .emit(TileMsg::SetIcon(Some(get_bluetooth_icon(state))));
-            widgets
-                .tile
-                .emit(TileMsg::SetTooltip(Some(self.tooltip_text.clone())));
-        } else {
-            widgets.root.set_visible(false);
-        }
+        self.tile
+            .emit(TileMsg::SetTooltip(Some(self.tooltip_text.clone())));
     }
 
     fn init_root() -> Self::Root {
