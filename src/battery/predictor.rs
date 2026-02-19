@@ -1,168 +1,284 @@
 use std::time::Duration;
 
 use super::{
-    extract_features, features::project_features_forward, model::RlsModel, profile::UsageProfile,
-    sysfs::SysfsReading,
+    extract_features,
+    features::project_features_forward,
+    model::RlsModel,
+    sysfs::{ChargingStatus, SysfsReading},
 };
 
-/// Battery life predictor combining EWMA, RLS, and usage profile.
+/// Battery life predictor combining EWMA and RLS.
+///
+/// Maintains separate RLS models for charging and discharging, since the two
+/// processes have fundamentally different physics.
 #[derive(Debug, Clone)]
 pub struct BatteryPredictor {
-    /// Recursive Least Squares model.
-    pub(super) rls_model: RlsModel,
-    /// Historical usage profile.
-    pub(super) usage_profile: UsageProfile,
+    /// RLS model for discharging (predicts power draw in watts).
+    pub(super) rls_discharge: RlsModel,
+    /// RLS model for charging (predicts charging power intake in watts).
+    pub(super) rls_charge: RlsModel,
     /// Exponentially-weighted moving average of power draw.
     pub(super) ewma_power: Option<f64>,
     /// EWMA smoothing factor.
     pub(super) ewma_alpha: f64,
+    /// Most recent cpu_load reading (normalized 0.0-1.0).
+    pub(super) cpu_load: f64,
+    /// Most recent brightness reading (normalized 0.0-1.0).
+    pub(super) brightness: f64,
 }
 
 impl BatteryPredictor {
     pub fn new() -> Self {
         Self {
-            rls_model: RlsModel::default(),
-            usage_profile: UsageProfile::default(),
+            rls_discharge: RlsModel::default(),
+            rls_charge: RlsModel::default(),
             ewma_power: None,
-            ewma_alpha: 0.3, // moderate smoothing
+            ewma_alpha: 0.3,
+            cpu_load: 0.0,
+            brightness: 0.5,
         }
+    }
+
+    /// Update stored cpu_load and brightness values.
+    pub fn set_context(&mut self, cpu_load: f64, brightness: f64) {
+        self.cpu_load = cpu_load;
+        self.brightness = brightness;
     }
 
     /// Update predictor with new battery reading.
     pub fn update(&mut self, reading: &SysfsReading) {
-        // extract features and update models
-        if let Some(features) = extract_features(reading) {
-            let power = features[0]; // power_draw is first feature
+        let power = match reading.power_watts() {
+            Some(p) => p,
+            None => return,
+        };
 
-            // update EWMA
-            self.ewma_power = Some(match self.ewma_power {
-                Some(prev) => self.ewma_alpha * power + (1.0 - self.ewma_alpha) * prev,
-                None => power,
-            });
+        // outlier detection: if the new reading is more than 3× the current
+        // EWMA, it is likely a transient spike. apply a dampened alpha so the
+        // EWMA moves only slightly, and skip the RLS update entirely to avoid
+        // corrupting the model weights with a single anomalous sample.
+        const OUTLIER_THRESHOLD: f64 = 3.0;
+        const OUTLIER_ALPHA: f64 = 0.05; // very slow incorporation for spikes
 
-            // update usage profile
-            self.usage_profile.update(power);
+        let is_outlier = self
+            .ewma_power
+            .is_some_and(|prev| prev > 0.0 && power > prev * OUTLIER_THRESHOLD);
 
-            // update RLS model
-            self.rls_model.update(&features, power);
+        // update EWMA (always, but with dampened alpha for outliers)
+        let alpha = if is_outlier {
+            OUTLIER_ALPHA
+        } else {
+            self.ewma_alpha
+        };
+        self.ewma_power = Some(match self.ewma_power {
+            Some(prev) => alpha * power + (1.0 - alpha) * prev,
+            None => power,
+        });
+
+        // skip RLS update for outliers to protect model weights
+        if is_outlier {
+            log::debug!(
+                "battery: skipping RLS update for outlier power reading ({:.1}W)",
+                power
+            );
+            return;
+        }
+
+        // extract features and train the appropriate model
+        if let Some(features) = extract_features(reading, self.cpu_load, self.brightness) {
+            match reading.status {
+                ChargingStatus::Charging => self.rls_charge.update(&features, power),
+                _ => self.rls_discharge.update(&features, power),
+            }
         }
     }
 
-    /// Predict time remaining until battery depletes.
+    /// Predict time remaining until battery depletes or charges to full.
     ///
-    /// Uses tiered prediction strategy:
-    /// 1. Forward integration (RLS + profile) - if RLS trained
-    /// 2. Instantaneous RLS - if RLS trained
-    /// 3. EWMA - if available
-    /// 4. Profile average - fallback
+    /// Dispatches to time-to-empty or time-to-full based on charging status.
     ///
-    /// Returns (time_remaining, confidence).
+    /// Returns `(duration, confidence)`, or `None` if no estimate is possible.
     pub fn predict_time_remaining(&self, reading: &SysfsReading) -> Option<(Duration, f32)> {
-        let features = extract_features(reading)?;
+        let features = extract_features(reading, self.cpu_load, self.brightness)?;
 
         let percentage = features[7];
-        if percentage <= 0.01 {
-            return Some((Duration::from_secs(0), 1.0)); // battery dead
-        }
 
-        // get battery capacity in watt-hours
+        match reading.status {
+            ChargingStatus::Charging => self.predict_time_to_full(reading, &features),
+            ChargingStatus::Full => Some((Duration::from_secs(0), 1.0)),
+            _ => {
+                if percentage <= 0.01 {
+                    return Some((Duration::from_secs(0), 1.0));
+                }
+                self.predict_time_to_empty(reading, &features)
+            }
+        }
+    }
+
+    /// Predict time until battery is empty (discharging).
+    fn predict_time_to_empty(
+        &self,
+        reading: &SysfsReading,
+        features: &[f64; 12],
+    ) -> Option<(Duration, f32)> {
+        let percentage = features[7];
         let capacity_wh = self.estimate_capacity_wh(reading)?;
         let remaining_wh = capacity_wh * percentage;
 
-        // try tiered prediction
-        if self.rls_model.is_trained() {
-            // strategy 1: forward integration with RLS + profile
-            if let Some((time, conf)) = self.predict_with_integration(&features, remaining_wh) {
-                return Some((time, conf));
+        if self.rls_discharge.is_trained() {
+            // strategy 1: forward integration with discharge RLS model
+            if let Some(result) =
+                self.predict_with_integration(features, remaining_wh, capacity_wh, false)
+            {
+                return Some(result);
             }
 
             // strategy 2: instantaneous RLS
-            let power = self.rls_model.predict(&features).max(0.5); // min 0.5W to avoid division by zero
-            let hours = remaining_wh / power;
-            let seconds = (hours * 3600.0) as u64;
-            return Some((Duration::from_secs(seconds), 0.7)); // moderate confidence
+            let power = self.rls_discharge.predict(features).max(0.5);
+            let seconds = ((remaining_wh / power) * 3600.0) as u64;
+            return Some((Duration::from_secs(seconds), 0.7));
         }
 
         // strategy 3: EWMA fallback
         if let Some(ewma) = self.ewma_power {
             let power = ewma.max(0.5);
-            let hours = remaining_wh / power;
-            let seconds = (hours * 3600.0) as u64;
-            return Some((Duration::from_secs(seconds), 0.5)); // lower confidence
+            let seconds = ((remaining_wh / power) * 3600.0) as u64;
+            return Some((Duration::from_secs(seconds), 0.5));
         }
 
-        // strategy 4: profile fallback
-        let power = self.usage_profile.get_current_power().max(0.5);
-        let hours = remaining_wh / power;
-        let seconds = (hours * 3600.0) as u64;
-        let confidence = self.usage_profile.get_confidence() as f32 * 0.4; // very low confidence
-        Some((Duration::from_secs(seconds), confidence))
+        None
+    }
+
+    /// Predict time until battery is full (charging).
+    fn predict_time_to_full(
+        &self,
+        reading: &SysfsReading,
+        features: &[f64; 12],
+    ) -> Option<(Duration, f32)> {
+        let percentage = features[7];
+        let capacity_wh = self.estimate_capacity_wh(reading)?;
+        let remaining_wh = capacity_wh * percentage;
+        let energy_to_full = capacity_wh - remaining_wh;
+
+        if energy_to_full <= 0.0 {
+            return Some((Duration::from_secs(0), 1.0));
+        }
+
+        if self.rls_charge.is_trained() {
+            // strategy 1: forward integration with charge RLS model
+            if let Some(result) =
+                self.predict_with_integration(features, remaining_wh, capacity_wh, true)
+            {
+                return Some(result);
+            }
+
+            // strategy 2: instantaneous RLS
+            let power = self.rls_charge.predict(features).max(0.5);
+            let seconds = ((energy_to_full / power) * 3600.0) as u64;
+            return Some((Duration::from_secs(seconds), 0.7));
+        }
+
+        // strategy 3: EWMA fallback
+        if let Some(ewma) = self.ewma_power {
+            let power = ewma.max(0.5);
+            let seconds = ((energy_to_full / power) * 3600.0) as u64;
+            return Some((Duration::from_secs(seconds), 0.5));
+        }
+
+        None
     }
 
     /// Predict using forward time integration.
     ///
-    /// Integrates predicted power draw over future time slots until battery
-    /// depletes.
+    /// Simulates energy flow in 15-minute steps until the battery depletes
+    /// (discharging) or reaches full capacity (charging). Interpolates within
+    /// the final step for sub-step accuracy.
+    ///
+    /// # Parameters
+    /// - `current_features`: current 12-element feature vector
+    /// - `remaining_wh`: watt-hours currently remaining
+    /// - `capacity_wh`: total battery capacity in watt-hours
+    /// - `charging`: true to integrate toward full, false toward empty
     fn predict_with_integration(
         &self,
-        current_features: &[f64; 8],
+        current_features: &[f64; 12],
         remaining_wh: f64,
+        capacity_wh: f64,
+        charging: bool,
     ) -> Option<(Duration, f32)> {
         const TIME_STEP: u64 = 900; // 15-minute steps
         const MAX_ITERATIONS: u32 = 4 * 24 * 7; // 1 week max
 
-        let capacity_wh = remaining_wh / current_features[7]; // total capacity from current percentage
+        let rls = if charging {
+            &self.rls_charge
+        } else {
+            &self.rls_discharge
+        };
+
         let mut energy_remaining = remaining_wh;
         let mut total_seconds = 0u64;
 
         for _ in 0..MAX_ITERATIONS {
             total_seconds += TIME_STEP;
 
-            // project features forward
-            let mut future_features = project_features_forward(current_features, total_seconds);
+            let current_pct = (energy_remaining / capacity_wh).clamp(0.0, 1.0);
+            let future_features =
+                project_features_forward(current_features, total_seconds, current_pct);
 
-            // update percentage based on remaining energy
-            future_features[7] = (energy_remaining / capacity_wh).clamp(0.0, 1.0);
-
-            // predict power draw
-            let predicted_power = self.rls_model.predict(&future_features).max(0.5);
-
-            // calculate energy consumed in this time step
+            let predicted_power = rls.predict(&future_features).max(0.5);
             let hours = TIME_STEP as f64 / 3600.0;
-            let energy_consumed = predicted_power * hours;
+            let energy_delta = predicted_power * hours;
 
-            energy_remaining -= energy_consumed;
-
-            if energy_remaining <= 0.0 {
-                // battery depleted - interpolate for accuracy
-                let overshoot = -energy_remaining;
-                let fraction = if energy_consumed > 0.0 {
-                    1.0 - (overshoot / energy_consumed)
-                } else {
-                    0.0
-                };
-                let final_seconds =
-                    total_seconds - TIME_STEP + (TIME_STEP as f64 * fraction) as u64;
-
-                // confidence based on profile and model maturity
-                let profile_conf = self.usage_profile.get_confidence() as f32;
-                let model_conf = (self.rls_model.sample_count() as f32 / 50.0).min(1.0);
-                let confidence = (profile_conf * 0.5 + model_conf * 0.5) * 0.9; // 0.9 = integration confidence
-
-                return Some((Duration::from_secs(final_seconds), confidence));
+            if charging {
+                energy_remaining += energy_delta;
+                if energy_remaining >= capacity_wh {
+                    // interpolate within final step
+                    let overshoot = energy_remaining - capacity_wh;
+                    let fraction = if energy_delta > 0.0 {
+                        1.0 - (overshoot / energy_delta)
+                    } else {
+                        0.0
+                    };
+                    let final_seconds =
+                        total_seconds - TIME_STEP + (TIME_STEP as f64 * fraction) as u64;
+                    let confidence = self.integration_confidence(rls);
+                    return Some((Duration::from_secs(final_seconds), confidence));
+                }
+            } else {
+                energy_remaining -= energy_delta;
+                if energy_remaining <= 0.0 {
+                    // interpolate within final step
+                    let overshoot = -energy_remaining;
+                    let fraction = if energy_delta > 0.0 {
+                        1.0 - (overshoot / energy_delta)
+                    } else {
+                        0.0
+                    };
+                    let final_seconds =
+                        total_seconds - TIME_STEP + (TIME_STEP as f64 * fraction) as u64;
+                    let confidence = self.integration_confidence(rls);
+                    return Some((Duration::from_secs(final_seconds), confidence));
+                }
             }
         }
 
-        // didn't converge within max time
-        None
+        None // did not converge within 1 week
     }
 
-    /// Estimate battery capacity in watt-hours.
+    /// Confidence score for the forward integration result.
+    ///
+    /// Saturates at 1.0 after 50 training samples. The 0.9 factor
+    /// reflects that integration compounds prediction errors over time.
+    fn integration_confidence(&self, rls: &RlsModel) -> f32 {
+        let model_conf = (rls.sample_count() as f32 / 50.0).min(1.0);
+        model_conf * 0.9
+    }
+
+    /// Estimate battery capacity in watt-hours from sysfs readings.
     fn estimate_capacity_wh(&self, reading: &SysfsReading) -> Option<f64> {
         let charge_full = reading.charge_full? as f64; // µAh
         let voltage = reading.voltage_now? as f64; // µV
 
-        // convert to watt-hours: (µAh × µV) / 1e12 = (Ah × V) = Wh
+        // (µAh × µV) / 1e12 = Wh
         let wh = (charge_full * voltage) / 1_000_000_000_000.0;
         Some(wh)
     }
@@ -179,63 +295,104 @@ mod tests {
     use super::*;
     use crate::battery::sysfs::ChargingStatus;
 
-    #[test]
-    fn test_predictor_update() {
-        let mut predictor = BatteryPredictor::new();
+    fn discharging_reading() -> SysfsReading {
+        SysfsReading {
+            charge_now: Some(5_000_000),
+            current_now: Some(1_000_000),
+            voltage_now: Some(12_000_000),
+            charge_full: Some(10_000_000),
+            charge_full_design: Some(10_000_000),
+            status: ChargingStatus::Discharging,
+        }
+    }
 
-        let reading = SysfsReading {
+    fn charging_reading() -> SysfsReading {
+        SysfsReading {
             charge_now: Some(5_000_000),
             current_now: Some(2_000_000),
             voltage_now: Some(12_000_000),
             charge_full: Some(10_000_000),
             charge_full_design: Some(10_000_000),
-            status: ChargingStatus::Discharging,
-        };
+            status: ChargingStatus::Charging,
+        }
+    }
 
+    #[test]
+    fn test_predictor_update_initializes_ewma() {
+        let mut predictor = BatteryPredictor::new();
         assert!(predictor.ewma_power.is_none());
-
-        predictor.update(&reading);
-
-        // EWMA should be initialized
+        predictor.update(&discharging_reading());
         assert!(predictor.ewma_power.is_some());
         assert!(predictor.ewma_power.unwrap() > 0.0);
     }
 
     #[test]
-    fn test_predictor_time_remaining() {
+    fn test_discharge_and_charge_models_updated_independently() {
         let mut predictor = BatteryPredictor::new();
 
-        let reading = SysfsReading {
-            charge_now: Some(5_000_000),   // 50% charged
-            current_now: Some(1_000_000),  // 1A
-            voltage_now: Some(12_000_000), // 12V
-            charge_full: Some(10_000_000), // 10Ah
-            charge_full_design: Some(10_000_000),
-            status: ChargingStatus::Discharging,
-        };
+        for _ in 0..30 {
+            predictor.update(&discharging_reading());
+        }
+        assert!(predictor.rls_discharge.is_trained());
+        assert!(!predictor.rls_charge.is_trained());
 
-        // train predictor
+        for _ in 0..30 {
+            predictor.update(&charging_reading());
+        }
+        assert!(predictor.rls_charge.is_trained());
+    }
+
+    #[test]
+    fn test_time_to_empty_after_training() {
+        let mut predictor = BatteryPredictor::new();
+        let reading = discharging_reading();
+
         for _ in 0..30 {
             predictor.update(&reading);
         }
 
-        let (time_remaining, confidence) = predictor.predict_time_remaining(&reading).unwrap();
-
-        // should predict some reasonable time
-        assert!(time_remaining.as_secs() > 0);
-        assert!(time_remaining.as_secs() < 24 * 3600); // less than 24 hours
-
-        // should have some confidence
-        assert!(confidence > 0.0);
-        assert!(confidence <= 1.0);
+        let (time, confidence) = predictor.predict_time_remaining(&reading).unwrap();
+        assert!(time.as_secs() > 0);
+        assert!(time.as_secs() < 24 * 3600);
+        assert!(confidence > 0.0 && confidence <= 1.0);
     }
 
     #[test]
-    fn test_predictor_zero_battery() {
-        let predictor = BatteryPredictor::new();
+    fn test_time_to_full_after_training() {
+        let mut predictor = BatteryPredictor::new();
+        let reading = charging_reading();
 
+        for _ in 0..30 {
+            predictor.update(&reading);
+        }
+
+        let (time, confidence) = predictor.predict_time_remaining(&reading).unwrap();
+        assert!(time.as_secs() > 0);
+        assert!(confidence > 0.0 && confidence <= 1.0);
+    }
+
+    #[test]
+    fn test_full_battery_returns_zero() {
+        let predictor = BatteryPredictor::new();
         let reading = SysfsReading {
-            charge_now: Some(0), // 0% charged
+            charge_now: Some(10_000_000),
+            current_now: Some(500_000),
+            voltage_now: Some(12_000_000),
+            charge_full: Some(10_000_000),
+            charge_full_design: Some(10_000_000),
+            status: ChargingStatus::Full,
+        };
+
+        let (time, confidence) = predictor.predict_time_remaining(&reading).unwrap();
+        assert_eq!(time.as_secs(), 0);
+        assert_eq!(confidence, 1.0);
+    }
+
+    #[test]
+    fn test_zero_battery_returns_zero() {
+        let predictor = BatteryPredictor::new();
+        let reading = SysfsReading {
+            charge_now: Some(0),
             current_now: Some(1_000_000),
             voltage_now: Some(12_000_000),
             charge_full: Some(10_000_000),
@@ -243,28 +400,17 @@ mod tests {
             status: ChargingStatus::Discharging,
         };
 
-        let (time_remaining, confidence) = predictor.predict_time_remaining(&reading).unwrap();
-
-        assert_eq!(time_remaining.as_secs(), 0);
+        let (time, confidence) = predictor.predict_time_remaining(&reading).unwrap();
+        assert_eq!(time.as_secs(), 0);
         assert_eq!(confidence, 1.0);
     }
 
     #[test]
     fn test_capacity_estimation() {
         let predictor = BatteryPredictor::new();
-
-        let reading = SysfsReading {
-            charge_now: Some(5_000_000),
-            current_now: Some(1_000_000),
-            voltage_now: Some(12_000_000), // 12V
-            charge_full: Some(10_000_000), // 10Ah
-            charge_full_design: Some(10_000_000),
-            status: ChargingStatus::Discharging,
-        };
-
-        let capacity_wh = predictor.estimate_capacity_wh(&reading).unwrap();
-
+        let reading = discharging_reading();
         // 10Ah × 12V = 120Wh
-        assert!((capacity_wh - 120.0).abs() < 0.1);
+        let wh = predictor.estimate_capacity_wh(&reading).unwrap();
+        assert!((wh - 120.0).abs() < 0.1);
     }
 }
