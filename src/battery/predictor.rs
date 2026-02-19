@@ -1,8 +1,7 @@
 use std::time::Duration;
 
 use super::{
-    extract_features,
-    features::project_features_forward,
+    features::{extract_features, project_features_forward},
     model::RlsModel,
     sysfs::{ChargingStatus, SysfsReading},
 };
