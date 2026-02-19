@@ -4,7 +4,9 @@ use anyhow::{Context, Result};
 use notify::{RecursiveMode, Watcher};
 use systemstat::{Platform, System};
 
-use super::{BATTERY_STATE, BatteryPredictor, BatteryState, load_predictor, save_predictor};
+use super::{
+    BATTERY_STATE, BatteryPredictor, BatteryState, load_predictor, read_cpu_load, save_predictor,
+};
 use crate::battery::sysfs::read_battery_sysfs;
 
 /// Maximum time between battery information and status fetches.
@@ -38,6 +40,10 @@ pub async fn start_battery_watcher() {
     else {
         return;
     };
+
+    // seed initial context before first prediction
+    let initial_cpu = read_cpu_load().unwrap_or(0.0);
+    predictor.set_context(initial_cpu, predictor.brightness);
 
     // send initial update with prediction
     let (smart_time_remaining, confidence) = read_battery_sysfs()
@@ -111,6 +117,9 @@ pub async fn start_battery_watcher() {
             Ok((percentage, charging, time_remaining)) => {
                 // update predictor if sysfs data available
                 if let Some(reading) = read_battery_sysfs() {
+                    // refresh context (cpu_load, brightness) before updating
+                    let cpu_load = read_cpu_load().unwrap_or(0.0);
+                    predictor.set_context(cpu_load, predictor.brightness);
                     predictor.update(&reading);
 
                     // get smart prediction
