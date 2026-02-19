@@ -11,7 +11,6 @@ mod sysfs;
 mod watcher;
 
 pub use cpu::read_cpu_load;
-pub use features::extract_features;
 pub use persistence::{load_predictor, save_predictor};
 pub use predictor::BatteryPredictor;
 pub use watcher::start_battery_watcher;
