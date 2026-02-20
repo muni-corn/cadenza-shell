@@ -9,7 +9,7 @@ use crate::battery::model::NUM_FEATURES;
 /// Serialization format version. Increment when the format changes
 /// incompatibly so that old files are gracefully discarded rather than
 /// causing a deserialization error.
-const STATE_VERSION: u32 = 3;
+const STATE_VERSION: u32 = 4;
 
 /// Serializable state for a single RLS model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -67,7 +67,8 @@ struct PredictorState {
     version: u32,
     rls_discharge: RlsState,
     rls_charge: RlsState,
-    ewma_power: Option<f64>,
+    ewma_power_discharge: Option<f64>,
+    ewma_power_charge: Option<f64>,
     ewma_alpha: f64,
     ewma_voltage: Option<f64>,
 }
@@ -78,7 +79,8 @@ impl PredictorState {
             version: STATE_VERSION,
             rls_discharge: RlsState::from_model(&predictor.rls_discharge),
             rls_charge: RlsState::from_model(&predictor.rls_charge),
-            ewma_power: predictor.ewma_power,
+            ewma_power_discharge: predictor.ewma_power_discharge,
+            ewma_power_charge: predictor.ewma_power_charge,
             ewma_alpha: predictor.ewma_alpha,
             ewma_voltage: predictor.ewma_voltage,
         }
@@ -105,7 +107,8 @@ impl PredictorState {
         Some(BatteryPredictor {
             rls_discharge,
             rls_charge,
-            ewma_power: self.ewma_power,
+            ewma_power_discharge: self.ewma_power_discharge,
+            ewma_power_charge: self.ewma_power_charge,
             ewma_alpha: self.ewma_alpha,
             ewma_voltage: self.ewma_voltage,
         })
@@ -169,7 +172,11 @@ mod tests {
             restored.rls_charge.sample_count,
             predictor.rls_charge.sample_count
         );
-        assert_eq!(restored.ewma_power, predictor.ewma_power);
+        assert_eq!(
+            restored.ewma_power_discharge,
+            predictor.ewma_power_discharge
+        );
+        assert_eq!(restored.ewma_power_charge, predictor.ewma_power_charge);
         assert_eq!(restored.ewma_alpha, predictor.ewma_alpha);
     }
 
