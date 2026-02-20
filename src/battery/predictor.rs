@@ -7,6 +7,8 @@ use super::{
 };
 use crate::battery::features::NUM_FEATURES;
 
+const EWMA_ALPHA: f64 = 0.3;
+
 /// Battery life predictor combining EWMA and RLS.
 ///
 /// Maintains separate RLS models and EWMA accumulators for charging and
@@ -22,8 +24,6 @@ pub struct BatteryPredictor {
     pub(super) ewma_power_discharge: Option<f64>,
     /// EWMA of power intake while charging (watts).
     pub(super) ewma_power_charge: Option<f64>,
-    /// EWMA smoothing factor.
-    pub(super) ewma_alpha: f64,
     /// EWMA-smoothed battery voltage in microvolts.
     ///
     /// Instantaneous voltage fluctuates with load; a heavily-smoothed value
@@ -38,7 +38,6 @@ impl BatteryPredictor {
             rls_charge: RlsModel::default(),
             ewma_power_discharge: None,
             ewma_power_charge: None,
-            ewma_alpha: 0.3,
             ewma_voltage: None,
         }
     }
@@ -50,51 +49,26 @@ impl BatteryPredictor {
             None => return,
         };
 
-        // update smoothed voltage (alpha=0.1 for heavy smoothing; voltage
-        // fluctuates with load so we want a stable long-run average)
-        const VOLTAGE_ALPHA: f64 = 0.1;
+        // update smoothed voltage
         if let Some(v) = reading.voltage_now {
             let v = v as f64;
             self.ewma_voltage = Some(match self.ewma_voltage {
-                Some(prev) => VOLTAGE_ALPHA * v + (1.0 - VOLTAGE_ALPHA) * prev,
+                Some(prev) => EWMA_ALPHA * v + (1.0 - EWMA_ALPHA) * prev,
                 None => v,
             });
         }
 
         // select the EWMA accumulator for the current charging state
-        let ewma = match reading.status {
+        let power_ewma = match reading.status {
             ChargingStatus::Charging => &mut self.ewma_power_charge,
             _ => &mut self.ewma_power_discharge,
         };
 
-        // outlier detection: if the new reading is more than 3× the current
-        // EWMA, it is likely a transient spike. apply a dampened alpha so the
-        // EWMA moves only slightly, and skip the RLS update entirely to avoid
-        // corrupting the model weights with a single anomalous sample.
-        const OUTLIER_THRESHOLD: f64 = 3.0;
-        const OUTLIER_ALPHA: f64 = 0.05; // very slow incorporation for spikes
-
-        let is_outlier = ewma.is_some_and(|prev| prev > 0.0 && power > prev * OUTLIER_THRESHOLD);
-
         // update EWMA (always, but with dampened alpha for outliers)
-        let alpha = if is_outlier {
-            OUTLIER_ALPHA
-        } else {
-            self.ewma_alpha
-        };
-        *ewma = Some(match *ewma {
-            Some(prev) => alpha * power + (1.0 - alpha) * prev,
+        *power_ewma = Some(match *power_ewma {
+            Some(prev) => EWMA_ALPHA * power + (1.0 - EWMA_ALPHA) * prev,
             None => power,
         });
-
-        // skip RLS update for outliers to protect model weights
-        if is_outlier {
-            log::debug!(
-                "battery: skipping RLS update for outlier power reading ({:.1}W)",
-                power
-            );
-            return;
-        }
 
         // extract features and train the appropriate model
         if let Some(features) = extract_features(reading) {
