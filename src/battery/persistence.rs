@@ -9,7 +9,7 @@ use crate::battery::features::NUM_FEATURES;
 /// Serialization format version. Increment when the format changes
 /// incompatibly so that old files are gracefully discarded rather than
 /// causing a deserialization error.
-const STATE_VERSION: u32 = 4;
+const STATE_VERSION: u32 = 0;
 
 /// Serializable state for a single RLS model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
