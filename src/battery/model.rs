@@ -1,4 +1,4 @@
-pub const NUM_FEATURES: usize = 9;
+pub const NUM_FEATURES: usize = 7;
 
 /// Recursive Least Squares (RLS) model for battery drain prediction.
 ///
@@ -177,8 +177,8 @@ mod tests {
     fn test_rls_learns_constant_drain() {
         let mut model = RlsModel::new(0.95, 10.0);
 
-        // simulate constant 10W drain with constant features (9-feature vector)
-        let features = [1.0, 0.5, 0.3, 0.8, 0.2, 0.1, 0.4, 0.16, 0.064];
+        // simulate constant 10W drain with constant features (7-feature vector)
+        let features = [1.0, 0.5, 0.3, 0.8, 0.2, 0.1, 0.4];
         let target = 10.0;
 
         // train for 50 iterations
@@ -201,7 +201,7 @@ mod tests {
     fn test_rls_adapts_to_change() {
         let mut model = RlsModel::new(0.90, 10.0); // faster adaptation
 
-        let features = [1.0, 0.5, 0.3, 0.8, 0.2, 0.1, 0.4, 0.16, 0.064];
+        let features = [1.0, 0.5, 0.3, 0.8, 0.2, 0.1, 0.4];
 
         // train on 8W for 30 samples
         for _ in 0..30 {
@@ -228,10 +228,10 @@ mod tests {
     fn test_rls_multiple_feature_patterns() {
         let mut model = RlsModel::new(0.98, 5.0);
 
-        // pattern 1: high power usage (9-feature vector)
-        let features_high = [1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.4, 0.16, 0.064];
+        // pattern 1: high power usage (7-feature vector)
+        let features_high = [1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.4];
         // pattern 2: low power usage
-        let features_low = [0.1, 0.2, 0.1, 0.3, 0.2, 0.1, 0.1, 0.01, 0.001];
+        let features_low = [0.1, 0.2, 0.1, 0.3, 0.2, 0.1, 0.1];
 
         // train on both patterns
         for _ in 0..25 {
@@ -253,7 +253,7 @@ mod tests {
         let model = RlsModel::default();
 
         // all-zero features should give non-negative prediction
-        let features = [0.0; 9];
+        let features = [0.0; NUM_FEATURES];
         let prediction = model.predict(&features);
         assert!(prediction >= 0.0);
     }

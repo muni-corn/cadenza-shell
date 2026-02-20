@@ -2,7 +2,7 @@ use chrono::{Datelike, Local, Timelike};
 
 use super::sysfs::SysfsReading;
 
-/// Extract 9 features from battery state for RLS model.
+/// Extract 7 features from battery state for RLS model.
 ///
 /// Power draw is intentionally excluded -- it is the prediction target, not
 /// an input. Charging state is excluded because separate models are used for
@@ -16,9 +16,7 @@ use super::sysfs::SysfsReading;
 ///  4. week_hour_sin  -- 168-hour cycle: sin(2π * hour_of_week / 168)
 ///  5. week_hour_cos  -- 168-hour cycle: cos(2π * hour_of_week / 168)
 ///  6. percentage     -- charge_now / charge_full
-///  7. percentage²    -- squared percentage for nonlinear curve fitting
-///  8. percentage³    -- cubic percentage for CC/CV taper modelling
-pub fn extract_features(reading: &SysfsReading) -> Option<[f64; 9]> {
+pub fn extract_features(reading: &SysfsReading) -> Option<[f64; 7]> {
     let now = Local::now();
 
     // fractional hour for sub-hour precision (e.g., 14.5 = 14:30)
@@ -44,8 +42,6 @@ pub fn extract_features(reading: &SysfsReading) -> Option<[f64; 9]> {
 
     // features 6-8: percentage and polynomial expansions
     let percentage = reading.percentage()?;
-    let percentage_sq = percentage * percentage;
-    let percentage_cu = percentage_sq * percentage;
 
     Some([
         hour_sin,
@@ -55,8 +51,6 @@ pub fn extract_features(reading: &SysfsReading) -> Option<[f64; 9]> {
         week_hour_sin,
         week_hour_cos,
         percentage,
-        percentage_sq,
-        percentage_cu,
     ])
 }
 
@@ -71,10 +65,10 @@ pub fn extract_features(reading: &SysfsReading) -> Option<[f64; 9]> {
 /// - `seconds_ahead`: how many seconds into the future to project
 /// - `new_percentage`: updated percentage based on energy consumed so far
 pub fn project_features_forward(
-    current_features: &[f64; 9],
+    current_features: &[f64; 7],
     seconds_ahead: u64,
     new_percentage: f64,
-) -> [f64; 9] {
+) -> [f64; 7] {
     let mut projected = *current_features;
 
     let now = Local::now();
@@ -104,8 +98,6 @@ pub fn project_features_forward(
     // features 6-8: percentage polynomial (updated by caller's energy accounting)
     let pct = new_percentage.clamp(0.0, 1.0);
     projected[6] = pct;
-    projected[7] = pct * pct;
-    projected[8] = pct * pct * pct;
 
     projected
 }
@@ -151,17 +143,6 @@ mod tests {
     }
 
     #[test]
-    fn test_percentage_polynomial() {
-        let features = extract_features(&make_reading()).unwrap();
-        let pct = features[6];
-        assert!((features[7] - pct * pct).abs() < 1e-9, "percentage² wrong");
-        assert!(
-            (features[8] - pct * pct * pct).abs() < 1e-9,
-            "percentage³ wrong"
-        );
-    }
-
-    #[test]
     fn test_project_features_forward_time_changes() {
         let current = extract_features(&make_reading()).unwrap();
 
@@ -184,8 +165,6 @@ mod tests {
         let projected = project_features_forward(&current, 3600, 0.35);
 
         assert!((projected[6] - 0.35).abs() < 1e-9);
-        assert!((projected[7] - 0.35_f64.powi(2)).abs() < 1e-9);
-        assert!((projected[8] - 0.35_f64.powi(3)).abs() < 1e-9);
     }
 
     #[test]
