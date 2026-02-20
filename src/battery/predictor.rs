@@ -8,16 +8,19 @@ use super::{
 
 /// Battery life predictor combining EWMA and RLS.
 ///
-/// Maintains separate RLS models for charging and discharging, since the two
-/// processes have fundamentally different physics.
+/// Maintains separate RLS models and EWMA accumulators for charging and
+/// discharging, since the two processes have fundamentally different physics
+/// and power magnitudes.
 #[derive(Debug, Clone)]
 pub struct BatteryPredictor {
     /// RLS model for discharging (predicts power draw in watts).
     pub(super) rls_discharge: RlsModel,
     /// RLS model for charging (predicts charging power intake in watts).
     pub(super) rls_charge: RlsModel,
-    /// Exponentially-weighted moving average of power draw.
-    pub(super) ewma_power: Option<f64>,
+    /// EWMA of power draw while discharging (watts).
+    pub(super) ewma_power_discharge: Option<f64>,
+    /// EWMA of power intake while charging (watts).
+    pub(super) ewma_power_charge: Option<f64>,
     /// EWMA smoothing factor.
     pub(super) ewma_alpha: f64,
     /// EWMA-smoothed battery voltage in microvolts.
@@ -32,7 +35,8 @@ impl BatteryPredictor {
         Self {
             rls_discharge: RlsModel::default(),
             rls_charge: RlsModel::default(),
-            ewma_power: None,
+            ewma_power_discharge: None,
+            ewma_power_charge: None,
             ewma_alpha: 0.3,
             ewma_voltage: None,
         }
@@ -56,6 +60,12 @@ impl BatteryPredictor {
             });
         }
 
+        // select the EWMA accumulator for the current charging state
+        let ewma = match reading.status {
+            ChargingStatus::Charging => &mut self.ewma_power_charge,
+            _ => &mut self.ewma_power_discharge,
+        };
+
         // outlier detection: if the new reading is more than 3× the current
         // EWMA, it is likely a transient spike. apply a dampened alpha so the
         // EWMA moves only slightly, and skip the RLS update entirely to avoid
@@ -63,9 +73,7 @@ impl BatteryPredictor {
         const OUTLIER_THRESHOLD: f64 = 3.0;
         const OUTLIER_ALPHA: f64 = 0.05; // very slow incorporation for spikes
 
-        let is_outlier = self
-            .ewma_power
-            .is_some_and(|prev| prev > 0.0 && power > prev * OUTLIER_THRESHOLD);
+        let is_outlier = ewma.is_some_and(|prev| prev > 0.0 && power > prev * OUTLIER_THRESHOLD);
 
         // update EWMA (always, but with dampened alpha for outliers)
         let alpha = if is_outlier {
@@ -73,7 +81,7 @@ impl BatteryPredictor {
         } else {
             self.ewma_alpha
         };
-        self.ewma_power = Some(match self.ewma_power {
+        *ewma = Some(match *ewma {
             Some(prev) => alpha * power + (1.0 - alpha) * prev,
             None => power,
         });
@@ -142,8 +150,8 @@ impl BatteryPredictor {
             return Some((Duration::from_secs(seconds), 0.7));
         }
 
-        // strategy 3: EWMA fallback
-        if let Some(ewma) = self.ewma_power {
+        // strategy 3: discharge EWMA fallback
+        if let Some(ewma) = self.ewma_power_discharge {
             let power = ewma.max(0.5);
             let seconds = ((remaining_wh / power) * 3600.0) as u64;
             return Some((Duration::from_secs(seconds), 0.5));
@@ -181,8 +189,8 @@ impl BatteryPredictor {
             return Some((Duration::from_secs(seconds), 0.7));
         }
 
-        // strategy 3: EWMA fallback
-        if let Some(ewma) = self.ewma_power {
+        // strategy 3: charge EWMA fallback
+        if let Some(ewma) = self.ewma_power_charge {
             let power = ewma.max(0.5);
             let seconds = ((energy_to_full / power) * 3600.0) as u64;
             return Some((Duration::from_secs(seconds), 0.5));
@@ -330,12 +338,46 @@ mod tests {
     }
 
     #[test]
-    fn test_predictor_update_initializes_ewma() {
+    fn test_ewma_discharge_initialized_on_discharging_reading() {
         let mut predictor = BatteryPredictor::new();
-        assert!(predictor.ewma_power.is_none());
+        assert!(predictor.ewma_power_discharge.is_none());
+        assert!(predictor.ewma_power_charge.is_none());
+
         predictor.update(&discharging_reading());
-        assert!(predictor.ewma_power.is_some());
-        assert!(predictor.ewma_power.unwrap() > 0.0);
+
+        assert!(predictor.ewma_power_discharge.is_some());
+        assert!(predictor.ewma_power_discharge.unwrap() > 0.0);
+        assert!(predictor.ewma_power_charge.is_none()); // charge EWMA must not be touched
+    }
+
+    #[test]
+    fn test_ewma_charge_initialized_on_charging_reading() {
+        let mut predictor = BatteryPredictor::new();
+        predictor.update(&charging_reading());
+
+        assert!(predictor.ewma_power_charge.is_some());
+        assert!(predictor.ewma_power_charge.unwrap() > 0.0);
+        assert!(predictor.ewma_power_discharge.is_none()); // discharge EWMA must not be touched
+    }
+
+    #[test]
+    fn test_ewma_accumulators_are_independent() {
+        let mut predictor = BatteryPredictor::new();
+
+        for _ in 0..5 {
+            predictor.update(&discharging_reading());
+        }
+        for _ in 0..5 {
+            predictor.update(&charging_reading());
+        }
+
+        // charging power (2A × 12V = 24W) is higher than discharging (1A × 12V = 12W)
+        let ewma_d = predictor.ewma_power_discharge.unwrap();
+        let ewma_c = predictor.ewma_power_charge.unwrap();
+        assert!(
+            ewma_c > ewma_d,
+            "ewma_charge={ewma_c:.2} should exceed ewma_discharge={ewma_d:.2}"
+        );
     }
 
     #[test]
