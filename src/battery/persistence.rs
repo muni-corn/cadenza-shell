@@ -9,7 +9,7 @@ use crate::battery::model::NUM_FEATURES;
 /// Serialization format version. Increment when the format changes
 /// incompatibly so that old files are gracefully discarded rather than
 /// causing a deserialization error.
-const STATE_VERSION: u32 = 2;
+const STATE_VERSION: u32 = 3;
 
 /// Serializable state for a single RLS model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -108,8 +108,6 @@ impl PredictorState {
             ewma_power: self.ewma_power,
             ewma_alpha: self.ewma_alpha,
             ewma_voltage: self.ewma_voltage,
-            cpu_load: 0.0,
-            brightness: 0.5,
         })
     }
 }
