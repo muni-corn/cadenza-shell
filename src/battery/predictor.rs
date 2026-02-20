@@ -130,7 +130,7 @@ impl BatteryPredictor {
     fn predict_time_to_empty(
         &self,
         reading: &SysfsReading,
-        features: &[f64; 9],
+        features: &[f64; 7],
     ) -> Option<(Duration, f32)> {
         let percentage = features[6];
         let capacity_wh = self.estimate_capacity_wh(reading)?;
@@ -164,7 +164,7 @@ impl BatteryPredictor {
     fn predict_time_to_full(
         &self,
         reading: &SysfsReading,
-        features: &[f64; 9],
+        features: &[f64; 7],
     ) -> Option<(Duration, f32)> {
         let percentage = features[6];
         let capacity_wh = self.estimate_capacity_wh(reading)?;
@@ -212,7 +212,7 @@ impl BatteryPredictor {
     /// - `charging`: true to integrate toward full, false toward empty
     fn predict_with_integration(
         &self,
-        current_features: &[f64; 9],
+        current_features: &[f64; 7],
         remaining_wh: f64,
         capacity_wh: f64,
         charging: bool,
