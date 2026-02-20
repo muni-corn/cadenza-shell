@@ -25,10 +25,6 @@ pub struct BatteryPredictor {
     /// Instantaneous voltage fluctuates with load; a heavily-smoothed value
     /// gives more stable Wh capacity estimates.
     pub(super) ewma_voltage: Option<f64>,
-    /// Most recent cpu_load reading (normalized 0.0-1.0).
-    pub(super) cpu_load: f64,
-    /// Most recent brightness reading (normalized 0.0-1.0).
-    pub(super) brightness: f64,
 }
 
 impl BatteryPredictor {
@@ -39,15 +35,7 @@ impl BatteryPredictor {
             ewma_power: None,
             ewma_alpha: 0.3,
             ewma_voltage: None,
-            cpu_load: 0.0,
-            brightness: 0.5,
         }
-    }
-
-    /// Update stored cpu_load and brightness values.
-    pub fn set_context(&mut self, cpu_load: f64, brightness: f64) {
-        self.cpu_load = cpu_load;
-        self.brightness = brightness;
     }
 
     /// Update predictor with new battery reading.
@@ -100,7 +88,7 @@ impl BatteryPredictor {
         }
 
         // extract features and train the appropriate model
-        if let Some(features) = extract_features(reading, self.cpu_load, self.brightness) {
+        if let Some(features) = extract_features(reading) {
             match reading.status {
                 ChargingStatus::Charging => self.rls_charge.update(&features, power),
                 _ => self.rls_discharge.update(&features, power),
@@ -114,9 +102,9 @@ impl BatteryPredictor {
     ///
     /// Returns `(duration, confidence)`, or `None` if no estimate is possible.
     pub fn predict_time_remaining(&self, reading: &SysfsReading) -> Option<(Duration, f32)> {
-        let features = extract_features(reading, self.cpu_load, self.brightness)?;
+        let features = extract_features(reading)?;
 
-        let percentage = features[7];
+        let percentage = features[6];
 
         match reading.status {
             ChargingStatus::Charging => self.predict_time_to_full(reading, &features),
@@ -134,9 +122,9 @@ impl BatteryPredictor {
     fn predict_time_to_empty(
         &self,
         reading: &SysfsReading,
-        features: &[f64; 12],
+        features: &[f64; 9],
     ) -> Option<(Duration, f32)> {
-        let percentage = features[7];
+        let percentage = features[6];
         let capacity_wh = self.estimate_capacity_wh(reading)?;
         let remaining_wh = capacity_wh * percentage;
 
@@ -168,9 +156,9 @@ impl BatteryPredictor {
     fn predict_time_to_full(
         &self,
         reading: &SysfsReading,
-        features: &[f64; 12],
+        features: &[f64; 9],
     ) -> Option<(Duration, f32)> {
-        let percentage = features[7];
+        let percentage = features[6];
         let capacity_wh = self.estimate_capacity_wh(reading)?;
         let remaining_wh = capacity_wh * percentage;
         let energy_to_full = capacity_wh - remaining_wh;
@@ -210,13 +198,13 @@ impl BatteryPredictor {
     /// the final step for sub-step accuracy.
     ///
     /// # Parameters
-    /// - `current_features`: current 12-element feature vector
+    /// - `current_features`: current 9-element feature vector
     /// - `remaining_wh`: watt-hours currently remaining
     /// - `capacity_wh`: total battery capacity in watt-hours
     /// - `charging`: true to integrate toward full, false toward empty
     fn predict_with_integration(
         &self,
-        current_features: &[f64; 12],
+        current_features: &[f64; 9],
         remaining_wh: f64,
         capacity_wh: f64,
         charging: bool,
