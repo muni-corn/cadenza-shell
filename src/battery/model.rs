@@ -1,4 +1,4 @@
-pub const NUM_FEATURES: usize = 7;
+use crate::battery::features::NUM_FEATURES;
 
 /// Recursive Least Squares (RLS) model for battery drain prediction.
 ///

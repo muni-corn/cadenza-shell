@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 use super::{model::RlsModel, predictor::BatteryPredictor};
-use crate::battery::model::NUM_FEATURES;
+use crate::battery::features::NUM_FEATURES;
 
 /// Serialization format version. Increment when the format changes
 /// incompatibly so that old files are gracefully discarded rather than
