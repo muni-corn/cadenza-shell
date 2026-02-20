@@ -1,5 +1,24 @@
 use std::{fs, path::Path};
 
+#[derive(Clone, Copy, Debug)]
+pub enum BatteryCapacity {
+    /// µAh
+    MicroAmpereHours(u64),
+
+    /// µWh
+    MicroWattHours(u64),
+}
+
+impl BatteryCapacity {
+    pub fn div(self, rhs: Self) -> Option<f64> {
+        match (self, rhs) {
+            (Self::MicroAmpereHours(l), Self::MicroAmpereHours(r))
+            | (Self::MicroWattHours(l), Self::MicroWattHours(r)) => Some(l as f64 / r as f64),
+            _ => None,
+        }
+    }
+}
+
 /// Charging status of the battery.
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ChargingStatus {
@@ -12,17 +31,20 @@ pub enum ChargingStatus {
 /// Raw reading from sysfs battery interface.
 #[derive(Debug, Clone)]
 pub struct SysfsReading {
-    /// Current charge in microampere-hours (µAh).
-    pub charge_now: Option<u64>,
+    /// Current voltage in microvolts (µV).
+    pub voltage_now: u64,
+
     /// Current draw in microamperes (µA). Positive values indicate charging,
     /// negative values indicate discharging.
-    pub current_now: Option<i64>,
-    /// Voltage in microvolts (µV).
-    pub voltage_now: Option<u64>,
+    pub current_now: i64,
+
+    /// Current capacity in either milliwatt-hours (µWh) or milliampere-hours
+    /// (µAh).
+    pub capacity_now: BatteryCapacity,
+
     /// Full charge capacity in microampere-hours (µAh).
-    pub charge_full: Option<u64>,
-    /// Design capacity in microampere-hours (µAh).
-    pub charge_full_design: Option<u64>,
+    pub capacity_full: BatteryCapacity,
+
     /// Charging status.
     pub status: ChargingStatus,
 }
@@ -31,38 +53,20 @@ impl SysfsReading {
     /// Calculate current power draw in watts.
     /// Returns None if voltage_now or current_now are unavailable.
     pub fn power_watts(&self) -> Option<f64> {
-        let voltage = self.voltage_now?;
-        let current = self.current_now?.unsigned_abs();
+        let voltage = self.voltage_now;
+        let current = self.current_now.unsigned_abs();
 
         // convert µV × µA = pW (picowatts), then to watts
         let power_picowatts = voltage as f64 * current as f64;
         Some(power_picowatts / 1_000_000_000_000.0)
     }
 
-    /// Calculate battery health as percentage of design capacity.
-    /// Returns None if either capacity value is unavailable.
-    pub fn battery_health(&self) -> Option<f64> {
-        let full = self.charge_full? as f64;
-        let design = self.charge_full_design? as f64;
-
-        if design > 0.0 {
-            Some((full / design).clamp(0.0, 1.0))
-        } else {
-            None
-        }
-    }
-
     /// Calculate precise percentage remaining.
-    /// Returns None if charge values are unavailable.
+    /// Returns None if charge values are unavailable or incompatible.
     pub fn percentage(&self) -> Option<f64> {
-        let now = self.charge_now? as f64;
-        let full = self.charge_full? as f64;
-
-        if full > 0.0 {
-            Some((now / full).clamp(0.0, 1.0))
-        } else {
-            None
-        }
+        self.capacity_now
+            .div(self.capacity_full)
+            .map(|p| p.clamp(0.0, 1.0))
     }
 }
 
@@ -72,24 +76,32 @@ impl SysfsReading {
 pub fn read_battery_sysfs() -> Option<SysfsReading> {
     let battery_path = detect_battery_path()?;
 
-    // current_now is critical for power calculation - if unavailable, return None
+    // current_now and voltage_now are critical for power calculation - if
+    // unavailable, return None
     let current_now = read_sysfs_i64(&battery_path, "current_now")?;
+    let voltage_now = read_sysfs_u64(&battery_path, "voltage_now")?;
 
     // read other values, allowing them to be missing
-    let charge_now = read_sysfs_u64(&battery_path, "charge_now");
-    let voltage_now = read_sysfs_u64(&battery_path, "voltage_now");
-    let charge_full = read_sysfs_u64(&battery_path, "charge_full");
-    let charge_full_design = read_sysfs_u64(&battery_path, "charge_full_design");
+    let charge_now =
+        read_sysfs_u64(&battery_path, "charge_now").map(BatteryCapacity::MicroAmpereHours);
+    let charge_full =
+        read_sysfs_u64(&battery_path, "charge_full").map(BatteryCapacity::MicroAmpereHours);
+    let energy_now =
+        read_sysfs_u64(&battery_path, "energy_now").map(BatteryCapacity::MicroWattHours);
+    let energy_full =
+        read_sysfs_u64(&battery_path, "energy_full").map(BatteryCapacity::MicroWattHours);
 
     let status = read_charging_status(&battery_path);
 
     Some(SysfsReading {
-        charge_now,
-        current_now: Some(current_now),
         voltage_now,
-        charge_full,
-        charge_full_design,
+        current_now,
         status,
+
+        // prefer watt-hours over amp-hours. if we only have amp-hours, we can calculate watt-hours
+        // with our voltage.
+        capacity_now: energy_now.or(charge_now)?,
+        capacity_full: energy_full.or(charge_full)?,
     })
 }
 
@@ -153,11 +165,10 @@ mod tests {
     #[test]
     fn test_power_calculation() {
         let reading = SysfsReading {
-            charge_now: Some(5_000_000),   // 5 Ah
-            current_now: Some(1_500_000),  // 1.5 A
-            voltage_now: Some(12_000_000), // 12 V
-            charge_full: Some(6_000_000),
-            charge_full_design: Some(6_500_000),
+            current_now: 1_500_000,                                      // 1.5 A
+            voltage_now: 12_000_000,                                     // 12 V
+            capacity_now: BatteryCapacity::MicroAmpereHours(5_000_000),  // 5 Ah
+            capacity_full: BatteryCapacity::MicroAmpereHours(6_000_000), // 6 Ah
             status: ChargingStatus::Discharging,
         };
 
@@ -167,29 +178,12 @@ mod tests {
     }
 
     #[test]
-    fn test_battery_health() {
-        let reading = SysfsReading {
-            charge_now: None,
-            current_now: None,
-            voltage_now: None,
-            charge_full: Some(5_200_000),        // 5.2 Ah
-            charge_full_design: Some(6_500_000), // 6.5 Ah
-            status: ChargingStatus::Full,
-        };
-
-        // 5.2 / 6.5 = 0.8
-        let health = reading.battery_health().unwrap();
-        assert!((health - 0.8).abs() < 0.01);
-    }
-
-    #[test]
     fn test_percentage() {
         let reading = SysfsReading {
-            charge_now: Some(3_250_000), // 3.25 Ah
-            current_now: None,
-            voltage_now: None,
-            charge_full: Some(6_500_000), // 6.5 Ah
-            charge_full_design: None,
+            current_now: 1_000_000,
+            voltage_now: 1_000_000,
+            capacity_now: BatteryCapacity::MicroAmpereHours(3_250_000), // 3.25 Ah
+            capacity_full: BatteryCapacity::MicroAmpereHours(6_500_000), // 6.5 Ah
             status: ChargingStatus::Discharging,
         };
 

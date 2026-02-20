@@ -3,7 +3,7 @@ use std::time::Duration;
 use super::{
     features::{extract_features, project_features_forward},
     model::RlsModel,
-    sysfs::{ChargingStatus, SysfsReading},
+    sysfs::{BatteryCapacity, ChargingStatus, SysfsReading},
 };
 use crate::battery::features::NUM_FEATURES;
 
@@ -50,13 +50,11 @@ impl BatteryPredictor {
         };
 
         // update smoothed voltage
-        if let Some(v) = reading.voltage_now {
-            let v = v as f64;
-            self.ewma_voltage = Some(match self.ewma_voltage {
-                Some(prev) => EWMA_ALPHA * v + (1.0 - EWMA_ALPHA) * prev,
-                None => v,
-            });
-        }
+        let v = reading.voltage_now as f64;
+        self.ewma_voltage = Some(match self.ewma_voltage {
+            Some(prev) => EWMA_ALPHA * v + (1.0 - EWMA_ALPHA) * prev,
+            None => v,
+        });
 
         // select the EWMA accumulator for the current charging state
         let power_ewma = match reading.status {
@@ -108,7 +106,7 @@ impl BatteryPredictor {
         features: &[f64; NUM_FEATURES],
     ) -> Option<(Duration, f32)> {
         let percentage = features[6];
-        let capacity_wh = self.estimate_capacity_wh(reading)?;
+        let capacity_wh = self.estimate_capacity_wh(reading);
         let remaining_wh = capacity_wh * percentage;
 
         if self.rls_discharge.is_trained() {
@@ -142,7 +140,7 @@ impl BatteryPredictor {
         features: &[f64; NUM_FEATURES],
     ) -> Option<(Duration, f32)> {
         let percentage = features[6];
-        let capacity_wh = self.estimate_capacity_wh(reading)?;
+        let capacity_wh = self.estimate_capacity_wh(reading);
         let remaining_wh = capacity_wh * percentage;
         let energy_to_full = capacity_wh - remaining_wh;
 
@@ -265,17 +263,19 @@ impl BatteryPredictor {
     /// Prefers the EWMA-smoothed voltage over the instantaneous reading to
     /// reduce noise from load-induced voltage sag. Falls back to instantaneous
     /// voltage if no smoothed value is available yet (first reading).
-    fn estimate_capacity_wh(&self, reading: &SysfsReading) -> Option<f64> {
-        let charge_full = reading.charge_full? as f64; // µAh
+    fn estimate_capacity_wh(&self, reading: &SysfsReading) -> f64 {
+        match reading.capacity_full {
+            BatteryCapacity::MicroAmpereHours(u_ah) => {
+                let u_ah = u_ah as f64;
 
-        // prefer smoothed voltage; fall back to instantaneous if not yet warmed up
-        let voltage = self
-            .ewma_voltage
-            .or_else(|| reading.voltage_now.map(|v| v as f64))?; // µV
+                // prefer smoothed voltage; fall back to instantaneous if not yet warmed up
+                let u_v = self.ewma_voltage.unwrap_or(reading.voltage_now as f64); // µV
 
-        // (µAh × µV) / 1e12 = Wh
-        let wh = (charge_full * voltage) / 1_000_000_000_000.0;
-        Some(wh)
+                // (µAh × µV) / 1e12 = Wh
+                (u_ah * u_v) / 1_000_000_000_000.0
+            }
+            BatteryCapacity::MicroWattHours(u_wh) => u_wh as f64 / 1_000_000.0,
+        }
     }
 }
 
@@ -292,22 +292,20 @@ mod tests {
 
     fn discharging_reading() -> SysfsReading {
         SysfsReading {
-            charge_now: Some(5_000_000),
-            current_now: Some(1_000_000),
-            voltage_now: Some(12_000_000),
-            charge_full: Some(10_000_000),
-            charge_full_design: Some(10_000_000),
+            current_now: 1_000_000,
+            voltage_now: 12_000_000,
+            capacity_now: BatteryCapacity::MicroAmpereHours(5_000_000),
+            capacity_full: BatteryCapacity::MicroAmpereHours(10_000_000),
             status: ChargingStatus::Discharging,
         }
     }
 
     fn charging_reading() -> SysfsReading {
         SysfsReading {
-            charge_now: Some(5_000_000),
-            current_now: Some(2_000_000),
-            voltage_now: Some(12_000_000),
-            charge_full: Some(10_000_000),
-            charge_full_design: Some(10_000_000),
+            current_now: 2_000_000,
+            voltage_now: 12_000_000,
+            capacity_now: BatteryCapacity::MicroAmpereHours(5_000_000),
+            capacity_full: BatteryCapacity::MicroAmpereHours(10_000_000),
             status: ChargingStatus::Charging,
         }
     }
@@ -404,11 +402,10 @@ mod tests {
     fn test_full_battery_returns_zero() {
         let predictor = BatteryPredictor::new();
         let reading = SysfsReading {
-            charge_now: Some(10_000_000),
-            current_now: Some(500_000),
-            voltage_now: Some(12_000_000),
-            charge_full: Some(10_000_000),
-            charge_full_design: Some(10_000_000),
+            current_now: 500_000,
+            voltage_now: 12_000_000,
+            capacity_now: BatteryCapacity::MicroAmpereHours(10_000_000),
+            capacity_full: BatteryCapacity::MicroAmpereHours(10_000_000),
             status: ChargingStatus::Full,
         };
 
@@ -421,11 +418,10 @@ mod tests {
     fn test_zero_battery_returns_zero() {
         let predictor = BatteryPredictor::new();
         let reading = SysfsReading {
-            charge_now: Some(0),
-            current_now: Some(1_000_000),
-            voltage_now: Some(12_000_000),
-            charge_full: Some(10_000_000),
-            charge_full_design: Some(10_000_000),
+            current_now: 1_000_000,
+            voltage_now: 12_000_000,
+            capacity_now: BatteryCapacity::MicroAmpereHours(0),
+            capacity_full: BatteryCapacity::MicroAmpereHours(10_000_000),
             status: ChargingStatus::Discharging,
         };
 
@@ -439,7 +435,7 @@ mod tests {
         let predictor = BatteryPredictor::new();
         let reading = discharging_reading();
         // 10Ah × 12V = 120Wh
-        let wh = predictor.estimate_capacity_wh(&reading).unwrap();
+        let wh = predictor.estimate_capacity_wh(&reading);
         assert!((wh - 120.0).abs() < 0.1);
     }
 }
