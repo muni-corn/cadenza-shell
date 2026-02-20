@@ -69,7 +69,6 @@ struct PredictorState {
     rls_charge: RlsState,
     ewma_power_discharge: Option<f64>,
     ewma_power_charge: Option<f64>,
-    ewma_alpha: f64,
     ewma_voltage: Option<f64>,
 }
 
@@ -81,7 +80,6 @@ impl PredictorState {
             rls_charge: RlsState::from_model(&predictor.rls_charge),
             ewma_power_discharge: predictor.ewma_power_discharge,
             ewma_power_charge: predictor.ewma_power_charge,
-            ewma_alpha: predictor.ewma_alpha,
             ewma_voltage: predictor.ewma_voltage,
         }
     }
@@ -96,11 +94,6 @@ impl PredictorState {
             return None;
         }
 
-        if !(0.0..=1.0).contains(&self.ewma_alpha) {
-            log::warn!("invalid ewma_alpha: {}", self.ewma_alpha);
-            return None;
-        }
-
         let rls_discharge = self.rls_discharge.to_model()?;
         let rls_charge = self.rls_charge.to_model()?;
 
@@ -109,7 +102,6 @@ impl PredictorState {
             rls_charge,
             ewma_power_discharge: self.ewma_power_discharge,
             ewma_power_charge: self.ewma_power_charge,
-            ewma_alpha: self.ewma_alpha,
             ewma_voltage: self.ewma_voltage,
         })
     }
@@ -177,7 +169,6 @@ mod tests {
             predictor.ewma_power_discharge
         );
         assert_eq!(restored.ewma_power_charge, predictor.ewma_power_charge);
-        assert_eq!(restored.ewma_alpha, predictor.ewma_alpha);
     }
 
     #[test]
@@ -201,15 +192,6 @@ mod tests {
         let predictor = BatteryPredictor::new();
         let mut state = PredictorState::from_predictor(&predictor);
         state.version = 99; // wrong version
-
-        assert!(state.to_predictor().is_none());
-    }
-
-    #[test]
-    fn test_invalid_ewma_alpha_returns_none() {
-        let predictor = BatteryPredictor::new();
-        let mut state = PredictorState::from_predictor(&predictor);
-        state.ewma_alpha = 1.5; // out of range
 
         assert!(state.to_predictor().is_none());
     }

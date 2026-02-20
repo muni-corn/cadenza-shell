@@ -7,7 +7,9 @@ use super::{
 };
 use crate::battery::features::NUM_FEATURES;
 
-/// Battery life predictor combining EWMA and RLS.
+const EWMA_ALPHA: f64 = 0.3;
+
+/// The all-encompassing battery life predictor combining EWMA and RLS.
 ///
 /// This updates and maintains separate RLS models and EWMA accumulators for
 /// charging and discharging. Charging and discharging have fundamentally
@@ -22,11 +24,9 @@ pub struct BatteryPredictor {
 
     /// EWMA of power draw while discharging (watts).
     pub(super) ewma_power_discharge: Option<f64>,
+
     /// EWMA of power intake while charging (watts).
     pub(super) ewma_power_charge: Option<f64>,
-    /// EWMA smoothing factor.
-    pub(super) ewma_alpha: f64,
-
     /// EWMA-smoothed battery voltage in microvolts.
     ///
     /// Instantaneous voltage fluctuates with load; a heavily-smoothed value
@@ -41,7 +41,6 @@ impl BatteryPredictor {
             rls_charge: RlsModel::default(),
             ewma_power_discharge: None,
             ewma_power_charge: None,
-            ewma_alpha: 0.3,
             ewma_voltage: None,
         }
     }
@@ -54,51 +53,45 @@ impl BatteryPredictor {
             return;
         };
 
-        // update smoothed voltage (alpha=0.1 for heavy smoothing; voltage
-        // fluctuates with load so we want a stable long-run average)
-        const VOLTAGE_ALPHA: f64 = 0.1;
+        // update smoothed voltage
         if let Some(v) = reading.voltage_now {
             let v = v as f64;
             self.ewma_voltage = Some(match self.ewma_voltage {
-                Some(prev) => VOLTAGE_ALPHA * v + (1.0 - VOLTAGE_ALPHA) * prev,
+                Some(prev) => EWMA_ALPHA * v + (1.0 - EWMA_ALPHA) * prev,
                 None => v,
             });
         }
 
         // select the EWMA accumulator for the current charging state
-        let ewma = match reading.status {
-            ChargingStatus::Charging => &mut self.ewma_power_charge,
-            _ => &mut self.ewma_power_discharge,
+        // return early if the battery is not charging or discharging
+        let (power_ewma, rls) = match reading.status {
+            ChargingStatus::Charging => (&mut self.ewma_power_charge, &mut self.rls_charge),
+            ChargingStatus::Discharging => {
+                (&mut self.ewma_power_discharge, &mut self.rls_discharge)
+            }
+            _ => {
+                log::warn!(
+                    "battery is neither charging nor discharging; not updating prediction model"
+                );
+                return;
+            }
         };
 
-        // outlier detection: if the new reading is more than 3× the current
-        // EWMA, it is likely a transient spike. apply a dampened alpha so the
-        // EWMA moves only slightly, and skip the RLS update entirely to avoid
-        // corrupting the model weights with a single anomalous sample.
-        const OUTLIER_THRESHOLD: f64 = 3.0;
-        const OUTLIER_ALPHA: f64 = 0.05; // very slow incorporation for spikes
+        self.last_update = Local::now();
 
-        let is_outlier = ewma.is_some_and(|prev| prev > 0.0 && power > prev * OUTLIER_THRESHOLD);
+        // update smoothed voltage
+        let voltage_now = reading.voltage_now as f64;
+        self.ewma_voltage = self
+            .ewma_voltage
+            .map(|previous_voltage| {
+                EWMA_ALPHA * voltage_now + (1.0 - EWMA_ALPHA) * previous_voltage
+            })
+            .or(Some(voltage_now));
 
-        // update EWMA (always, but with dampened alpha for outliers)
-        let alpha = if is_outlier {
-            OUTLIER_ALPHA
-        } else {
-            self.ewma_alpha
-        };
-        *ewma = Some(match *ewma {
-            Some(prev) => alpha * power + (1.0 - alpha) * prev,
-            None => power,
-        });
-
-        // skip RLS update for outliers to protect model weights
-        if is_outlier {
-            log::debug!(
-                "battery: skipping RLS update for outlier power reading ({:.1}W)",
-                power
-            );
-            return;
-        }
+        // update EWMA for power
+        *power_ewma = power_ewma
+            .map(|previous_power| EWMA_ALPHA * power_now + (1.0 - EWMA_ALPHA) * previous_power)
+            .or(Some(power_now));
 
         // extract features and train the appropriate model
         if let Some(features) = extract_features(reading) {
