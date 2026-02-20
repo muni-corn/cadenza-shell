@@ -107,15 +107,14 @@ pub fn project_features_forward(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battery::sysfs::ChargingStatus;
+    use crate::battery::sysfs::{BatteryCapacity, ChargingStatus};
 
     fn make_reading() -> SysfsReading {
         SysfsReading {
-            charge_now: Some(5_000_000),
-            current_now: Some(2_000_000),
-            voltage_now: Some(12_000_000),
-            charge_full: Some(10_000_000),
-            charge_full_design: Some(12_000_000),
+            current_now: 2_000_000,
+            voltage_now: 12_000_000,
+            capacity_now: BatteryCapacity::MicroAmpereHours(5_000_000),
+            capacity_full: BatteryCapacity::MicroAmpereHours(10_000_000),
             status: ChargingStatus::Discharging,
         }
     }
@@ -187,11 +186,10 @@ mod tests {
     #[test]
     fn test_missing_percentage_returns_none() {
         let reading = SysfsReading {
-            charge_now: None,
-            current_now: Some(1_000_000),
-            voltage_now: Some(12_000_000),
-            charge_full: None,
-            charge_full_design: None,
+            current_now: 1_000_000,
+            voltage_now: 12_000_000,
+            capacity_now: BatteryCapacity::MicroAmpereHours(5_000_000),
+            capacity_full: BatteryCapacity::MicroWattHours(10_000_000),
             status: ChargingStatus::Discharging,
         };
 
