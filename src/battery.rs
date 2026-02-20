@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use relm4::SharedState;
 
-mod cpu;
 mod features;
 mod model;
 mod persistence;
@@ -10,7 +9,6 @@ mod predictor;
 mod sysfs;
 mod watcher;
 
-pub use cpu::read_cpu_load;
 pub use persistence::{load_predictor, save_predictor};
 pub use predictor::BatteryPredictor;
 pub use watcher::start_battery_watcher;
