@@ -2,6 +2,8 @@ use chrono::{Datelike, Local, Timelike};
 
 use super::sysfs::SysfsReading;
 
+pub const NUM_FEATURES: usize = 7;
+
 /// Extract 7 features from battery state for RLS model.
 ///
 /// Power draw is intentionally excluded -- it is the prediction target, not
@@ -16,7 +18,7 @@ use super::sysfs::SysfsReading;
 ///  4. week_hour_sin  -- 168-hour cycle: sin(2π * hour_of_week / 168)
 ///  5. week_hour_cos  -- 168-hour cycle: cos(2π * hour_of_week / 168)
 ///  6. percentage     -- charge_now / charge_full
-pub fn extract_features(reading: &SysfsReading) -> Option<[f64; 7]> {
+pub fn extract_features(reading: &SysfsReading) -> Option<[f64; NUM_FEATURES]> {
     let now = Local::now();
 
     // fractional hour for sub-hour precision (e.g., 14.5 = 14:30)
@@ -65,10 +67,10 @@ pub fn extract_features(reading: &SysfsReading) -> Option<[f64; 7]> {
 /// - `seconds_ahead`: how many seconds into the future to project
 /// - `new_percentage`: updated percentage based on energy consumed so far
 pub fn project_features_forward(
-    current_features: &[f64; 7],
+    current_features: &[f64; NUM_FEATURES],
     seconds_ahead: u64,
     new_percentage: f64,
-) -> [f64; 7] {
+) -> [f64; NUM_FEATURES] {
     let mut projected = *current_features;
 
     let now = Local::now();
