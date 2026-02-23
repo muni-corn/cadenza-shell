@@ -1,4 +1,4 @@
-use chrono::{Datelike, Local, Timelike};
+use chrono::{DateTime, Datelike, Local, Timelike};
 
 use super::sysfs::SysfsReading;
 
@@ -17,7 +17,7 @@ pub const NUM_FEATURES: usize = 5;
 ///  3. day_cos        -- weekly cycle: cos(2π * day / 7)
 ///  4. percentage     -- charge_now / charge_full
 pub fn extract_features(reading: &SysfsReading) -> Option<[f64; NUM_FEATURES]> {
-    let (hour_of_day, day_of_week) = get_times();
+    let (hour_of_day, day_of_week) = get_time_values(Local::now());
 
     // features 0-1: daily cycle
     let hour_rad = 2.0 * std::f64::consts::PI * hour_of_day / 24.0;
@@ -36,14 +36,13 @@ pub fn extract_features(reading: &SysfsReading) -> Option<[f64; NUM_FEATURES]> {
 }
 
 /// Returns the hour of the day and the day of the week (both with fractions).
-pub fn get_times() -> (f64, f64) {
-    let now = Local::now();
-
+pub fn get_time_values(when: DateTime<Local>) -> (f64, f64) {
     // fractional hour for sub-hour precision (e.g., 14.5 = 14:30)
-    let hour_of_day = now.hour() as f64 + now.minute() as f64 / 60.0 + now.second() as f64 / 3600.0;
+    let hour_of_day =
+        when.hour() as f64 + when.minute() as f64 / 60.0 + when.second() as f64 / 3600.0;
 
     // fractional day of week
-    let day_of_week = now.weekday().num_days_from_monday() as f64 + hour_of_day / 24.0;
+    let day_of_week = when.weekday().num_days_from_monday() as f64 + hour_of_day / 24.0;
 
     (hour_of_day, day_of_week)
 }
