@@ -121,14 +121,14 @@ impl BatteryPredictor {
         let percentage = features[4];
 
         match reading.status {
-            ChargingStatus::Charging => self.predict_time_to_full(reading, &features),
-            ChargingStatus::Full => Some((Duration::from_secs(0), 1.0)),
-            _ => {
+            ChargingStatus::Charging => Some(self.predict_time_to_full(reading, &features)),
+            ChargingStatus::Discharging => {
                 if percentage <= 0.01 {
                     return Some((Duration::from_secs(0), 1.0));
                 }
-                self.predict_time_to_empty(reading, &features)
+                Some(self.predict_time_to_empty(reading, &features))
             }
+            _ => None,
         }
     }
 
@@ -137,33 +137,30 @@ impl BatteryPredictor {
         &self,
         reading: &SysfsReading,
         features: &[f64; NUM_FEATURES],
-    ) -> Option<(Duration, f32)> {
+    ) -> (Duration, f64) {
         let percentage = features[4];
         let capacity_wh = self.estimate_capacity_wh(reading);
         let remaining_wh = capacity_wh * percentage;
 
-        if self.rls_discharge.is_trained() {
-            // strategy 1: forward integration with discharge RLS model
-            if let Some(result) =
-                self.predict_with_integration(features, remaining_wh, capacity_wh, false)
-            {
-                return Some(result);
-            }
+        // get integrated predicted time
+        let (predicted_time_remaining, rls_confidence) =
+            self.predict_with_integration(features, remaining_wh, capacity_wh, false);
 
-            // strategy 2: instantaneous RLS
-            let power = self.rls_discharge.predict(features).max(0.5);
-            let seconds = ((remaining_wh / power) * 3600.0) as u64;
-            return Some((Duration::from_secs(seconds), 0.7));
-        }
+        // if no ewma right now, return just the integration prediction
+        let Some(power) = self.ewma_power_discharge else {
+            return (predicted_time_remaining, rls_confidence);
+        };
 
-        // strategy 3: discharge EWMA fallback
-        if let Some(ewma) = self.ewma_power_discharge {
-            let power = ewma.max(0.5);
-            let seconds = ((remaining_wh / power) * 3600.0) as u64;
-            return Some((Duration::from_secs(seconds), 0.5));
-        }
+        let ewma_secs_remaining = (remaining_wh / power) * 3600.0;
 
-        None
+        // return a weighted average based on the model's confidence
+        let weighted_secs_remaining = predicted_time_remaining.as_secs_f64() * rls_confidence
+            + ewma_secs_remaining * (1.0 - rls_confidence);
+
+        (
+            Duration::from_secs_f64(weighted_secs_remaining),
+            rls_confidence,
+        )
     }
 
     /// Predict time until battery is full (charging).
@@ -171,38 +168,35 @@ impl BatteryPredictor {
         &self,
         reading: &SysfsReading,
         features: &[f64; NUM_FEATURES],
-    ) -> Option<(Duration, f32)> {
+    ) -> (Duration, f64) {
         let percentage = features[4];
         let capacity_wh = self.estimate_capacity_wh(reading);
         let remaining_wh = capacity_wh * percentage;
         let energy_to_full = capacity_wh - remaining_wh;
 
         if energy_to_full <= 0.0 {
-            return Some((Duration::from_secs(0), 1.0));
+            return (Duration::from_secs(0), 1.0);
         }
 
-        if self.rls_charge.is_trained() {
-            // strategy 1: forward integration with charge RLS model
-            if let Some(result) =
-                self.predict_with_integration(features, remaining_wh, capacity_wh, true)
-            {
-                return Some(result);
-            }
+        // get integrated predicted time
+        let (predicted_time_remaining, rls_confidence) =
+            self.predict_with_integration(features, remaining_wh, capacity_wh, true);
 
-            // strategy 2: instantaneous RLS
-            let power = self.rls_charge.predict(features).max(0.5);
-            let seconds = ((energy_to_full / power) * 3600.0) as u64;
-            return Some((Duration::from_secs(seconds), 0.7));
-        }
+        // if no ewma right now, return just the integration prediction
+        let Some(power) = self.ewma_power_charge else {
+            return (predicted_time_remaining, rls_confidence);
+        };
 
-        // strategy 3: charge EWMA fallback
-        if let Some(ewma) = self.ewma_power_charge {
-            let power = ewma.max(0.5);
-            let seconds = ((energy_to_full / power) * 3600.0) as u64;
-            return Some((Duration::from_secs(seconds), 0.5));
-        }
+        let ewma_secs_remaining = (energy_to_full / power) * 3600.0;
 
-        None
+        // return a weighted average based on the model's confidence
+        let weighted_secs_remaining = predicted_time_remaining.as_secs_f64() * rls_confidence
+            + ewma_secs_remaining * (1.0 - rls_confidence);
+
+        (
+            Duration::from_secs_f64(weighted_secs_remaining),
+            rls_confidence,
+        )
     }
 
     /// Predict using forward time integration.
@@ -222,7 +216,7 @@ impl BatteryPredictor {
         remaining_wh: f64,
         capacity_wh: f64,
         charging: bool,
-    ) -> Option<(Duration, f32)> {
+    ) -> (Duration, f64) {
         const TIME_STEP: u64 = 900; // 15-minute steps
         const MAX_ITERATIONS: u32 = 4 * 24 * 7; // 1 week max
 
@@ -238,11 +232,11 @@ impl BatteryPredictor {
         for _ in 0..MAX_ITERATIONS {
             total_seconds += TIME_STEP;
 
-            let current_pct = (energy_remaining / capacity_wh).clamp(0.0, 1.0);
+            let current_percent = (energy_remaining / capacity_wh).clamp(0.0, 1.0);
             let future_features =
-                project_features_forward(current_features, total_seconds, current_pct);
+                project_features_forward(current_features, total_seconds, current_percent);
 
-            let predicted_power = rls.predict(&future_features).max(0.5);
+            let predicted_power = rls.predict(&future_features).min(0.0);
             let hours = TIME_STEP as f64 / 3600.0;
             let energy_delta = predicted_power * hours;
 
@@ -258,8 +252,8 @@ impl BatteryPredictor {
                     };
                     let final_seconds =
                         total_seconds - TIME_STEP + (TIME_STEP as f64 * fraction) as u64;
-                    let confidence = self.integration_confidence(rls);
-                    return Some((Duration::from_secs(final_seconds), confidence));
+                    let confidence = rls.confidence();
+                    return (Duration::from_secs(final_seconds), confidence);
                 }
             } else {
                 energy_remaining -= energy_delta;
@@ -273,22 +267,13 @@ impl BatteryPredictor {
                     };
                     let final_seconds =
                         total_seconds - TIME_STEP + (TIME_STEP as f64 * fraction) as u64;
-                    let confidence = self.integration_confidence(rls);
-                    return Some((Duration::from_secs(final_seconds), confidence));
+                    let confidence = rls.confidence();
+                    return (Duration::from_secs(final_seconds), confidence);
                 }
             }
         }
 
-        None // did not converge within 1 week
-    }
-
-    /// Confidence score for the forward integration result.
-    ///
-    /// Saturates at 1.0 after 50 training samples. The 0.9 factor
-    /// reflects that integration compounds prediction errors over time.
-    fn integration_confidence(&self, rls: &RlsModel) -> f32 {
-        let model_conf = (rls.sample_count() as f32 / 50.0).min(1.0);
-        model_conf * 0.9
+        (Duration::MAX, 0.0) // did not converge within 1 week
     }
 
     /// Estimate battery capacity in watt-hours from sysfs readings.
