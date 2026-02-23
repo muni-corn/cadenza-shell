@@ -21,5 +21,5 @@ pub struct BatteryState {
     pub charging: bool,
     pub time_remaining: Duration, // kernel/sysfs estimate (kept for reference)
     pub smart_time_remaining: Duration, // ml-enhanced estimate
-    pub confidence: f32,          // 0.0-1.0, prediction confidence
+    pub confidence: f64,          // 0.0-1.0, prediction confidence
 }

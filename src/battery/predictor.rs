@@ -115,7 +115,7 @@ impl BatteryPredictor {
     /// Dispatches to time-to-empty or time-to-full based on charging status.
     ///
     /// Returns `(duration, confidence)`, or `None` if no estimate is possible.
-    pub fn predict_time_remaining(&self, reading: &SysfsReading) -> Option<(Duration, f32)> {
+    pub fn predict_time_remaining(&self, reading: &SysfsReading) -> Option<(Duration, f64)> {
         let features = extract_features(reading)?;
 
         let percentage = features[4];
