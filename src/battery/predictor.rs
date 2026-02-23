@@ -120,7 +120,7 @@ impl BatteryPredictor {
 
         let percentage = features[4];
 
-        match reading.status {
+        let result = match reading.status {
             ChargingStatus::Charging => Some(self.predict_time_to_full(reading, &features)),
             ChargingStatus::Discharging => {
                 if percentage <= 0.01 {
@@ -129,7 +129,13 @@ impl BatteryPredictor {
                 Some(self.predict_time_to_empty(reading, &features))
             }
             _ => None,
+        };
+
+        if let Some((_, confidence)) = result {
+            log::info!("prediction made with {confidence} confidence");
         }
+
+        result
     }
 
     /// Predict time until battery is empty (discharging).
@@ -229,6 +235,9 @@ impl BatteryPredictor {
         let mut energy_remaining = remaining_wh;
         let mut total_seconds = 0u64;
 
+        // count the number of times power prediction was negative
+        let mut negative_predictions = 0;
+
         for _ in 0..MAX_ITERATIONS {
             total_seconds += TIME_STEP;
 
@@ -236,7 +245,12 @@ impl BatteryPredictor {
             let future_features =
                 project_features_forward(current_features, total_seconds, current_percent);
 
-            let predicted_power = rls.predict(&future_features).min(0.0);
+            let raw_prediction = rls.predict(&future_features);
+            if raw_prediction < 0.0 {
+                negative_predictions += 1;
+            }
+
+            let predicted_power = raw_prediction.max(0.0);
             let hours = TIME_STEP as f64 / 3600.0;
             let energy_delta = predicted_power * hours;
 
@@ -253,6 +267,12 @@ impl BatteryPredictor {
                     let final_seconds =
                         total_seconds - TIME_STEP + (TIME_STEP as f64 * fraction) as u64;
                     let confidence = rls.confidence();
+
+                    // warn about the number of negative predictions made
+                    if negative_predictions > 0 {
+                        log::warn!("rls model made {negative_predictions} negative predictions");
+                    }
+
                     return (Duration::from_secs(final_seconds), confidence);
                 }
             } else {
@@ -268,9 +288,22 @@ impl BatteryPredictor {
                     let final_seconds =
                         total_seconds - TIME_STEP + (TIME_STEP as f64 * fraction) as u64;
                     let confidence = rls.confidence();
+
+                    // warn about the number of negative predictions made
+                    if negative_predictions > 0 {
+                        log::warn!("rls model made {negative_predictions} negative predictions");
+                    }
+
                     return (Duration::from_secs(final_seconds), confidence);
                 }
             }
+        }
+
+        // warn about the number of negative predictions made
+        if negative_predictions > 0 {
+            log::warn!(
+                "rls model made {negative_predictions} negative predictions and never converged"
+            );
         }
 
         (Duration::MAX, 0.0) // did not converge within 1 week

@@ -135,7 +135,21 @@ impl RlsModel {
             .iter()
             .fold(0.0, |acc, n| acc + confidence_sigmoid(*n));
 
-        (sum_of_confidence / MIN_QUARTER_HOURS_FOR_COMPLETE_CONFIDENCE as f64).clamp(0.0, 1.0)
+        let result =
+            (sum_of_confidence / MIN_QUARTER_HOURS_FOR_COMPLETE_CONFIDENCE as f64).clamp(0.0, 1.0);
+
+        log::info!("computed confidence for rls model:");
+        log::info!(
+            "- {} of {} samples collected",
+            self.total_sample_count(),
+            MIN_SAMPLES_PER_QUARTER_HOUR_FOR_CONFIDENCE * MIN_QUARTER_HOURS_FOR_COMPLETE_CONFIDENCE
+        );
+        log::info!(
+            "- {sum_of_confidence} / {MIN_QUARTER_HOURS_FOR_COMPLETE_CONFIDENCE} sigmoid-normalized"
+        );
+        log::info!("= {result}");
+
+        result
     }
 }
 
