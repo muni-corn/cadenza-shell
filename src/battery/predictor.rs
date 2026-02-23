@@ -1,5 +1,7 @@
 use std::time::Duration;
 
+use chrono::{DateTime, Local};
+
 use super::{
     features::{extract_features, project_features_forward},
     model::RlsModel,
@@ -8,6 +10,10 @@ use super::{
 use crate::battery::features::NUM_FEATURES;
 
 const EWMA_ALPHA: f64 = 0.3;
+
+/// The minimum number of seconds that must pass before the predictor can be
+/// updated.
+const MIN_UPDATE_TIME: f32 = 5.0;
 
 /// The all-encompassing battery life predictor combining EWMA and RLS.
 ///
@@ -27,11 +33,15 @@ pub struct BatteryPredictor {
 
     /// EWMA of power intake while charging (watts).
     pub(super) ewma_power_charge: Option<f64>,
+
     /// EWMA-smoothed battery voltage in microvolts.
     ///
     /// Instantaneous voltage fluctuates with load; a heavily-smoothed value
     /// gives more stable Wh capacity estimates.
     pub(super) ewma_voltage: Option<f64>,
+
+    /// The time at which the predictor was last updated with data.
+    pub(super) last_update: DateTime<Local>,
 }
 
 impl BatteryPredictor {
@@ -42,11 +52,21 @@ impl BatteryPredictor {
             ewma_power_discharge: None,
             ewma_power_charge: None,
             ewma_voltage: None,
+            last_update: Local::now(),
         }
     }
 
     /// Update predictor with new battery reading.
     pub fn update(&mut self, reading: &SysfsReading) {
+        let now = Local::now();
+
+        if now.signed_duration_since(self.last_update).as_seconds_f32() < MIN_UPDATE_TIME {
+            log::info!(
+                "not updating battery predictor before {MIN_UPDATE_TIME} seconds have passed"
+            );
+            return;
+        }
+
         // return early if there is no power reading
         let Some(power) = reading.power_watts() else {
             log::warn!("couldn't get current power usage");

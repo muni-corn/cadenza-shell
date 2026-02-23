@@ -1,6 +1,7 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::{Context, Result};
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 
 use super::{model::RlsModel, predictor::BatteryPredictor};
@@ -105,6 +106,7 @@ impl PredictorState {
             ewma_power_discharge: self.ewma_power_discharge,
             ewma_power_charge: self.ewma_power_charge,
             ewma_voltage: self.ewma_voltage,
+            last_update: Local::now(),
         })
     }
 }
