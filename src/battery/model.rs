@@ -166,6 +166,37 @@ impl RlsModel {
     pub fn is_trained(&self) -> bool {
         self.sample_count() >= 20 // require at least 20 samples
     }
+
+    /// Provides the confidence level of the model from 0.0-1.0.
+    pub fn confidence(&self) -> f64 {
+        let sum_of_confidence = self
+            .sample_count
+            .iter()
+            .fold(0.0, |acc, n| acc + confidence_sigmoid(*n));
+
+        (sum_of_confidence / MIN_QUARTER_HOURS_FOR_COMPLETE_CONFIDENCE as f64).clamp(0.0, 1.0)
+    }
+}
+
+/// How many samples should be in a quarter-hour slot to be considered
+/// confident.
+const MIN_SAMPLES_PER_QUARTER_HOUR_FOR_CONFIDENCE: usize = 500;
+
+/// The desired confidence we want to have at our minimum sample count.
+const CONFIDENCE_AT_MIN_SAMPLES: f64 = 0.99;
+
+/// How many quarter-hours should be covered for full model confidence.
+/// Right now, this is the number of quarter-hours in a week, multiplied by the
+/// fraction of typical waking hours in a day, assuming 8 hours of sleep.
+const MIN_QUARTER_HOURS_FOR_COMPLETE_CONFIDENCE: usize = QUARTER_HOURS_IN_A_WEEK * 16 / 24;
+
+fn confidence_sigmoid(samples: u32) -> f64 {
+    let n = MIN_SAMPLES_PER_QUARTER_HOUR_FOR_CONFIDENCE as f64;
+    let c = CONFIDENCE_AT_MIN_SAMPLES;
+    let a = n / c - n;
+    let x = samples as f64;
+
+    (x / a) / (1. + (x / a))
 }
 
 impl Default for RlsModel {
