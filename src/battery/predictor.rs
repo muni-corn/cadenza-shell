@@ -411,14 +411,14 @@ mod tests {
         for _ in 0..30 {
             predictor.update(&discharging_reading());
         }
-        assert_eq!(&predictor.rls_discharge.total_sample_count(), 30);
-        assert_ne!(&predictor.rls_charge.total_sample_count(), 30);
+        assert_eq!(predictor.rls_discharge.total_sample_count(), 30);
+        assert_ne!(predictor.rls_charge.total_sample_count(), 30);
 
         for _ in 0..30 {
             predictor.update(&charging_reading());
         }
-        assert_eq!(&predictor.rls_discharge.total_sample_count(), 30);
-        assert_eq!(&predictor.rls_charge.total_sample_count(), 30);
+        assert_eq!(predictor.rls_discharge.total_sample_count(), 30);
+        assert_eq!(predictor.rls_charge.total_sample_count(), 30);
     }
 
     #[test]
@@ -451,7 +451,7 @@ mod tests {
     }
 
     #[test]
-    fn test_full_battery_returns_zero() {
+    fn test_full_battery_returns_none() {
         let predictor = BatteryPredictor::new();
         let reading = SysfsReading {
             current_now: 500_000,
@@ -461,9 +461,7 @@ mod tests {
             status: ChargingStatus::Full,
         };
 
-        let (time, confidence) = predictor.predict_time_remaining(&reading).unwrap();
-        assert_eq!(time.as_secs(), 0);
-        assert_eq!(confidence, 1.0);
+        assert!(predictor.predict_time_remaining(&reading).is_none());
     }
 
     #[test]
