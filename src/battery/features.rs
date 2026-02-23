@@ -17,18 +17,14 @@ pub const NUM_FEATURES: usize = 5;
 ///  3. day_cos        -- weekly cycle: cos(2π * day / 7)
 ///  4. percentage     -- charge_now / charge_full
 pub fn extract_features(reading: &SysfsReading) -> Option<[f64; NUM_FEATURES]> {
-    let now = Local::now();
-
-    // fractional hour for sub-hour precision (e.g., 14.5 = 14:30)
-    let hour_frac = now.hour() as f64 + now.minute() as f64 / 60.0 + now.second() as f64 / 3600.0;
+    let (hour_of_day, day_of_week) = get_times();
 
     // features 0-1: daily cycle
-    let hour_rad = 2.0 * std::f64::consts::PI * hour_frac / 24.0;
+    let hour_rad = 2.0 * std::f64::consts::PI * hour_of_day / 24.0;
     let hour_sin = hour_rad.sin();
     let hour_cos = hour_rad.cos();
 
     // features 2-3: weekly cycle
-    let day_of_week = now.weekday().num_days_from_monday() as f64 + hour_frac / 24.0;
     let dow_rad = 2.0 * std::f64::consts::PI * day_of_week / 7.0;
     let day_sin = dow_rad.sin();
     let day_cos = dow_rad.cos();
@@ -37,6 +33,19 @@ pub fn extract_features(reading: &SysfsReading) -> Option<[f64; NUM_FEATURES]> {
     let percentage = reading.percentage()?;
 
     Some([hour_sin, hour_cos, day_sin, day_cos, percentage])
+}
+
+/// Returns the hour of the day and the day of the week (both with fractions).
+pub fn get_times() -> (f64, f64) {
+    let now = Local::now();
+
+    // fractional hour for sub-hour precision (e.g., 14.5 = 14:30)
+    let hour_of_day = now.hour() as f64 + now.minute() as f64 / 60.0 + now.second() as f64 / 3600.0;
+
+    // fractional day of week
+    let day_of_week = now.weekday().num_days_from_monday() as f64 + hour_of_day / 24.0;
+
+    (hour_of_day, day_of_week)
 }
 
 /// Project features forward in time for forward integration.
