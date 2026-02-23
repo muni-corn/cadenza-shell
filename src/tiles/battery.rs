@@ -161,10 +161,25 @@ impl BatteryTile {
         if self.charging && self.current_percentage > 0.99 {
             "Plugged in".to_string()
         } else {
-            let time_remaining = self.smart_time_remaining.as_secs();
+            let time_remaining = self.time_remaining.as_secs();
+            let is_tomorrow = self.time_remaining >= Duration::from_hours(24)
+                && self.time_remaining < Duration::from_hours(48);
+            let is_someday = self.time_remaining > Duration::from_hours(48);
 
             if time_remaining < 30 * 60 {
                 format!("{} min left", time_remaining / 60)
+            } else if is_tomorrow {
+                if self.charging {
+                    "Full tomorrow".to_string()
+                } else {
+                    "Until tomorrow".to_string()
+                }
+            } else if is_someday {
+                if self.charging {
+                    "Full someday".to_string()
+                } else {
+                    "Until someday".to_string()
+                }
             } else {
                 // calculate actual completion time
                 let now = Local::now();
