@@ -72,7 +72,6 @@ pub async fn start_battery_watcher() {
     }
 
     let mut has_watcher = true;
-    let mut update_count = 0u32;
 
     loop {
         if has_watcher {
@@ -136,11 +135,8 @@ pub async fn start_battery_watcher() {
                     });
                 }
 
-                // save predictor state every 10 updates (~5 minutes)
-                update_count += 1;
-                if update_count.is_multiple_of(10)
-                    && let Err(e) = save_predictor(&predictor)
-                {
+                // save state immediately
+                if let Err(e) = save_predictor(&predictor) {
                     log::warn!("couldn't save battery predictor: {}", e);
                 }
             }
