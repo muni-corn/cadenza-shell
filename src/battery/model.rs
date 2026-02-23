@@ -150,11 +150,18 @@ impl RlsModel {
 
     /// Predict battery drain rate from features.
     pub fn predict(&self, features: &[f64; NUM_FEATURES]) -> f64 {
-        let mut sum = 0.0;
-        for (i, feature) in features.iter().enumerate().take(NUM_FEATURES) {
-            sum += self.weights[i] * feature;
+        let sum = self
+            .weights
+            .iter()
+            .zip(features)
+            .map(|(weight, feature)| weight * feature)
+            .sum::<f64>();
+
+        if sum < 0.0 {
+            log::debug!("battery model is predicting a negative power rate: {sum}")
         }
-        sum.max(0.0) // drain rate cannot be negative
+
+        sum
     }
 
     /// Get the number of samples seen.
