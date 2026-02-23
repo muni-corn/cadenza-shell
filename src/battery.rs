@@ -14,7 +14,5 @@ pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new()
 pub struct BatteryState {
     pub percentage: f32,
     pub charging: bool,
-    pub time_remaining: Duration, // kernel/sysfs estimate (kept for reference)
-    pub smart_time_remaining: Duration, // ml-enhanced estimate
-    pub confidence: f32,          // 0.0-1.0, prediction confidence
+    pub time_remaining: Duration,
 }

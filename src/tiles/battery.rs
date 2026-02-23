@@ -17,9 +17,7 @@ pub struct BatteryTile {
 
     current_percentage: f32,
     charging: bool,
-    time_remaining: Duration,       // kernel estimate (for reference)
-    smart_time_remaining: Duration, // ml-enhanced estimate
-    confidence: f32,                // 0.0-1.0
+    time_remaining: Duration,
 }
 
 #[derive(Debug)]
