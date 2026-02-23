@@ -67,17 +67,14 @@ pub fn project_features_forward(
     let now = Local::now();
     let future = now + chrono::Duration::seconds(seconds_ahead as i64);
 
-    // fractional hour for the future timestamp
-    let hour_frac =
-        future.hour() as f64 + future.minute() as f64 / 60.0 + future.second() as f64 / 3600.0;
+    let (hour_of_day, day_of_week) = get_time_values(future);
 
     // features 0-1: daily cycle
-    let hour_rad = 2.0 * std::f64::consts::PI * hour_frac / 24.0;
+    let hour_rad = 2.0 * std::f64::consts::PI * hour_of_day / 24.0;
     projected[0] = hour_rad.sin();
     projected[1] = hour_rad.cos();
 
     // features 2-3: weekly cycle
-    let day_of_week = future.weekday().num_days_from_monday() as f64;
     let dow_rad = 2.0 * std::f64::consts::PI * day_of_week / 7.0;
     projected[2] = dow_rad.sin();
     projected[3] = dow_rad.cos();
