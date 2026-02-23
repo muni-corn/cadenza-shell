@@ -164,14 +164,9 @@ impl RlsModel {
         sum
     }
 
-    /// Get the number of samples seen.
-    pub fn sample_count(&self) -> u32 {
+    /// Get the total number of samples seen.
+    pub fn total_sample_count(&self) -> u32 {
         self.sample_count.iter().sum::<u32>()
-    }
-
-    /// Check if the model has enough data to be reliable.
-    pub fn is_trained(&self) -> bool {
-        self.sample_count() >= 20 // require at least 20 samples
     }
 
     /// Provides the confidence level of the model from 0.0-1.0.
@@ -239,7 +234,7 @@ mod tests {
             prediction,
             target
         );
-        assert!(model.is_trained());
+        assert_eq!(model.total_sample_count(), 50);
     }
 
     #[test]

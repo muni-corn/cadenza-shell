@@ -378,13 +378,14 @@ mod tests {
         for _ in 0..30 {
             predictor.update(&discharging_reading());
         }
-        assert!(predictor.rls_discharge.is_trained());
-        assert!(!predictor.rls_charge.is_trained());
+        assert_eq!(&predictor.rls_discharge.total_sample_count(), 30);
+        assert_ne!(&predictor.rls_charge.total_sample_count(), 30);
 
         for _ in 0..30 {
             predictor.update(&charging_reading());
         }
-        assert!(predictor.rls_charge.is_trained());
+        assert_eq!(&predictor.rls_discharge.total_sample_count(), 30);
+        assert_eq!(&predictor.rls_charge.total_sample_count(), 30);
     }
 
     #[test]
