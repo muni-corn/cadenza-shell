@@ -2,9 +2,9 @@ use chrono::{Datelike, Local, Timelike};
 
 use super::sysfs::SysfsReading;
 
-pub const NUM_FEATURES: usize = 7;
+pub const NUM_FEATURES: usize = 5;
 
-/// Extract 7 features from battery state for RLS model.
+/// Extract 5 features from battery state for RLS model.
 ///
 /// Power draw is intentionally excluded -- it is the prediction target, not
 /// an input. Charging state is excluded because separate models are used for
@@ -15,9 +15,7 @@ pub const NUM_FEATURES: usize = 7;
 ///  1. hour_cos       -- fractional-hour daily cycle: cos(2π * hour_frac / 24)
 ///  2. day_sin        -- weekly cycle: sin(2π * day / 7)
 ///  3. day_cos        -- weekly cycle: cos(2π * day / 7)
-///  4. week_hour_sin  -- 168-hour cycle: sin(2π * hour_of_week / 168)
-///  5. week_hour_cos  -- 168-hour cycle: cos(2π * hour_of_week / 168)
-///  6. percentage     -- charge_now / charge_full
+///  4. percentage     -- charge_now / charge_full
 pub fn extract_features(reading: &SysfsReading) -> Option<[f64; NUM_FEATURES]> {
     let now = Local::now();
 
@@ -35,25 +33,10 @@ pub fn extract_features(reading: &SysfsReading) -> Option<[f64; NUM_FEATURES]> {
     let day_sin = dow_rad.sin();
     let day_cos = dow_rad.cos();
 
-    // features 4-5: hour-of-week cycle (168 hours per week)
-    // this distinguishes e.g. Monday 9am from Saturday 9am
-    let hour_of_week = day_of_week * 24.0 + hour_frac;
-    let how_rad = 2.0 * std::f64::consts::PI * hour_of_week / (24.0 * 7.0);
-    let week_hour_sin = how_rad.sin();
-    let week_hour_cos = how_rad.cos();
-
-    // features 6-8: percentage and polynomial expansions
+    // features 4: percentage
     let percentage = reading.percentage()?;
 
-    Some([
-        hour_sin,
-        hour_cos,
-        day_sin,
-        day_cos,
-        week_hour_sin,
-        week_hour_cos,
-        percentage,
-    ])
+    Some([hour_sin, hour_cos, day_sin, day_cos, percentage])
 }
 
 /// Project features forward in time for forward integration.
@@ -91,15 +74,9 @@ pub fn project_features_forward(
     projected[2] = dow_rad.sin();
     projected[3] = dow_rad.cos();
 
-    // features 4-5: hour-of-week cycle
-    let hour_of_week = day_of_week * 24.0 + hour_frac;
-    let how_rad = 2.0 * std::f64::consts::PI * hour_of_week / 168.0;
-    projected[4] = how_rad.sin();
-    projected[5] = how_rad.cos();
-
-    // features 6-8: percentage polynomial (updated by caller's energy accounting)
+    // features 4: percentage polynomial (updated by caller's energy accounting)
     let pct = new_percentage.clamp(0.0, 1.0);
-    projected[6] = pct;
+    projected[4] = pct;
 
     projected
 }
@@ -135,12 +112,6 @@ mod tests {
 
         let day_sq = features[2].powi(2) + features[3].powi(2);
         assert!((day_sq - 1.0).abs() < 1e-9, "day cycle off unit circle");
-
-        let how_sq = features[4].powi(2) + features[5].powi(2);
-        assert!(
-            (how_sq - 1.0).abs() < 1e-9,
-            "week_hour cycle off unit circle"
-        );
     }
 
     #[test]
@@ -155,8 +126,7 @@ mod tests {
             || projected[1] != current[1]
             || projected[2] != current[2]
             || projected[3] != current[3]
-            || projected[4] != current[4]
-            || projected[5] != current[5];
+            || projected[4] != current[4];
         assert!(time_changed, "no time features changed after 6h projection");
     }
 
@@ -165,7 +135,7 @@ mod tests {
         let current = extract_features(&make_reading()).unwrap();
         let projected = project_features_forward(&current, 3600, 0.35);
 
-        assert!((projected[6] - 0.35).abs() < 1e-9);
+        assert!((projected[4] - 0.35).abs() < 1e-9);
     }
 
     #[test]
@@ -178,9 +148,6 @@ mod tests {
 
         let day_sq = projected[2].powi(2) + projected[3].powi(2);
         assert!((day_sq - 1.0).abs() < 1e-9);
-
-        let how_sq = projected[4].powi(2) + projected[5].powi(2);
-        assert!((how_sq - 1.0).abs() < 1e-9);
     }
 
     #[test]

@@ -3,7 +3,7 @@ use crate::battery::features::NUM_FEATURES;
 /// Recursive Least Squares (RLS) model for battery drain prediction.
 ///
 /// Uses exponentially-weighted forgetting factor to adapt to changing
-/// conditions. Predicts battery drain rate (watts) from 9 features.
+/// conditions. Predicts battery drain rate (watts) from 5 features.
 #[derive(Debug, Clone)]
 pub struct RlsModel {
     /// Weight vector.
@@ -20,7 +20,7 @@ pub struct RlsModel {
 }
 
 impl RlsModel {
-    /// Create a new RLS model with 9 features.
+    /// Create a new RLS model.
     ///
     /// # Parameters
     /// - `lambda`: forgetting factor (0.95-0.995). lower = faster adaptation to
@@ -178,7 +178,7 @@ mod tests {
         let mut model = RlsModel::new(0.95, 10.0);
 
         // simulate constant 10W drain with constant features (7-feature vector)
-        let features = [1.0, 0.5, 0.3, 0.8, 0.2, 0.1, 0.4];
+        let features: [f64; NUM_FEATURES] = [1.0, 0.5, 0.3, 0.8, 0.2];
         let target = 10.0;
 
         // train for 50 iterations
@@ -201,7 +201,7 @@ mod tests {
     fn test_rls_adapts_to_change() {
         let mut model = RlsModel::new(0.90, 10.0); // faster adaptation
 
-        let features = [1.0, 0.5, 0.3, 0.8, 0.2, 0.1, 0.4];
+        let features: [f64; NUM_FEATURES] = [1.0, 0.5, 0.3, 0.8, 0.2];
 
         // train on 8W for 30 samples
         for _ in 0..30 {
@@ -228,10 +228,10 @@ mod tests {
     fn test_rls_multiple_feature_patterns() {
         let mut model = RlsModel::new(0.98, 5.0);
 
-        // pattern 1: high power usage (7-feature vector)
-        let features_high = [1.0, 1.0, 0.9, 0.8, 0.7, 0.6, 0.4];
+        // pattern 1: high power usage
+        let features_high: [f64; NUM_FEATURES] = [1.0, 1.0, 0.9, 0.8, 0.7];
         // pattern 2: low power usage
-        let features_low = [0.1, 0.2, 0.1, 0.3, 0.2, 0.1, 0.1];
+        let features_low: [f64; NUM_FEATURES] = [0.1, 0.2, 0.1, 0.3, 0.2];
 
         // train on both patterns
         for _ in 0..25 {

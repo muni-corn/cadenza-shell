@@ -98,7 +98,7 @@ impl BatteryPredictor {
     pub fn predict_time_remaining(&self, reading: &SysfsReading) -> Option<(Duration, f32)> {
         let features = extract_features(reading)?;
 
-        let percentage = features[6];
+        let percentage = features[4];
 
         match reading.status {
             ChargingStatus::Charging => self.predict_time_to_full(reading, &features),
@@ -118,7 +118,7 @@ impl BatteryPredictor {
         reading: &SysfsReading,
         features: &[f64; NUM_FEATURES],
     ) -> Option<(Duration, f32)> {
-        let percentage = features[6];
+        let percentage = features[4];
         let capacity_wh = self.estimate_capacity_wh(reading);
         let remaining_wh = capacity_wh * percentage;
 
@@ -152,7 +152,7 @@ impl BatteryPredictor {
         reading: &SysfsReading,
         features: &[f64; NUM_FEATURES],
     ) -> Option<(Duration, f32)> {
-        let percentage = features[6];
+        let percentage = features[4];
         let capacity_wh = self.estimate_capacity_wh(reading);
         let remaining_wh = capacity_wh * percentage;
         let energy_to_full = capacity_wh - remaining_wh;
