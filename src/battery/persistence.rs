@@ -17,7 +17,7 @@ struct RlsState {
     weights: Vec<f64>,
     p_matrix: Vec<f64>,
     lambda: f64,
-    sample_count: u32,
+    sample_count: Vec<u32>,
 }
 
 impl RlsState {
@@ -26,7 +26,7 @@ impl RlsState {
             weights: model.weights.clone(),
             p_matrix: model.p_matrix.clone(),
             lambda: model.lambda,
-            sample_count: model.sample_count,
+            sample_count: model.sample_count.clone(),
         }
     }
 
@@ -55,7 +55,7 @@ impl RlsState {
             weights: self.weights.clone(),
             p_matrix: self.p_matrix.clone(),
             lambda: self.lambda,
-            sample_count: self.sample_count,
+            sample_count: self.sample_count.clone(),
         })
     }
 }

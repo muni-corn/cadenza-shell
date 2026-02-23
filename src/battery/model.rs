@@ -1,4 +1,8 @@
-use crate::battery::features::NUM_FEATURES;
+use chrono::Local;
+
+use crate::battery::features::{NUM_FEATURES, get_time_values};
+
+pub const QUARTER_HOURS_IN_A_WEEK: usize = 24 * 7 * 4;
 
 /// Recursive Least Squares (RLS) model for battery drain prediction.
 ///
@@ -15,8 +19,8 @@ pub struct RlsModel {
     /// Forgetting factor (0.95-0.995). Lower = faster adaptation.
     pub(super) lambda: f64,
 
-    /// Number of samples seen.
-    pub(super) sample_count: u32,
+    /// Number of samples seen by quarter-hour of week.
+    pub(super) sample_count: Vec<u32>,
 }
 
 impl RlsModel {
@@ -41,7 +45,7 @@ impl RlsModel {
             weights,
             p_matrix,
             lambda,
-            sample_count: 0,
+            sample_count: vec![0; QUARTER_HOURS_IN_A_WEEK],
         }
     }
 
@@ -102,7 +106,10 @@ impl RlsModel {
         // 2. if trace exceeds threshold, scale down proportionally
         self.condition_p_matrix();
 
-        self.sample_count += 1;
+        let (_, day_of_week) = get_time_values(Local::now());
+        let hour_of_week = day_of_week * 24.0;
+        let quarter_hour_of_week = (hour_of_week * 4.0).floor() as usize;
+        self.sample_count[quarter_hour_of_week] += 1;
     }
 
     /// Enforce P-matrix symmetry and bound its trace.
@@ -152,12 +159,12 @@ impl RlsModel {
 
     /// Get the number of samples seen.
     pub fn sample_count(&self) -> u32 {
-        self.sample_count
+        self.sample_count.iter().sum::<u32>()
     }
 
     /// Check if the model has enough data to be reliable.
     pub fn is_trained(&self) -> bool {
-        self.sample_count >= 20 // require at least 20 samples
+        self.sample_count() >= 20 // require at least 20 samples
     }
 }
 
