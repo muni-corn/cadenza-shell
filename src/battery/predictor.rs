@@ -68,10 +68,10 @@ impl BatteryPredictor {
         }
 
         // return early if there is no power reading
-        let Some(power) = reading.power_watts() else {
-            log::warn!("couldn't get current power usage");
-            return;
-        };
+        let power_now = reading.power_watts();
+
+        log::info!("updating battery predictor now");
+        log::debug!("reading: {reading:?}");
 
         // select the EWMA accumulator for the current charging state
         // return early if the battery is not charging or discharging

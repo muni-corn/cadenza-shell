@@ -50,14 +50,13 @@ pub struct SysfsReading {
 
 impl SysfsReading {
     /// Calculate current power draw in watts.
-    /// Returns None if voltage_now or current_now are unavailable.
-    pub fn power_watts(&self) -> Option<f64> {
+    pub fn power_watts(&self) -> f64 {
         let voltage = self.voltage_now;
         let current = self.current_now.unsigned_abs();
 
         // convert µV × µA = pW (picowatts), then to watts
         let power_picowatts = voltage as f64 * current as f64;
-        Some(power_picowatts / 1_000_000_000_000.0)
+        power_picowatts / 1_000_000_000_000.0
     }
 
     /// Calculate precise percentage remaining.
@@ -170,7 +169,7 @@ mod tests {
         };
 
         // 12V × 1.5A = 18W
-        let power = reading.power_watts().unwrap();
+        let power = reading.power_watts();
         assert!((power - 18.0).abs() < 0.01);
     }
 
