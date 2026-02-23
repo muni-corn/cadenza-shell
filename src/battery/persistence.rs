@@ -20,8 +20,8 @@ struct RlsState {
     sample_count: Vec<u32>,
 }
 
-impl RlsState {
-    fn from_model(model: &RlsModel) -> Self {
+impl From<&RlsModel> for RlsState {
+    fn from(model: &RlsModel) -> Self {
         Self {
             weights: model.weights,
             p_matrix: model.p_matrix.clone(),
@@ -29,8 +29,10 @@ impl RlsState {
             sample_count: model.sample_count.clone(),
         }
     }
+}
 
-    fn to_model(&self) -> Option<RlsModel> {
+impl RlsState {
+    fn as_model(&self) -> Option<RlsModel> {
         if self.weights.len() != NUM_FEATURES {
             log::warn!(
                 "invalid rls weights length: expected {NUM_FEATURES}, got {}",
@@ -76,8 +78,8 @@ impl PredictorState {
     fn from_predictor(predictor: &BatteryPredictor) -> Self {
         Self {
             version: STATE_VERSION,
-            rls_discharge: RlsState::from_model(&predictor.rls_discharge),
-            rls_charge: RlsState::from_model(&predictor.rls_charge),
+            rls_discharge: RlsState::from(&predictor.rls_discharge),
+            rls_charge: RlsState::from(&predictor.rls_charge),
             ewma_power_discharge: predictor.ewma_power_discharge,
             ewma_power_charge: predictor.ewma_power_charge,
             ewma_voltage: predictor.ewma_voltage,
@@ -94,8 +96,8 @@ impl PredictorState {
             return None;
         }
 
-        let rls_discharge = self.rls_discharge.to_model()?;
-        let rls_charge = self.rls_charge.to_model()?;
+        let rls_discharge = self.rls_discharge.as_model()?;
+        let rls_charge = self.rls_charge.as_model()?;
 
         Some(BatteryPredictor {
             rls_discharge,
