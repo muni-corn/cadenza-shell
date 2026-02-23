@@ -14,7 +14,7 @@ const STATE_VERSION: u32 = 0;
 /// Serializable state for a single RLS model.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct RlsState {
-    weights: Vec<f64>,
+    weights: [f64; NUM_FEATURES],
     p_matrix: Vec<f64>,
     lambda: f64,
     sample_count: Vec<u32>,
@@ -23,7 +23,7 @@ struct RlsState {
 impl RlsState {
     fn from_model(model: &RlsModel) -> Self {
         Self {
-            weights: model.weights.clone(),
+            weights: model.weights,
             p_matrix: model.p_matrix.clone(),
             lambda: model.lambda,
             sample_count: model.sample_count.clone(),
@@ -52,7 +52,7 @@ impl RlsState {
         }
 
         Some(RlsModel {
-            weights: self.weights.clone(),
+            weights: self.weights,
             p_matrix: self.p_matrix.clone(),
             lambda: self.lambda,
             sample_count: self.sample_count.clone(),

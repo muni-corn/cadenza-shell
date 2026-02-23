@@ -11,7 +11,7 @@ pub const QUARTER_HOURS_IN_A_WEEK: usize = 24 * 7 * 4;
 #[derive(Debug, Clone)]
 pub struct RlsModel {
     /// Weight vector.
-    pub(super) weights: Vec<f64>,
+    pub(super) weights: [f64; NUM_FEATURES],
 
     /// Inverse covariance matrix (stored as flattened row-major).
     pub(super) p_matrix: Vec<f64>,
@@ -33,7 +33,7 @@ impl RlsModel {
     ///   initial learning.
     pub fn new(lambda: f64, initial_variance: f64) -> Self {
         // initialize weights to zero
-        let weights = vec![0.0; NUM_FEATURES];
+        let weights = [0.0; NUM_FEATURES];
 
         // initialize P matrix as identity × initial_variance
         let mut p_matrix = vec![0.0; NUM_FEATURES * NUM_FEATURES];
