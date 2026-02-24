@@ -132,7 +132,7 @@ impl BatteryPredictor {
         };
 
         if let Some((_, confidence)) = result {
-            log::info!("prediction made with {confidence} confidence");
+            log::info!("prediction made with {:.3}% confidence", confidence * 100.);
         }
 
         result
