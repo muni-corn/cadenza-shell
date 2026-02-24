@@ -266,6 +266,7 @@ impl BatteryPredictor {
                     };
                     let final_seconds =
                         total_seconds - TIME_STEP + (TIME_STEP as f64 * fraction) as u64;
+                    let final_duration = Duration::from_secs(final_seconds);
                     let confidence = rls.confidence();
 
                     // warn about the number of negative predictions made
@@ -274,11 +275,13 @@ impl BatteryPredictor {
                     }
 
                     log::info!(
-                        "rls model predicted {:.2} hours remaining",
-                        final_seconds as f32 / 3600.
+                        "rls model predicted {} hours and {} minutes remaining ({})",
+                        final_seconds / 3600,
+                        (final_seconds / 60) % 60,
+                        (Local::now() + final_duration).format("%v %r")
                     );
 
-                    return (Duration::from_secs(final_seconds), confidence);
+                    return (final_duration, confidence);
                 }
             } else {
                 energy_remaining -= energy_delta;
@@ -292,6 +295,7 @@ impl BatteryPredictor {
                     };
                     let final_seconds =
                         total_seconds - TIME_STEP + (TIME_STEP as f64 * fraction) as u64;
+                    let final_duration = Duration::from_secs(final_seconds);
                     let confidence = rls.confidence();
 
                     // warn about the number of negative predictions made
@@ -300,11 +304,13 @@ impl BatteryPredictor {
                     }
 
                     log::info!(
-                        "rls model predicted {:.2} hours remaining",
-                        final_seconds as f32 / 3600.
+                        "rls model predicted {} hours and {} minutes remaining ({})",
+                        final_seconds / 3600,
+                        (final_seconds / 60) % 60,
+                        (Local::now() + final_duration).format("%v %r")
                     );
 
-                    return (Duration::from_secs(final_seconds), confidence);
+                    return (final_duration, confidence);
                 }
             }
         }
