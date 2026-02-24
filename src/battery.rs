@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use relm4::SharedState;
-
+mod history;
 mod sysfs;
 mod watcher;
 
