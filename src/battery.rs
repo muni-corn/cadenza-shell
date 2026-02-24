@@ -3,6 +3,7 @@ use std::time::Duration;
 use relm4::SharedState;
 
 mod features;
+mod history;
 mod model;
 mod persistence;
 mod predictor;
