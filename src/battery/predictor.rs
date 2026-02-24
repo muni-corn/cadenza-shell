@@ -273,6 +273,11 @@ impl BatteryPredictor {
                         log::warn!("rls model made {negative_predictions} negative predictions");
                     }
 
+                    log::info!(
+                        "rls model predicted {:.2} hours remaining",
+                        final_seconds as f32 / 3600.
+                    );
+
                     return (Duration::from_secs(final_seconds), confidence);
                 }
             } else {
@@ -293,6 +298,11 @@ impl BatteryPredictor {
                     if negative_predictions > 0 {
                         log::warn!("rls model made {negative_predictions} negative predictions");
                     }
+
+                    log::info!(
+                        "rls model predicted {:.2} hours remaining",
+                        final_seconds as f32 / 3600.
+                    );
 
                     return (Duration::from_secs(final_seconds), confidence);
                 }
