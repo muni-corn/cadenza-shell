@@ -12,14 +12,14 @@ use super::sysfs::ChargingStatus;
 use crate::battery::sysfs::SysfsReading;
 
 /// Records 15-minute time slots.
-pub const TIME_SLOTS_PER_HOUR: u32 = 4;
+const TIME_SLOTS_PER_HOUR: u32 = 4;
 
-pub const TIME_SLOTS_PER_DAY: u32 = TIME_SLOTS_PER_HOUR * 24;
-pub const TIME_SLOTS_PER_WEEK: u32 = TIME_SLOTS_PER_DAY * 7;
-pub const MINUTES_PER_TIME_SLOT: u32 = 60 / TIME_SLOTS_PER_HOUR;
+const TIME_SLOTS_PER_DAY: u32 = TIME_SLOTS_PER_HOUR * 24;
+const TIME_SLOTS_PER_WEEK: u32 = TIME_SLOTS_PER_DAY * 7;
+const MINUTES_PER_TIME_SLOT: u32 = 60 / TIME_SLOTS_PER_HOUR;
 
 /// Determines how much new power readings affect historial averages.
-pub const LEARNING_RATE: f64 = 0.1;
+const LEARNING_RATE: f64 = 0.1;
 
 #[derive(Deserialize, Serialize)]
 pub struct HistoricalPowerUsage {
