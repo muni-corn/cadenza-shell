@@ -64,6 +64,7 @@ impl HistoricalPowerUsage {
     pub fn update(&mut self, reading: &SysfsReading) {
         let power_now = reading.power_watts();
 
+        self.all_readings.push(reading.clone());
         match reading.status {
             ChargingStatus::Charging => {
                 if let Some(percentage_now) = reading.percentage() {
