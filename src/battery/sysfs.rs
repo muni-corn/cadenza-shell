@@ -3,11 +3,17 @@ use std::{
     path::{Path, PathBuf},
 };
 
+use chrono::{DateTime, Local};
+use serde::{Deserialize, Serialize};
+
 use crate::battery::{BatteryCapacity, ChargingStatus};
 
 /// Raw reading from sysfs battery interface.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SysfsReading {
+    /// The time of the reading.
+    pub when: DateTime<Local>,
+
     /// Current voltage in microvolts (µV).
     pub voltage_now: u64,
 
@@ -90,6 +96,7 @@ pub fn read_battery_sysfs(battery_path: &Path) -> Option<SysfsReading> {
     let status = read_charging_status(battery_path);
 
     Some(SysfsReading {
+        when: Local::now(),
         voltage_now,
         current_now,
         status,
@@ -161,9 +168,10 @@ mod tests {
     #[test]
     fn test_power_calculation() {
         let reading = SysfsReading {
-            current_now: 1_500_000,                                      // 1.5 A
-            voltage_now: 12_000_000,                                     // 12 V
-            capacity_now: BatteryCapacity::MicroAmpereHours(5_000_000),  // 5 Ah
+            when: Local::now(),
+            current_now: 1_500_000,  // 1.5 A
+            voltage_now: 12_000_000, // 12 V
+            capacity_now: BatteryCapacity::MicroAmpereHours(5_000_000), // 5 Ah
             capacity_full: BatteryCapacity::MicroAmpereHours(6_000_000), // 6 Ah
             status: ChargingStatus::Discharging,
         };
@@ -176,6 +184,7 @@ mod tests {
     #[test]
     fn test_percentage() {
         let reading = SysfsReading {
+            when: Local::now(),
             current_now: 1_000_000,
             voltage_now: 1_000_000,
             capacity_now: BatteryCapacity::MicroAmpereHours(3_250_000), // 3.25 Ah
