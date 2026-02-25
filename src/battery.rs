@@ -7,6 +7,7 @@ mod sysfs;
 mod udev;
 mod watcher;
 
+use serde::{Deserialize, Serialize};
 pub use watcher::start_battery_service;
 
 pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
@@ -18,7 +19,7 @@ pub struct BatteryState {
     pub time_remaining: Duration,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
 pub enum BatteryCapacity {
     /// µAh
     MicroAmpereHours(u64),
