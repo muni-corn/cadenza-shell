@@ -4,7 +4,7 @@
 use std::{fs, path::PathBuf};
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Datelike, Local, Timelike};
+use chrono::{DateTime, Datelike, Local, TimeDelta, Timelike};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
@@ -34,6 +34,10 @@ pub struct HistoricalPowerUsage {
     /// The value of the slope that determines how much power will be drawn
     /// based on percentage while charging.
     charging_coefficient: f64,
+
+    /// The last time history was persisted to disk.
+    #[serde(skip)]
+    last_save: DateTime<Local>,
 }
 
 impl HistoricalPowerUsage {
@@ -56,9 +60,14 @@ impl HistoricalPowerUsage {
             _ => return,
         }
 
-        if let Err(e) = self.save_to_disk() {
+        // save state if 5 minutes or more have passed
+        let now = Local::now();
+        if now.signed_duration_since(self.last_save) >= TimeDelta::minutes(5)
+            && let Err(e) = self.save_to_disk()
+        {
             log::error!("{e}");
         }
+        self.last_save = now;
     }
 
     fn update_discharging(&mut self, power_now: f64) {
