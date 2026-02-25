@@ -9,7 +9,7 @@ use crate::battery::{history::HistoricalPowerUsage, sysfs::read_battery_sysfs};
 /// Maximum time between battery information and status fetches.
 const MAX_BATTERY_POLL_TIME: Duration = Duration::from_secs(30);
 
-pub async fn start_battery_watcher() {
+pub async fn start_battery_service() {
     // detect battery interface
     let Some(battery_interface) = detect_battery_interface() else {
         log::error!("couldn't detect battery interface");

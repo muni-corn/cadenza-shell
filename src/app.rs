@@ -6,7 +6,7 @@ use relm4::prelude::*;
 use tokio::sync::Mutex;
 
 use crate::{
-    battery::start_battery_watcher,
+    battery::start_battery_service,
     bluetooth::run_bluetooth_service,
     brightness::start_brightness_watcher,
     mpris::run_mpris_service,
@@ -66,7 +66,7 @@ impl AsyncComponent for CadenzaShellModel {
         // start battery watching
         sender.command(|_, shutdown| {
             shutdown
-                .register(start_battery_watcher())
+                .register(start_battery_service())
                 .drop_on_shutdown()
         });
 
