@@ -4,7 +4,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    battery::{BATTERY_STATE, BatteryState},
+    battery::{BATTERY_STATE, BatteryState, ChargingStatus},
     icon_names::{BATTERY_CHARGE_REGULAR, BATTERY_CHECKMARK_REGULAR},
     tiles::Attention,
     utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
@@ -53,7 +53,7 @@ impl SimpleComponent for BatteryTile {
             available: true,
 
             current_percentage: s.percentage,
-            charging: s.charging,
+            charging: s.status == ChargingStatus::Charging,
             time_remaining: s.time_remaining,
         });
 
@@ -81,12 +81,12 @@ impl SimpleComponent for BatteryTile {
     fn update(&mut self, BatteryMsg::StateUpdate(o): Self::Input, _sender: ComponentSender<Self>) {
         if let Some(BatteryState {
             percentage,
-            charging,
+            status,
             time_remaining,
         }) = o
         {
             self.current_percentage = percentage;
-            self.charging = charging;
+            self.charging = status == ChargingStatus::Charging;
             self.time_remaining = time_remaining;
             self.available = true;
         } else {
