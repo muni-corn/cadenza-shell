@@ -5,9 +5,9 @@ use chrono::{DateTime, Local};
 use super::{
     features::{extract_features, project_features_forward},
     model::RlsModel,
-    sysfs::{BatteryCapacity, ChargingStatus, SysfsReading},
+    sysfs::SysfsReading,
 };
-use crate::battery::features::NUM_FEATURES;
+use crate::battery::{BatteryCapacity, ChargingStatus, features::NUM_FEATURES};
 
 const EWMA_ALPHA: f64 = 0.3;
 
@@ -355,7 +355,6 @@ impl Default for BatteryPredictor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battery::sysfs::ChargingStatus;
 
     fn discharging_reading() -> SysfsReading {
         SysfsReading {

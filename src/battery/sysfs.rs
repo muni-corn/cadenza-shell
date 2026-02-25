@@ -1,32 +1,6 @@
 use std::{fs, path::Path};
 
-#[derive(Clone, Copy, Debug)]
-pub enum BatteryCapacity {
-    /// µAh
-    MicroAmpereHours(u64),
-
-    /// µWh
-    MicroWattHours(u64),
-}
-
-impl BatteryCapacity {
-    pub fn div(self, rhs: Self) -> Option<f64> {
-        match (self, rhs) {
-            (Self::MicroAmpereHours(l), Self::MicroAmpereHours(r))
-            | (Self::MicroWattHours(l), Self::MicroWattHours(r)) => Some(l as f64 / r as f64),
-            _ => None,
-        }
-    }
-}
-
-/// Charging status of the battery.
-#[derive(Debug, Copy, Clone, PartialEq, Eq)]
-pub enum ChargingStatus {
-    Charging,
-    Discharging,
-    Full,
-    NotCharging,
-}
+use crate::battery::{BatteryCapacity, ChargingStatus};
 
 /// Raw reading from sysfs battery interface.
 #[derive(Debug, Clone)]

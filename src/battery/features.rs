@@ -89,7 +89,7 @@ pub fn project_features_forward(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::battery::sysfs::{BatteryCapacity, ChargingStatus};
+    use crate::battery::{BatteryCapacity, ChargingStatus};
 
     fn make_reading() -> SysfsReading {
         SysfsReading {
