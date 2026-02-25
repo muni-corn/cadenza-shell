@@ -1,16 +1,17 @@
 use std::{path::Path, sync::mpsc, time::Duration};
 
 use chrono::Local;
-use notify::{RecursiveMode, Watcher};
+use tokio::io::unix::AsyncFd;
 
 use super::{BATTERY_STATE, BatteryState};
 use crate::battery::{
     history::HistoricalPowerUsage,
     sysfs::{detect_battery_path, read_battery_sysfs},
+    udev::{create_battery_monitor, is_battery_change},
 };
 
-/// Maximum time between battery information and status fetches.
-const MAX_BATTERY_POLL_TIME: Duration = Duration::from_secs(30);
+/// Interval between periodic battery stat polls.
+const BATTERY_POLL_INTERVAL: Duration = Duration::from_secs(10);
 
 pub async fn start_battery_service() {
     // detect battery sysfs path
@@ -46,78 +47,75 @@ pub async fn start_battery_service() {
         time_remaining,
     });
 
-    let (tx, rx) = mpsc::channel();
-
-    // watch only the status file for instant updates
-    let mut watcher = match notify::recommended_watcher(tx) {
-        Ok(watcher) => watcher,
+    // set up udev monitor for immediate status change events
+    let monitor = match create_battery_monitor() {
+        Ok(m) => m,
         Err(e) => {
-            log::error!("couldn't create battery watcher: {}", e);
+            log::error!("couldn't create udev battery monitor: {}", e);
             return;
         }
     };
 
-    // watch status file for charging state changes
-    let status_path = battery_path.join("status");
+    let async_fd = match AsyncFd::new(monitor) {
+        Ok(fd) => fd,
+        Err(e) => {
+            log::error!("couldn't wrap udev monitor in AsyncFd: {}", e);
+            return;
+        }
+    };
 
-    if let Err(e) = watcher.watch(Path::new(&status_path), RecursiveMode::NonRecursive) {
-        log::error!(
-            "couldn't set up watcher for {}: {}",
-            status_path.to_string_lossy(),
-            e
-        );
-        return;
-    }
+    watch_battery(&battery_path, async_fd, &mut power_history).await;
+}
 
-    let mut has_watcher = true;
+async fn watch_battery(
+    battery_path: &Path,
+    async_fd: AsyncFd<udev::MonitorSocket>,
+    power_history: &mut HistoricalPowerUsage,
+) -> Option<!> {
+    let mut poll_interval = tokio::time::interval(BATTERY_POLL_INTERVAL);
+
+    // skip the first tick, which fires immediately
+    poll_interval.tick().await;
 
     loop {
-        if has_watcher {
-            // additional reads of sysfs may have occurred during last iteration, so drain
-            // events before waiting again
-            while rx.try_recv().is_ok() {}
+        tokio::select! {
+            guard = async_fd.readable() => {
+                let mut guard = guard.ok()?;
 
-            // now wait for a file change event or poll timeout
-            match rx.recv_timeout(MAX_BATTERY_POLL_TIME) {
-                Ok(Err(e)) => {
-                    // i'm not sure what this case is supposed to handle
-                    log::error!("{e}");
+                // drain all pending events from the monitor
+                for event in guard.get_inner().iter() {
+                    if is_battery_change(&event) {
+                        log::debug!("udev battery change event received");
+                        update_battery_state(battery_path, power_history);
+                    }
+                }
 
-                    // so we won't react to this errant event; continue instead
-                    continue;
-                }
-                Err(mpsc::RecvTimeoutError::Timeout) => {
-                    // normal poll interval elapsed, proceed with update
-                    log::debug!(
-                        "no battery event received for {MAX_BATTERY_POLL_TIME:?}, fetching battery info now"
-                    );
-                }
-                Err(mpsc::RecvTimeoutError::Disconnected) => {
-                    // no longer sending or receiving events
-                    log::error!("battery status watcher has died");
-                    has_watcher = false;
-                }
-                _ => (),
+                // clear readiness so we wait for the next edge
+                guard.clear_ready();
             }
-        } else {
-            // just poll without a watcher
-            tokio::time::sleep(MAX_BATTERY_POLL_TIME).await;
+
+            _ = poll_interval.tick() => {
+                log::debug!("battery poll interval elapsed, fetching battery info");
+                update_battery_state(battery_path, power_history);
+            }
         }
-
-        let Some(reading) = read_battery_sysfs(&battery_path) else {
-            return;
-        };
-
-        // update historical readings with new reading
-        power_history.update(&reading);
-
-        // get new time_remaining estimate
-        let time_remaining = power_history.predict_time_remaining(&reading, Local::now());
-
-        *BATTERY_STATE.write() = Some(BatteryState {
-            percentage: reading.percentage().unwrap_or_default() as f32,
-            status: reading.status,
-            time_remaining,
-        });
     }
+}
+
+/// Read the latest battery stats from sysfs and update [`BATTERY_STATE`].
+fn update_battery_state(battery_path: &Path, power_history: &mut HistoricalPowerUsage) {
+    let Some(reading) = read_battery_sysfs(battery_path) else {
+        log::warn!("couldn't read battery sysfs");
+        return;
+    };
+
+    power_history.update(&reading);
+
+    let time_remaining = power_history.predict_time_remaining(&reading, Local::now());
+
+    *BATTERY_STATE.write() = Some(BatteryState {
+        percentage: reading.percentage().unwrap_or_default() as f32,
+        status: reading.status,
+        time_remaining,
+    });
 }
