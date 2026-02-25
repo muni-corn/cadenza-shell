@@ -83,7 +83,7 @@ impl HistoricalPowerUsage {
         if now.signed_duration_since(self.last_save) >= TimeDelta::minutes(5)
             && let Err(e) = self.save_to_disk()
         {
-            log::error!("{e}");
+            log::error!("couldn't save numbers: {e}");
         }
 
         // save csv files
