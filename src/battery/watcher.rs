@@ -1,10 +1,12 @@
 use std::{fs, path::Path, sync::mpsc, time::Duration};
 
 use anyhow::{Context, Result};
+use chrono::Local;
 use notify::{RecursiveMode, Watcher};
 use systemstat::{Platform, System};
 
 use super::{BATTERY_STATE, BatteryState};
+use crate::battery::{history::HistoricalPowerUsage, sysfs::read_battery_sysfs};
 
 /// Maximum time between battery information and status fetches.
 const MAX_BATTERY_POLL_TIME: Duration = Duration::from_secs(30);
@@ -17,6 +19,18 @@ pub async fn start_battery_watcher() {
     };
 
     let system = System::new();
+
+    // load or create power usage history
+    let mut power_history = match HistoricalPowerUsage::read_from_disk() {
+        Ok(p) => {
+            log::info!("loaded power history from previous session");
+            p
+        }
+        Err(e) => {
+            log::info!("creating new power usage log: {}", e);
+            HistoricalPowerUsage::default()
+        }
+    };
 
     // read initial battery properties. if any fail, we will not consider the
     // service available.
@@ -87,12 +101,29 @@ pub async fn start_battery_watcher() {
         }
 
         match read_battery_state(&system) {
-            Ok((percentage, charging, time_remaining)) => {
-                *BATTERY_STATE.write() = Some(BatteryState {
-                    percentage,
-                    charging,
-                    time_remaining,
-                });
+            Ok((percentage, charging, dumb_time_remaining)) => {
+                // update predictor if sysfs data available
+                if let Some(reading) = read_battery_sysfs() {
+                    power_history.update(&reading);
+
+                    let time_remaining =
+                        power_history.predict_time_remaining(&reading, Local::now());
+        // update historical readings with new reading
+        power_history.update(&reading);
+
+                    *BATTERY_STATE.write() = Some(BatteryState {
+                        percentage,
+                        charging,
+                        time_remaining,
+                    });
+                } else {
+                    // sysfs unavailable, fall back to kernel estimates
+                    *BATTERY_STATE.write() = Some(BatteryState {
+                        percentage,
+                        charging,
+                        time_remaining: dumb_time_remaining,
+                    });
+                }
             }
             Err(e) => {
                 log::error!("couldn't read battery state: {}", e);

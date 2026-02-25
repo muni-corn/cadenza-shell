@@ -1,11 +1,11 @@
 use std::time::Duration;
 
 use relm4::SharedState;
+
 mod history;
 mod sysfs;
 mod watcher;
 
-pub use sysfs::{ChargingStatus, SysfsReading, read_battery_sysfs};
 pub use watcher::start_battery_watcher;
 
 pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
