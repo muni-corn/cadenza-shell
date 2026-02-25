@@ -17,9 +17,7 @@ pub struct BatteryTile {
 
     current_percentage: f32,
     charging: bool,
-    time_remaining: Duration,       // kernel estimate (for reference)
-    smart_time_remaining: Duration, // ml-enhanced estimate
-    confidence: f64,                // 0.0-1.0
+    time_remaining: Duration,
 }
 
 #[derive(Debug)]
@@ -57,8 +55,6 @@ impl SimpleComponent for BatteryTile {
             current_percentage: s.percentage,
             charging: s.charging,
             time_remaining: s.time_remaining,
-            smart_time_remaining: s.smart_time_remaining,
-            confidence: s.confidence,
         });
 
         // hide the entire tile if battery isn't available
@@ -87,15 +83,11 @@ impl SimpleComponent for BatteryTile {
             percentage,
             charging,
             time_remaining,
-            smart_time_remaining,
-            confidence,
         }) = o
         {
             self.current_percentage = percentage;
             self.charging = charging;
             self.time_remaining = time_remaining;
-            self.smart_time_remaining = smart_time_remaining;
-            self.confidence = confidence;
             self.available = true;
         } else {
             self.available = false;
@@ -152,13 +144,13 @@ impl BatteryTile {
     }
 
     fn is_low(&self) -> bool {
-        let time_remaining_secs = self.smart_time_remaining.as_secs();
+        let time_remaining_secs = self.time_remaining.as_secs();
 
         (self.current_percentage <= 0.2 || time_remaining_secs <= 3600) && !self.charging
     }
 
     fn is_critical(&self) -> bool {
-        let time_remaining_secs = self.smart_time_remaining.as_secs();
+        let time_remaining_secs = self.time_remaining.as_secs();
 
         (self.current_percentage <= 0.1 || time_remaining_secs <= 1800) && !self.charging
     }
@@ -169,10 +161,10 @@ impl BatteryTile {
         if self.charging && self.current_percentage > 0.99 {
             "Plugged in".to_string()
         } else {
-            let time_remaining = self.smart_time_remaining.as_secs();
-            let is_tomorrow = self.smart_time_remaining >= Duration::from_hours(24)
-                && self.smart_time_remaining < Duration::from_hours(48);
-            let is_someday = self.smart_time_remaining > Duration::from_hours(48);
+            let time_remaining = self.time_remaining.as_secs();
+            let is_tomorrow = self.time_remaining >= Duration::from_hours(24)
+                && self.time_remaining < Duration::from_hours(48);
+            let is_someday = self.time_remaining > Duration::from_hours(48);
 
             if time_remaining < 30 * 60 {
                 format!("{} min left", time_remaining / 60)
