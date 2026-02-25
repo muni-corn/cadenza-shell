@@ -2,16 +2,10 @@ use std::time::Duration;
 
 use relm4::SharedState;
 
-mod features;
 mod history;
-mod model;
-mod persistence;
-mod predictor;
 mod sysfs;
 mod watcher;
 
-pub use persistence::{load_predictor, save_predictor};
-pub use predictor::BatteryPredictor;
 pub use watcher::start_battery_watcher;
 
 pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
