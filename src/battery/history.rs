@@ -53,7 +53,11 @@ impl HistoricalPowerUsage {
             }
 
             // do nothing otherwise
-            _ => (),
+            _ => return,
+        }
+
+        if let Err(e) = self.save_to_disk() {
+            log::error!("{e}");
         }
     }
 
@@ -149,6 +153,21 @@ impl HistoricalPowerUsage {
         fs::create_dir_all(&cadenza_state)?;
 
         Ok(cadenza_state.join("power_history.json"))
+    }
+
+    fn read_from_disk() -> Result<Self> {
+        let path = Self::get_state_path()?;
+        let json = fs::read_to_string(&path).context("couldn't read power history")?;
+
+        Ok(serde_json::from_str(&json)?)
+    }
+
+    fn save_to_disk(&self) -> Result<()> {
+        let json = serde_json::to_string_pretty(&self)?;
+        let path = Self::get_state_path()?;
+        fs::write(&path, json).context("couldn't write predictor state")?;
+        log::debug!("saved power history state to {:?}", path);
+        Ok(())
     }
 }
 
