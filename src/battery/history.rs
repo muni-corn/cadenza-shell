@@ -40,6 +40,18 @@ pub struct HistoricalPowerUsage {
     last_save: DateTime<Local>,
 }
 
+impl Default for HistoricalPowerUsage {
+    fn default() -> Self {
+        Self {
+            overall_discharging_average: Default::default(),
+            daily_averages: [0.0; TIME_SLOTS_PER_DAY as usize],
+            weekly_averages: [0.0; TIME_SLOTS_PER_WEEK as usize],
+            charging_coefficient: Default::default(),
+            last_save: Local::now(),
+        }
+    }
+}
+
 impl HistoricalPowerUsage {
     /// Updates historical records based on a current reading of the device's
     /// power state.
