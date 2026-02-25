@@ -252,7 +252,7 @@ impl HistoricalPowerUsage {
         Ok(cadenza_state.join("power_history.json"))
     }
 
-    fn read_from_disk() -> Result<Self> {
+    pub fn read_from_disk() -> Result<Self> {
         let path = Self::get_state_path()?;
         let json = fs::read_to_string(&path).context("couldn't read power history")?;
 
