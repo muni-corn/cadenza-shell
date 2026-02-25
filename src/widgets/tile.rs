@@ -115,6 +115,8 @@ impl SimpleComponent for Tile {
 
         let primary_label = gtk::Label::builder()
             .css_classes(vec!["primary", model.attention.css_class()])
+            .ellipsize(gtk::pango::EllipsizeMode::End)
+            .max_width_chars(64)
             .build();
 
         let secondary_label = gtk::Label::builder()
