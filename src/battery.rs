@@ -6,7 +6,7 @@ mod history;
 mod sysfs;
 mod watcher;
 
-pub use watcher::start_battery_watcher;
+pub use watcher::start_battery_service;
 
 pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
 
