@@ -13,7 +13,7 @@ pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new()
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct BatteryState {
     pub percentage: f32,
-    pub charging: bool,
+    pub status: ChargingStatus,
     pub time_remaining: Duration,
 }
 
