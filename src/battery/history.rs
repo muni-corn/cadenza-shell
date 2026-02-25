@@ -24,9 +24,11 @@ const LEARNING_RATE: f64 = 0.1;
 pub struct HistoricalPowerUsage {
     overall_discharging_average: f64,
 
+    /// Average power usage per day, in watts.
     #[serde(with = "BigArray")]
     daily_averages: [f64; TIME_SLOTS_PER_DAY as usize],
 
+    /// Average power usage per week, in watts.
     #[serde(with = "BigArray")]
     weekly_averages: [f64; TIME_SLOTS_PER_WEEK as usize],
 
