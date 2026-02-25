@@ -80,6 +80,7 @@
             pango
             gdk-pixbuf
             libpulseaudio.dev
+            udev.dev
             pipewire
             wireplumber
             networkmanager
