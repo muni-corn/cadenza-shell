@@ -1,4 +1,4 @@
-use std::{path::Path, sync::mpsc, time::Duration};
+use std::{path::Path, time::Duration};
 
 use chrono::Local;
 use tokio::io::unix::AsyncFd;
@@ -80,15 +80,28 @@ async fn watch_battery(
     loop {
         tokio::select! {
             guard = async_fd.readable() => {
-                let mut guard = guard.ok()?;
+                let mut guard = match guard {
+                    Ok(g) => g,
+                    Err(e) => {
+                        log::error!("error acquiring guard: {e}");
+                        continue;
+                    },
+                };
+
+                log::debug!("async_fd ready: {:?}", guard.ready());
 
                 // drain all pending events from the monitor
                 for event in guard.get_inner().iter() {
+                    log::debug!("udev event received: {event:?}");
                     if is_battery_change(&event) {
-                        log::debug!("udev battery change event received");
+                        log::debug!("event is a battery event");
                         update_battery_state(battery_path, power_history);
+                    } else {
+                        log::debug!("event was not a battery event");
                     }
                 }
+
+                log::debug!("reaching end of socket iterator");
 
                 // clear readiness so we wait for the next edge
                 guard.clear_ready();

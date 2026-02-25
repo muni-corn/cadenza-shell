@@ -3,15 +3,25 @@
 //! This module provides helpers for creating a udev monitor on the
 //! `power_supply` subsystem and extracting charging status from events.
 
-use udev::MonitorSocket;
+use udev::{Enumerator, MonitorSocket};
 
 use crate::battery::ChargingStatus;
 
 /// Creates a udev monitor socket filtered to the `power_supply` subsystem.
 pub fn create_battery_monitor() -> anyhow::Result<MonitorSocket> {
+    log::debug!("getting power_supply devices for monitor...");
+
+    let mut enumerator = Enumerator::new()?;
+    enumerator.match_subsystem("power_supply")?;
+    for dev in enumerator.scan_devices()? {
+        log::debug!("found power_supply device: {dev:?}")
+    }
+
     let socket = udev::MonitorBuilder::new()?
         .match_subsystem("power_supply")?
         .listen()?;
+
+    log::debug!("done. returning socket");
     Ok(socket)
 }
 
