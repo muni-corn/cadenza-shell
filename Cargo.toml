@@ -21,7 +21,6 @@ inotify = "0.11"
 log = { version = "0.4", features = ["release_max_level_info"] }
 mpris = "2.0.1"
 niri-ipc = "25.8.0"
-notify = "8"
 pango = "0.21"
 pulse = { version = "2.30", package = "libpulse-binding" }
 relm4 = { git = "https://github.com/muni-corn/relm4", branch = "async-reducible", features = [
