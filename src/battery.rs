@@ -39,7 +39,7 @@ impl BatteryCapacity {
 }
 
 /// Charging status of the battery.
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Deserialize, Serialize)]
 pub enum ChargingStatus {
     Charging,
     Discharging,
