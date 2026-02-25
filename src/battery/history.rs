@@ -85,6 +85,12 @@ impl HistoricalPowerUsage {
         {
             log::error!("{e}");
         }
+
+        // save csv files
+        if let Err(e) = self.save_csv() {
+            log::error!("couldn't save csv: {e}");
+        }
+
         self.last_save = now;
     }
 
@@ -267,6 +273,21 @@ impl HistoricalPowerUsage {
         let path = Self::get_state_path()?;
         fs::write(&path, json).context("couldn't write predictor state")?;
         log::debug!("saved power history state to {:?}", path);
+        Ok(())
+    }
+
+    fn save_csv(&self) -> Result<()> {
+        let filename = "reading_history.csv";
+        let path = get_state_directory()
+            .context("getting state directory for csv")?
+            .join(filename);
+
+        let mut wtr = csv::Writer::from_path(&path).context("opening writer from path")?;
+        for reading in &self.all_readings {
+            wtr.serialize(reading)
+                .context("serializing a ChargeReading")?;
+        }
+        wtr.flush().context("flushing writer")?;
         Ok(())
     }
 }
