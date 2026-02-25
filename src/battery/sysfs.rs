@@ -1,4 +1,7 @@
-use std::{fs, path::Path};
+use std::{
+    fs,
+    path::{Path, PathBuf},
+};
 
 use crate::battery::{BatteryCapacity, ChargingStatus};
 
@@ -64,28 +67,27 @@ impl SysfsReading {
     }
 }
 
-/// Read battery data from sysfs.
-/// Returns None if sysfs interface is unavailable or current_now cannot be
-/// read.
-pub fn read_battery_sysfs() -> Option<SysfsReading> {
-    let battery_path = detect_battery_path()?;
-
+/// Read battery data from sysfs at the given battery path.
+///
+/// Returns `None` if `current_now` or `voltage_now` are unavailable, as these
+/// are critical for power calculation.
+pub fn read_battery_sysfs(battery_path: &Path) -> Option<SysfsReading> {
     // current_now and voltage_now are critical for power calculation - if
     // unavailable, return None
-    let current_now = read_sysfs_i64(&battery_path, "current_now")?;
-    let voltage_now = read_sysfs_u64(&battery_path, "voltage_now")?;
+    let current_now = read_sysfs_i64(battery_path, "current_now")?;
+    let voltage_now = read_sysfs_u64(battery_path, "voltage_now")?;
 
     // read other values, allowing them to be missing
     let charge_now =
-        read_sysfs_u64(&battery_path, "charge_now").map(BatteryCapacity::MicroAmpereHours);
+        read_sysfs_u64(battery_path, "charge_now").map(BatteryCapacity::MicroAmpereHours);
     let charge_full =
-        read_sysfs_u64(&battery_path, "charge_full").map(BatteryCapacity::MicroAmpereHours);
+        read_sysfs_u64(battery_path, "charge_full").map(BatteryCapacity::MicroAmpereHours);
     let energy_now =
-        read_sysfs_u64(&battery_path, "energy_now").map(BatteryCapacity::MicroWattHours);
+        read_sysfs_u64(battery_path, "energy_now").map(BatteryCapacity::MicroWattHours);
     let energy_full =
-        read_sysfs_u64(&battery_path, "energy_full").map(BatteryCapacity::MicroWattHours);
+        read_sysfs_u64(battery_path, "energy_full").map(BatteryCapacity::MicroWattHours);
 
-    let status = read_charging_status(&battery_path);
+    let status = read_charging_status(battery_path);
 
     Some(SysfsReading {
         voltage_now,
@@ -99,8 +101,9 @@ pub fn read_battery_sysfs() -> Option<SysfsReading> {
     })
 }
 
-/// Detect the battery sysfs path.
-fn detect_battery_path() -> Option<String> {
+/// Detect the battery sysfs path by scanning `/sys/class/power_supply/` for
+/// devices with type "Battery".
+pub fn detect_battery_path() -> Option<PathBuf> {
     let power_supply_path = Path::new("/sys/class/power_supply");
 
     fs::read_dir(power_supply_path).ok()?.find_map(|entry| {
@@ -112,7 +115,7 @@ fn detect_battery_path() -> Option<String> {
             if type_path.exists() {
                 let type_content = fs::read_to_string(&type_path).ok()?;
                 if type_content.trim().eq_ignore_ascii_case("battery") {
-                    Some(path.to_string_lossy().to_string())
+                    Some(path)
                 } else {
                     None
                 }
@@ -126,30 +129,29 @@ fn detect_battery_path() -> Option<String> {
 }
 
 /// Read a sysfs file as u64.
-fn read_sysfs_u64(battery_path: &str, file: &str) -> Option<u64> {
-    let path = Path::new(battery_path).join(file);
-    fs::read_to_string(path).ok()?.trim().parse().ok()
+fn read_sysfs_u64(battery_path: &Path, file: &str) -> Option<u64> {
+    fs::read_to_string(battery_path.join(file))
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
 }
 
 /// Read a sysfs file as i64 (for current_now which can be negative).
-fn read_sysfs_i64(battery_path: &str, file: &str) -> Option<i64> {
-    let path = Path::new(battery_path).join(file);
-    fs::read_to_string(path).ok()?.trim().parse().ok()
+fn read_sysfs_i64(battery_path: &Path, file: &str) -> Option<i64> {
+    fs::read_to_string(battery_path.join(file))
+        .ok()?
+        .trim()
+        .parse()
+        .ok()
 }
 
-/// Read charging status from sysfs.
-fn read_charging_status(battery_path: &str) -> ChargingStatus {
-    let path = Path::new(battery_path).join("status");
-    fs::read_to_string(path)
+/// Read charging status from sysfs, delegating to the shared parser in `udev`.
+fn read_charging_status(battery_path: &Path) -> ChargingStatus {
+    fs::read_to_string(battery_path.join("status"))
         .ok()
-        .and_then(|s| match s.trim() {
-            "Charging" => Some(ChargingStatus::Charging),
-            "Discharging" => Some(ChargingStatus::Discharging),
-            "Full" => Some(ChargingStatus::Full),
-            "Not charging" => Some(ChargingStatus::NotCharging),
-            _ => None,
-        })
-        .unwrap_or(ChargingStatus::Discharging) // safe default
+        .map(|s| crate::battery::udev::parse_charging_status(&s))
+        .unwrap_or(ChargingStatus::Unknown)
 }
 
 #[cfg(test)]
