@@ -203,6 +203,9 @@ impl HistoricalPowerUsage {
     /// inverse of power over the remaining capacity gives:
     /// `time = (wh_capacity / coefficient) * ln(1 / (1 - percentage_now))`.
     fn predict_time_to_full(&self, percentage_now: f64, wh_capacity: f64) -> Duration {
+        if percentage_now == 1.0 || self.charging_coefficient == 0.0 {
+            return Duration::MAX;
+        }
         let estimated_power = self.charging_coefficient * (1.0 - percentage_now);
         let wh_to_go = wh_capacity * (1.0 - percentage_now);
         let hours_to_full = wh_to_go / estimated_power;
