@@ -1,7 +1,7 @@
 //! Stores a user's historical power usage. This data is used to make informed
 //! predictions on future battery drain and estimated time remaining.
 
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Datelike, Local, TimeDelta, Timelike};
@@ -161,6 +161,83 @@ impl HistoricalPowerUsage {
         week_opt
             .or(day_opt)
             .unwrap_or(self.overall_discharging_average)
+    }
+
+    /// Returns the amount of time until the battery will be either full or
+    /// empty based on the given sysfs reading.
+    pub fn predict_time_remaining(
+        &self,
+        reading: &SysfsReading,
+        from_when: DateTime<Local>,
+    ) -> Duration {
+        match reading.status {
+            ChargingStatus::Charging => {
+                let Some(percentage_now) = reading.percentage() else {
+                    return Duration::ZERO;
+                };
+
+                let wh_capacity = reading.capacity_wh();
+
+                self.predict_time_to_full(percentage_now, wh_capacity)
+            }
+            ChargingStatus::Discharging => {
+                let wh_remaining = reading.remaining_wh();
+                self.predict_time_to_empty(from_when, wh_remaining)
+            }
+            _ => Duration::ZERO,
+        }
+    }
+
+    /// Uses the stored charging coefficient and current percentage to determine
+    /// when the battery will be full.
+    ///
+    /// The charging model assumes `power = coefficient * (1.0 - percentage)`,
+    /// where power tapers off as the battery approaches full. Integrating the
+    /// inverse of power over the remaining capacity gives:
+    /// `time = (wh_capacity / coefficient) * ln(1 / (1 - percentage_now))`.
+    fn predict_time_to_full(&self, percentage_now: f64, wh_capacity: f64) -> Duration {
+        let estimated_power = self.charging_coefficient * (1.0 - percentage_now);
+        let wh_to_go = wh_capacity * (1.0 - percentage_now);
+        let hours_to_full = wh_to_go / estimated_power;
+        Duration::from_secs_f64(hours_to_full * 3600.0)
+    }
+
+    /// Uses integration over stored historical time-slot data to determine how
+    /// long it will take for the battery to deplete entirely.
+    ///
+    /// Steps forward through 15-minute slots starting from `from_when`,
+    /// subtracting the predicted power draw each slot until `wh_remaining`
+    /// reaches zero.
+    fn predict_time_to_empty(&self, from_when: DateTime<Local>, mut wh_remaining: f64) -> Duration {
+        if wh_remaining == 0.0 {
+            return Duration::ZERO;
+        }
+
+        let hours_per_slot = 1.0 / TIME_SLOTS_PER_HOUR as f64;
+        let mut elapsed = Duration::ZERO;
+        let mut current_time = from_when;
+
+        // step forward slot by slot until energy runs out or a week has passed
+        // (guard against infinite loops when history is zero everywhere)
+        for _ in 0..TIME_SLOTS_PER_WEEK {
+            let power_watts = self.predict_discharging_power_at(current_time);
+
+            let energy_this_slot = power_watts * hours_per_slot;
+            if energy_this_slot >= wh_remaining {
+                // battery drains partway through this slot — interpolate the
+                // fraction of the slot consumed
+                let fraction = wh_remaining / energy_this_slot;
+                let slot_minutes = MINUTES_PER_TIME_SLOT as f64 * fraction;
+                elapsed += Duration::from_secs_f64(slot_minutes * 60.);
+                break;
+            }
+
+            wh_remaining -= energy_this_slot;
+            elapsed += Duration::from_mins(MINUTES_PER_TIME_SLOT.into());
+            current_time += Duration::from_mins(MINUTES_PER_TIME_SLOT.into());
+        }
+
+        elapsed
     }
 
     /// Get the path to the history file.
