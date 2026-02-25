@@ -39,6 +39,10 @@ pub struct HistoricalPowerUsage {
     /// The last time history was persisted to disk.
     #[serde(skip)]
     last_save: DateTime<Local>,
+
+    /// All readings of the battery state.
+    #[serde(skip)]
+    all_readings: Vec<SysfsReading>,
 }
 
 impl Default for HistoricalPowerUsage {
@@ -49,6 +53,7 @@ impl Default for HistoricalPowerUsage {
             weekly_averages: [0.0; TIME_SLOTS_PER_WEEK as usize],
             charging_coefficient: Default::default(),
             last_save: Local::now(),
+            all_readings: Default::default(),
         }
     }
 }
@@ -244,14 +249,7 @@ impl HistoricalPowerUsage {
 
     /// Get the path to the history file.
     fn get_state_path() -> Result<PathBuf> {
-        let state_dir = dirs::state_dir()
-            .or_else(dirs::data_local_dir)
-            .context("couldn't find state directory")?;
-
-        let cadenza_state = state_dir.join("cadenza-shell");
-        fs::create_dir_all(&cadenza_state)?;
-
-        Ok(cadenza_state.join("power_history.json"))
+        Ok(get_state_directory()?.join("power_history.json"))
     }
 
     pub fn read_from_disk() -> Result<Self> {
@@ -268,6 +266,15 @@ impl HistoricalPowerUsage {
         log::debug!("saved power history state to {:?}", path);
         Ok(())
     }
+}
+
+fn get_state_directory() -> Result<PathBuf> {
+    let state_dir = dirs::state_dir()
+        .or_else(dirs::data_local_dir)
+        .context("couldn't find state directory")?;
+    let cadenza_state = state_dir.join("cadenza-shell");
+    fs::create_dir_all(&cadenza_state).context("couldn't create state directory")?;
+    Ok(cadenza_state)
 }
 
 /// Returns the day and week slot that correspond to the given date and time.
