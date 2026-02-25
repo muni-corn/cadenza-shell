@@ -8,8 +8,7 @@ use chrono::{DateTime, Datelike, Local, TimeDelta, Timelike};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use super::sysfs::ChargingStatus;
-use crate::battery::sysfs::SysfsReading;
+use crate::battery::{ChargingStatus, sysfs::SysfsReading};
 
 /// Records 15-minute time slots.
 const TIME_SLOTS_PER_HOUR: u32 = 4;
