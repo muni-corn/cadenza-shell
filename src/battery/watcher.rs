@@ -1,17 +1,20 @@
-use std::{fs, path::Path, sync::mpsc, time::Duration};
+use std::{path::Path, sync::mpsc, time::Duration};
 
 use chrono::Local;
 use notify::{RecursiveMode, Watcher};
 
 use super::{BATTERY_STATE, BatteryState};
-use crate::battery::{history::HistoricalPowerUsage, sysfs::read_battery_sysfs};
+use crate::battery::{
+    history::HistoricalPowerUsage,
+    sysfs::{detect_battery_path, read_battery_sysfs},
+};
 
 /// Maximum time between battery information and status fetches.
 const MAX_BATTERY_POLL_TIME: Duration = Duration::from_secs(30);
 
 pub async fn start_battery_service() {
-    // detect battery interface
-    let Some(battery_interface) = detect_battery_interface() else {
+    // detect battery sysfs path
+    let Some(battery_path) = detect_battery_path() else {
         log::error!("couldn't detect battery interface");
         return;
     };
@@ -30,7 +33,7 @@ pub async fn start_battery_service() {
 
     // read initial battery properties. if it fails, we will not consider the
     // service available.
-    let Some(reading) = read_battery_sysfs() else {
+    let Some(reading) = read_battery_sysfs(&battery_path) else {
         return;
     };
 
@@ -55,10 +58,14 @@ pub async fn start_battery_service() {
     };
 
     // watch status file for charging state changes
-    let status_path = format!("/sys/class/power_supply/{}/status", battery_interface);
+    let status_path = battery_path.join("status");
 
     if let Err(e) = watcher.watch(Path::new(&status_path), RecursiveMode::NonRecursive) {
-        log::error!("couldn't set up watcher for {}: {}", status_path, e);
+        log::error!(
+            "couldn't set up watcher for {}: {}",
+            status_path.to_string_lossy(),
+            e
+        );
         return;
     }
 
@@ -96,7 +103,7 @@ pub async fn start_battery_service() {
             tokio::time::sleep(MAX_BATTERY_POLL_TIME).await;
         }
 
-        let Some(reading) = read_battery_sysfs() else {
+        let Some(reading) = read_battery_sysfs(&battery_path) else {
             return;
         };
 
@@ -112,36 +119,4 @@ pub async fn start_battery_service() {
             time_remaining,
         });
     }
-}
-
-/// Detect the battery interface by scanning /sys/class/power_supply/ for
-/// devices with type "Battery".
-fn detect_battery_interface() -> Option<String> {
-    let power_supply_path = Path::new("/sys/class/power_supply");
-
-    // read all entries in the power_supply directory
-    fs::read_dir(power_supply_path).ok()?.find_map(|entry| {
-        let entry = entry.ok()?;
-        let path = entry.path();
-
-        // check if this is a directory
-        if path.is_dir() {
-            // check if there's a type file
-            let type_path = path.join("type");
-            if type_path.exists() {
-                // read the type file
-                let type_content = fs::read_to_string(&type_path).ok()?;
-                if type_content.trim().eq_ignore_ascii_case("battery") {
-                    // found a battery device, return its name
-                    Some(entry.file_name().to_string_lossy().to_string())
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    })
 }
