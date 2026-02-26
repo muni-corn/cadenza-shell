@@ -24,7 +24,8 @@ pub struct SysfsReading {
     /// (µAh).
     pub capacity_now: BatteryCapacity,
 
-    /// Full charge capacity in microampere-hours (µAh).
+    /// Full charge capacity in either milliwatt-hours (µWh) or
+    /// milliampere-hours (µAh).
     pub capacity_full: BatteryCapacity,
 
     /// Charging status.

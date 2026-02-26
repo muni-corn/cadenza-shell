@@ -29,6 +29,20 @@ pub enum BatteryCapacity {
 }
 
 impl BatteryCapacity {
+    pub fn as_microampere_hours(&self, voltage: u64) -> u64 {
+        match *self {
+            BatteryCapacity::MicroAmpereHours(uah) => uah,
+            BatteryCapacity::MicroWattHours(uwh) => uwh * 1_000_000 / voltage,
+        }
+    }
+
+    pub fn as_microwatt_hours(&self, voltage: u64) -> u64 {
+        match *self {
+            BatteryCapacity::MicroAmpereHours(uah) => uah * voltage / 1_000_000,
+            BatteryCapacity::MicroWattHours(uwh) => uwh,
+        }
+    }
+
     pub fn div(self, rhs: Self) -> Option<f64> {
         match (self, rhs) {
             (Self::MicroAmpereHours(l), Self::MicroAmpereHours(r))
