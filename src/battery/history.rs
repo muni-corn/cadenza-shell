@@ -262,11 +262,32 @@ impl HistoricalPowerUsage {
         Ok(get_state_directory()?.join("power_history.json"))
     }
 
+    /// Get the path to the CSV readings file.
+    fn get_csv_path() -> Result<PathBuf> {
+        Ok(get_state_directory()?.join("reading_history.csv"))
+    }
+
     pub fn read_from_disk() -> Result<Self> {
         let path = Self::get_state_path()?;
         let json = fs::read_to_string(&path).context("couldn't read power history")?;
 
-        Ok(serde_json::from_str(&json)?)
+        let mut history: Self = serde_json::from_str(&json)?;
+        history.all_readings = Self::load_csv().unwrap_or_else(|e| {
+            log::warn!("couldn't load csv readings: {e}");
+            Vec::new()
+        });
+
+        Ok(history)
+    }
+
+    fn load_csv() -> Result<Vec<SysfsReading>> {
+        let path = Self::get_csv_path()?;
+        let mut rdr = csv::Reader::from_path(&path).context("opening csv reader")?;
+        let readings = rdr
+            .deserialize()
+            .collect::<Result<Vec<SysfsReading>, _>>()
+            .context("deserializing csv readings")?;
+        Ok(readings)
     }
 
     fn save_to_disk(&self) -> Result<()> {
