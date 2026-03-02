@@ -1,4 +1,4 @@
-@use 'sass:string';
+@use "sass:string";
 
 $warn-color: #fa0;
 $dim-color: rgba(255, 255, 255, 0.5);
@@ -21,7 +21,8 @@ window {
 .bar {
   background-color: rgba(0, 0, 0, 0.5);
 
-  .bar-button, menubutton.bar-button > button {
+  .bar-button,
+  menubutton.bar-button > button {
     min-width: 0;
     background-color: transparent;
     box-shadow: none;
@@ -36,12 +37,14 @@ window {
   border-spacing: 40px;
 }
 
-.dim, .secondary {
+.dim,
+.secondary {
   opacity: 0.5;
 }
 
 progressbar {
-  progress, trough {
+  progress,
+  trough {
     min-height: 2px;
     transition:
       min-width 500ms cubic-bezier(0.5, 0, 0, 1),
@@ -62,7 +65,8 @@ progressbar {
   }
 
   &.dim {
-    progress, trough {
+    progress,
+    trough {
       transition:
         min-width 500ms cubic-bezier(0.5, 0, 0, 1),
         background-color 1s cubic-bezier(0.5, 0, 0, 1);
@@ -121,7 +125,7 @@ progressbar {
 }
 
 @function gtkalpha($c, $a) {
-  @return string.unquote('alpha(#{$c},#{$a})');
+  @return string.unquote("alpha(#{$c},#{$a})");
 }
 
 box.notification-card {
@@ -277,7 +281,8 @@ calendar.view {
       border-radius: 99px;
     }
 
-    .month, .year {
+    .month,
+    .year {
       font-weight: 500;
     }
   }
