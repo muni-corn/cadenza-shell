@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 
-use super::history::get_state_directory;
+use super::{history::get_state_directory, sysfs::SysfsReading};
 
 /// Learning rate for exponential moving averages applied to [`ChargeProfile`]
 /// fields after each completed charging session.
@@ -159,6 +159,26 @@ pub struct SessionReading {
 
     /// Remaining capacity in microampere-hours (µAh).
     pub charge_uah: f64,
+}
+
+// ── session reading
+// ───────────────────────────────────────────────────────────
+
+impl SessionReading {
+    /// Construct a [`SessionReading`] from a raw sysfs snapshot.
+    ///
+    /// Returns `None` if the sysfs reading lacks percentage or capacity data.
+    pub fn from_sysfs(r: &SysfsReading) -> Option<Self> {
+        let percentage = r.percentage()?;
+        // prefer µAh; convert from µWh via voltage if necessary
+        let charge_uah = r.capacity_now.as_microampere_hours(r.voltage_now) as f64;
+        Some(Self {
+            when: r.when,
+            current_ua: r.current_now.unsigned_abs() as f64,
+            percentage,
+            charge_uah,
+        })
+    }
 }
 
 /// Minimum number of CV-phase readings required before the OLS fit is
@@ -380,6 +400,46 @@ impl ChargingSession {
         let t_secs = (latest.when - t0).num_milliseconds() as f64 / 1000.0;
         self.cv_fit.push(t_secs, latest.current_ua);
     }
+
+    // ── lifecycle ─────────────────────────────────────────────────────────────
+
+    /// Finalise the session and, if a CC→CV transition was observed and the CV
+    /// fit is valid, update `profile` with the learned parameters.
+    ///
+    /// Call this when the charger is disconnected or the status changes away
+    /// from `Charging`.
+    pub fn end(&self, profile: &mut ChargeProfile) {
+        let Some(transition_idx) = self.transition_index else {
+            log::debug!("session ended without a detected CC→CV transition; profile unchanged");
+            return;
+        };
+
+        let Some(tau) = self.cv_fit.tau_secs() else {
+            log::debug!("session ended but CV fit is not ready; profile unchanged");
+            return;
+        };
+
+        let Some(i0) = self.cv_fit.i0_ua() else {
+            return;
+        };
+
+        let switch_pct = self.readings[transition_idx].percentage;
+        let cc_current_ua = self.cc_plateau_ua;
+
+        log::info!(
+            "charging session complete: cc={cc_current_ua:.0} µA, \
+             switch={:.1}%, tau={tau:.0} s, I₀={i0:.0} µA",
+            switch_pct * 100.0,
+        );
+
+        profile.update(cc_current_ua, switch_pct, i0, tau);
+
+        if let Err(e) = profile.save() {
+            log::error!("couldn't save charge profile: {e}");
+        }
+    }
+
+    // ── internal helpers ─────────────────────────────────────────────────────
 
     /// Compute the median current (µA) over the most recent [`PHASE_WINDOW`]
     /// readings. Uses a sorted copy, so it is robust to transient spikes and
