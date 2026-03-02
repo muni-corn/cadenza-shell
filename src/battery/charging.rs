@@ -603,10 +603,16 @@ fn predict_cc_plus_cv(
     Some(Duration::from_secs_f64(cc_secs + cv_secs))
 }
 
-// ── legacy stub (kept for history.rs delegation) ─────────────────────────────
+// ── legacy fallback (used by history.rs when no CC/CV session is active) ─────
 
-/// Predict the time until the battery is full using the legacy linear-taper
+/// Predict the time until the battery is full using the linear-taper
 /// coefficient model.
+///
+/// Assumes `power(p) = coefficient × (1 − p)`. Integrating over `[p_now, 1]`:
+///
+/// ```text
+/// time = (wh_capacity / coefficient) × ln(1 / (1 − p_now))
+/// ```
 ///
 /// Returns [`Duration::MAX`] when the battery is already full or no
 /// coefficient has been learned yet.
@@ -618,8 +624,7 @@ pub fn predict_time_to_full(
     if percentage_now >= 1.0 || charging_coefficient == 0.0 {
         return Duration::MAX;
     }
-    let estimated_power = charging_coefficient * (1.0 - percentage_now);
-    let wh_to_go = wh_capacity * (1.0 - percentage_now);
-    let hours_to_full = wh_to_go / estimated_power;
+    // analytical integral of 1/power dp from p_now to 1
+    let hours_to_full = (wh_capacity / charging_coefficient) * (1.0 / (1.0 - percentage_now)).ln();
     Duration::from_secs_f64(hours_to_full * 3600.0)
 }
