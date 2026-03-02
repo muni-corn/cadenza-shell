@@ -400,7 +400,150 @@ impl ChargingSession {
     }
 }
 
-// ── legacy stub (kept until history.rs is fully migrated) ────────────────────
+// ── prediction ───────────────────────────────────────────────────────────────
+
+/// Predict time to full using the CC/CV model.
+///
+/// Uses a three-tier strategy:
+///
+/// 1. **Best** — active session has a confirmed CV phase with a valid OLS fit:
+///    integrate the fitted exponential to the `charge_full_uah` target.
+/// 2. **Good** — a session is active in CC or early CV, and a learned
+///    [`ChargeProfile`] is available: combine a linear CC estimate with the
+///    profile's CV time constant.
+/// 3. **Fallback** — no useful data yet: simple `charge_remaining / current`
+///    linear extrapolation.
+///
+/// Returns [`Duration::MAX`] when the battery is already full or no current
+/// is flowing.
+pub fn predict_time_to_full_cc_cv(
+    session: &ChargingSession,
+    profile: &ChargeProfile,
+    current_ua: f64,
+    charge_now_uah: f64,
+    charge_full_uah: f64,
+) -> Duration {
+    if charge_now_uah >= charge_full_uah || current_ua <= 0.0 {
+        return Duration::MAX;
+    }
+
+    let charge_remaining_uah = charge_full_uah - charge_now_uah;
+
+    // tier 1: active CV fit
+    if session.phase == ChargingPhase::Cv {
+        if let Some(t) = predict_cv_remaining(session, charge_now_uah, charge_full_uah) {
+            return t;
+        }
+    }
+
+    // tier 2: CC phase with a learned profile
+    if profile.is_ready()
+        && let Some(t) = predict_cc_plus_cv(
+            session,
+            profile,
+            current_ua,
+            charge_now_uah,
+            charge_full_uah,
+        )
+    {
+        return t;
+    }
+
+    // tier 3: linear fallback
+    let hours = charge_remaining_uah / current_ua;
+    Duration::from_secs_f64(hours * 3600.0)
+}
+
+/// Tier 1: integrate the fitted `I(t) = I₀ · exp(−t/tau)` curve from the
+/// current time until `∫I dt = charge_remaining_uah`.
+///
+/// The amount of charge deposited between `t_now` and some future time `T` is:
+/// ```text
+/// Q = I₀ · tau · (exp(−t_now/tau) − exp(−T/tau))
+/// ```
+/// Solving for `T − t_now` gives:
+/// ```text
+/// Δt = −tau · ln(1 − Q / (I(t_now) · tau))
+/// ```
+fn predict_cv_remaining(
+    session: &ChargingSession,
+    charge_now_uah: f64,
+    charge_full_uah: f64,
+) -> Option<Duration> {
+    let tau = session.cv_fit.tau_secs()?;
+    let i0 = session.cv_fit.i0_ua()?;
+    let transition_idx = session.transition_index?;
+
+    // elapsed seconds since the CV transition started
+    let t0 = session.readings[transition_idx].when;
+    let t_now = session.readings.last()?.when;
+    let t_elapsed = (t_now - t0).num_milliseconds() as f64 / 1000.0;
+
+    // current value on the fitted curve at t_now (µA)
+    let i_now_fitted = i0 * (-t_elapsed / tau).exp();
+
+    // charge remaining (µAh → µAs for integration, then back)
+    let charge_remaining_uas = (charge_full_uah - charge_now_uah) * 3600.0;
+
+    // amount the exponential can ever deliver from t_now: I_now_fitted · tau
+    let deliverable = i_now_fitted * tau;
+    if charge_remaining_uas >= deliverable {
+        // the exponential asymptote falls short of charge_full; don't use
+        return None;
+    }
+
+    let delta_t_secs = -tau * (1.0 - charge_remaining_uas / deliverable).ln();
+    Some(Duration::from_secs_f64(delta_t_secs))
+}
+
+/// Tier 2: linear CC estimate to the switch point, then CV estimate using
+/// the profile's learned tau.
+fn predict_cc_plus_cv(
+    session: &ChargingSession,
+    profile: &ChargeProfile,
+    current_ua: f64,
+    charge_now_uah: f64,
+    charge_full_uah: f64,
+) -> Option<Duration> {
+    let switch_uah = profile.switch_percentage * charge_full_uah;
+
+    let cc_secs = if session.phase == ChargingPhase::Cv {
+        // already past the switch point
+        0.0
+    } else if charge_now_uah < switch_uah {
+        // still in CC: estimate time to reach the switch point linearly
+        let cc_remaining = switch_uah - charge_now_uah;
+        let effective_current = if current_ua > 0.0 {
+            current_ua
+        } else {
+            profile.cc_current_ua
+        };
+        if effective_current <= 0.0 {
+            return None;
+        }
+        cc_remaining / effective_current * 3600.0
+    } else {
+        0.0
+    };
+
+    // CV portion: charge to deposit from switch_uah to charge_full_uah
+    let cv_charge_uas = (charge_full_uah - switch_uah.max(charge_now_uah)) * 3600.0;
+    let tau = profile.cv_tau_secs;
+    let i_start = profile.cv_start_current_ua;
+    if tau <= 0.0 || i_start <= 0.0 {
+        return None;
+    }
+
+    let deliverable = i_start * tau;
+    if cv_charge_uas >= deliverable {
+        return None;
+    }
+
+    let cv_secs = -tau * (1.0 - cv_charge_uas / deliverable).ln();
+    Some(Duration::from_secs_f64(cc_secs + cv_secs))
+}
+
+// ── legacy stub (kept for history.rs delegation) ─────────────────────────────
 
 /// Predict the time until the battery is full using the legacy linear-taper
 /// coefficient model.
