@@ -2,11 +2,12 @@
 //!
 //! Learned per-device charging parameters ([`ChargeProfile`]) are persisted to
 //! disk and updated at the end of each charging session. The active session is
-//! tracked in-memory by [`ChargingSession`] (added in a later commit).
+//! tracked in-memory by [`ChargingSession`].
 
 use std::{fs, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
+use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 
 use super::history::get_state_directory;
@@ -124,6 +125,61 @@ impl ChargeProfile {
         log::debug!("saved charge profile to {path:?}");
         Ok(())
     }
+}
+
+// ── active session ───────────────────────────────────────────────────────────
+
+/// The detected phase of a charging session.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ChargingPhase {
+    /// Phase not yet determined; waiting for enough readings.
+    #[default]
+    Unknown,
+
+    /// Constant-current phase: charger supplies a near-constant current while
+    /// voltage rises.
+    Cc,
+
+    /// Constant-voltage phase: voltage is held at maximum and current decays
+    /// exponentially as the battery approaches full.
+    Cv,
+}
+
+/// A single timestamped observation recorded during a charging session.
+#[derive(Debug, Clone)]
+pub struct SessionReading {
+    /// Wall-clock time of this reading.
+    pub when: DateTime<Local>,
+
+    /// Measured current in microamperes (µA). Always positive (charging).
+    pub current_ua: f64,
+
+    /// State of charge as a fraction `[0, 1]`.
+    pub percentage: f64,
+
+    /// Remaining capacity in microampere-hours (µAh).
+    pub charge_uah: f64,
+}
+
+/// Transient state for the charging session that is currently in progress.
+///
+/// Created when a charger is connected and discarded when it is removed. Phase
+/// detection and CV curve fitting operate on the readings accumulated here.
+#[derive(Debug, Default)]
+pub struct ChargingSession {
+    /// All readings collected since the charger was connected.
+    pub readings: Vec<SessionReading>,
+
+    /// Currently detected phase.
+    pub phase: ChargingPhase,
+
+    /// Smoothed peak current observed while in the CC phase (µA). Updated as
+    /// long as `phase == Cc`.
+    pub cc_plateau_ua: f64,
+
+    /// Index into `readings` at which the CC→CV transition was detected.
+    /// `None` if the transition has not yet been observed.
+    pub transition_index: Option<usize>,
 }
 
 // ── legacy stub (kept until history.rs is fully migrated) ────────────────────
