@@ -628,3 +628,271 @@ pub fn predict_time_to_full(
     let hours_to_full = (wh_capacity / charging_coefficient) * (1.0 / (1.0 - percentage_now)).ln();
     Duration::from_secs_f64(hours_to_full * 3600.0)
 }
+
+// ── tests ─────────────────────────────────────────────────────────────────────
+
+#[cfg(test)]
+mod tests {
+    use chrono::Local;
+
+    use super::*;
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    /// Build a synthetic [`SessionReading`] at `t_offset_secs` seconds after
+    /// `base`, with the given current and percentage.
+    fn make_reading(
+        base: DateTime<Local>,
+        t_offset_secs: i64,
+        current_ua: f64,
+        percentage: f64,
+    ) -> SessionReading {
+        let when = base + chrono::Duration::seconds(t_offset_secs);
+        SessionReading {
+            when,
+            current_ua,
+            percentage,
+            charge_uah: percentage * 5000.0, // 5 Ah battery
+        }
+    }
+
+    /// Push `n` identical CC readings at 10 s intervals, then return the
+    /// session.
+    fn fill_cc_phase(n: usize, current_ua: f64) -> (ChargingSession, DateTime<Local>) {
+        let base = Local::now();
+        let profile = ChargeProfile::default();
+        let mut session = ChargingSession::default();
+        for i in 0..n {
+            let r = make_reading(base, i as i64 * 10, current_ua, 0.5 + i as f64 * 0.001);
+            session.push(r, &profile);
+        }
+        (session, base)
+    }
+
+    // ── CvFit tests ───────────────────────────────────────────────────────────
+
+    #[test]
+    fn cv_fit_not_ready_with_few_points() {
+        let mut fit = CvFit::default();
+        fit.push(0.0, 3000.0);
+        fit.push(10.0, 2900.0);
+        assert!(!fit.is_ready());
+        assert!(fit.tau_secs().is_none());
+    }
+
+    #[test]
+    fn cv_fit_recovers_known_tau() {
+        // generate synthetic data: I(t) = 4000 * exp(-t / 3600)
+        let tau_true = 3600.0_f64; // 1 hour
+        let i0_true = 4000.0_f64;
+        let mut fit = CvFit::default();
+        for i in 0..20 {
+            let t = i as f64 * 120.0; // every 2 minutes
+            let current = i0_true * (-t / tau_true).exp();
+            fit.push(t, current);
+        }
+
+        let tau_fitted = fit.tau_secs().expect("fit should be ready");
+        let i0_fitted = fit.i0_ua().expect("i0 should be available");
+
+        // allow 1% tolerance on tau and i0
+        assert!(
+            (tau_fitted - tau_true).abs() / tau_true < 0.01,
+            "tau: expected ~{tau_true:.0}, got {tau_fitted:.0}"
+        );
+        assert!(
+            (i0_fitted - i0_true).abs() / i0_true < 0.01,
+            "i0: expected ~{i0_true:.0}, got {i0_fitted:.0}"
+        );
+    }
+
+    #[test]
+    fn cv_fit_rejects_non_decaying_current() {
+        // flat current: slope ≈ 0, tau should be None
+        let mut fit = CvFit::default();
+        for i in 0..10 {
+            fit.push(i as f64 * 10.0, 3000.0);
+        }
+        // slope is ≈ 0, so tau returns None (or a very large positive number
+        // if there's floating-point noise — but the slope should not be negative)
+        let tau = fit.tau_secs();
+        assert!(
+            tau.is_none(),
+            "flat current should yield None tau, got {tau:?}"
+        );
+    }
+
+    #[test]
+    fn cv_fit_ignores_non_positive_current() {
+        let mut fit = CvFit::default();
+        // these should be silently ignored
+        fit.push(0.0, 0.0);
+        fit.push(10.0, -100.0);
+        assert!(!fit.is_ready());
+    }
+
+    // ── phase detection tests ─────────────────────────────────────────────────
+
+    #[test]
+    fn phase_starts_unknown() {
+        let session = ChargingSession::default();
+        assert_eq!(session.phase, ChargingPhase::Unknown);
+    }
+
+    #[test]
+    fn phase_transitions_to_cc_after_window() {
+        let (session, _) = fill_cc_phase(PHASE_WINDOW + 1, 3_800_000.0);
+        assert_eq!(session.phase, ChargingPhase::Cc);
+    }
+
+    #[test]
+    fn phase_detects_cv_transition() {
+        // build a session: PHASE_WINDOW CC readings at full current, then
+        // CV_CONFIRM_READINGS + a few extra at low current
+        let base = Local::now();
+        let profile = ChargeProfile::default();
+        let mut session = ChargingSession::default();
+        let cc_current = 3_800_000.0_f64;
+
+        // CC phase — enough to establish a plateau
+        for i in 0..(PHASE_WINDOW + 4) {
+            let r = make_reading(base, i as i64 * 10, cc_current, 0.50 + i as f64 * 0.005);
+            session.push(r, &profile);
+        }
+        assert_eq!(session.phase, ChargingPhase::Cc);
+
+        // CV phase — current drops to 50% of plateau.
+        // the rolling median needs PHASE_WINDOW/2 + 1 readings to tip over, then
+        // CV_CONFIRM_READINGS more to confirm; use PHASE_WINDOW + CV_CONFIRM_READINGS
+        // to have a clear margin.
+        let cc_count = PHASE_WINDOW + 4;
+        let low_current = cc_current * 0.50; // well below 0.75 threshold
+        for i in 0..(PHASE_WINDOW + CV_CONFIRM_READINGS) {
+            let r = make_reading(
+                base,
+                (cc_count + i) as i64 * 10,
+                low_current,
+                0.70 + i as f64 * 0.005,
+            );
+            session.push(r, &profile);
+        }
+
+        assert_eq!(session.phase, ChargingPhase::Cv);
+        assert!(session.transition_index.is_some());
+    }
+
+    #[test]
+    fn phase_does_not_falsely_trigger_on_transient_dip() {
+        // a single dip below threshold should not trigger a transition
+        let base = Local::now();
+        let profile = ChargeProfile::default();
+        let mut session = ChargingSession::default();
+        let cc_current = 3_800_000.0_f64;
+        let dip_current = cc_current * 0.30; // deep dip
+
+        // establish CC plateau
+        for i in 0..(PHASE_WINDOW + 4) {
+            let r = make_reading(base, i as i64 * 10, cc_current, 0.50 + i as f64 * 0.002);
+            session.push(r, &profile);
+        }
+
+        // single dip reading
+        let offset = PHASE_WINDOW + 4;
+        session.push(
+            make_reading(base, offset as i64 * 10, dip_current, 0.56),
+            &profile,
+        );
+
+        // should still be in CC: one dip is nowhere near CV_CONFIRM_READINGS
+        assert_eq!(session.phase, ChargingPhase::Cc);
+    }
+
+    // ── predict_time_to_full tests ────────────────────────────────────────────
+
+    #[test]
+    fn legacy_predict_returns_max_when_full() {
+        assert_eq!(predict_time_to_full(1.0, 50.0, 10.0), Duration::MAX);
+    }
+
+    #[test]
+    fn legacy_predict_returns_max_with_no_coefficient() {
+        assert_eq!(predict_time_to_full(0.5, 50.0, 0.0), Duration::MAX);
+    }
+
+    #[test]
+    fn legacy_predict_varies_with_percentage() {
+        // the taper model power = coeff*(1-p) means charging slows dramatically
+        // near full: at 90% the remaining 10% takes LONGER than the 50% at 50%
+        // because the average power in the last stretch is very low.
+        // the integral gives time = (wh/coeff) * ln(1/(1-p)), so t(0.9) > t(0.5).
+        let t50 = predict_time_to_full(0.5, 50.0, 10.0);
+        let t90 = predict_time_to_full(0.9, 50.0, 10.0);
+        assert!(
+            t90 > t50,
+            "t90={t90:?} should be greater than t50={t50:?} (taper model)"
+        );
+        // sanity check that both are finite and positive
+        assert!(t50.as_secs_f64() > 0.0);
+        assert!(t90.as_secs_f64().is_finite());
+    }
+
+    #[test]
+    fn cv_prediction_uses_active_fit() {
+        // generate a CV session with a known tau and verify the prediction
+        // converges to the right ballpark
+        let tau_true = 3600.0_f64; // 1 hour
+        let i0 = 3000.0_f64; // µA
+        let charge_full_uah = 5_000_000.0_f64;
+
+        // charge deposited over 1 hour: I0*tau*(1 - exp(-1)) ≈ 1896000 µAh
+        let charge_deposited_uas = i0 * tau_true * (1.0 - (-1.0_f64).exp());
+        let charge_now_uah = charge_full_uah - charge_deposited_uas / 3600.0;
+
+        let base = Local::now();
+        let mut session = ChargingSession {
+            phase: ChargingPhase::Cv,
+            transition_index: Some(0),
+            ..Default::default()
+        };
+
+        // seed transition reading
+        session.readings.push(SessionReading {
+            when: base,
+            current_ua: i0,
+            percentage: charge_now_uah / charge_full_uah,
+            charge_uah: charge_now_uah,
+        });
+
+        // seed CV fit with 10 minutes of data
+        for i in 1..=6 {
+            let t = i as f64 * 100.0;
+            let current = i0 * (-t / tau_true).exp();
+            session.cv_fit.push(t, current);
+            session.readings.push(SessionReading {
+                when: base + chrono::Duration::seconds(t as i64),
+                current_ua: current,
+                percentage: 0.9,
+                charge_uah: charge_now_uah,
+            });
+        }
+
+        let profile = ChargeProfile::default();
+        let predicted = predict_time_to_full_cc_cv(
+            &session,
+            &profile,
+            i0 * (-600.0 / tau_true).exp(),
+            charge_now_uah,
+            charge_full_uah,
+        );
+
+        // at t=600s into CV the fitted current is I0*exp(-600/3600).
+        // integrating from t=600 to reach charge_full analytically gives ~4944 s.
+        // allow ±10% tolerance for floating-point fit error.
+        let secs = predicted.as_secs_f64();
+        let expected = 4944.0_f64;
+        assert!(
+            (secs - expected).abs() / expected < 0.10,
+            "expected ~{expected:.0} s, got {secs:.0} s"
+        );
+    }
+}
