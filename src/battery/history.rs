@@ -8,7 +8,7 @@ use chrono::{DateTime, Datelike, Local, TimeDelta, Timelike};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use crate::battery::{ChargingStatus, sysfs::SysfsReading};
+use crate::battery::{ChargingStatus, charging, sysfs::SysfsReading};
 
 /// Records 15-minute time slots.
 const TIME_SLOTS_PER_HOUR: u32 = 4;
@@ -203,20 +203,10 @@ impl HistoricalPowerUsage {
     }
 
     /// Uses the stored charging coefficient and current percentage to determine
-    /// when the battery will be full.
-    ///
-    /// The charging model assumes `power = coefficient * (1.0 - percentage)`,
-    /// where power tapers off as the battery approaches full. Integrating the
-    /// inverse of power over the remaining capacity gives:
-    /// `time = (wh_capacity / coefficient) * ln(1 / (1 - percentage_now))`.
+    /// when the battery will be full. Delegates to
+    /// [`charging::predict_time_to_full`].
     fn predict_time_to_full(&self, percentage_now: f64, wh_capacity: f64) -> Duration {
-        if percentage_now == 1.0 || self.charging_coefficient == 0.0 {
-            return Duration::MAX;
-        }
-        let estimated_power = self.charging_coefficient * (1.0 - percentage_now);
-        let wh_to_go = wh_capacity * (1.0 - percentage_now);
-        let hours_to_full = wh_to_go / estimated_power;
-        Duration::from_secs_f64(hours_to_full * 3600.0)
+        charging::predict_time_to_full(percentage_now, wh_capacity, self.charging_coefficient)
     }
 
     /// Uses integration over stored historical time-slot data to determine how

@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use relm4::SharedState;
 
+pub(super) mod charging;
 mod history;
 mod sysfs;
 mod udev;
