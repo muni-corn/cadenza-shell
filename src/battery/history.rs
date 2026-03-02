@@ -304,7 +304,7 @@ impl HistoricalPowerUsage {
     }
 }
 
-fn get_state_directory() -> Result<PathBuf> {
+pub(super) fn get_state_directory() -> Result<PathBuf> {
     let state_dir = dirs::state_dir()
         .or_else(dirs::data_local_dir)
         .context("couldn't find state directory")?;
