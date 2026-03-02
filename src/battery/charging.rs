@@ -161,6 +161,18 @@ pub struct SessionReading {
     pub charge_uah: f64,
 }
 
+/// Number of readings in the rolling window used to compute the median current
+/// for phase detection. At 10 s polling this covers ~1 minute.
+const PHASE_WINDOW: usize = 6;
+
+/// A current drop to this fraction of the CC plateau triggers a transition
+/// check. Chosen to be robust against the noisy dips visible in your data.
+const CV_DROP_THRESHOLD: f64 = 0.75;
+
+/// How many consecutive readings below `CV_DROP_THRESHOLD` are required before
+/// declaring the CC→CV transition. At 10 s polling this is ~1 minute.
+const CV_CONFIRM_READINGS: usize = 6;
+
 /// Transient state for the charging session that is currently in progress.
 ///
 /// Created when a charger is connected and discarded when it is removed. Phase
@@ -180,6 +192,100 @@ pub struct ChargingSession {
     /// Index into `readings` at which the CC→CV transition was detected.
     /// `None` if the transition has not yet been observed.
     pub transition_index: Option<usize>,
+
+    /// Number of consecutive readings that have been below the CV drop
+    /// threshold, used to confirm the transition before committing.
+    cv_confirm_count: usize,
+}
+
+impl ChargingSession {
+    /// Add a new reading and update the phase detection state.
+    ///
+    /// `profile` is consulted to provide a learned `switch_percentage` hint
+    /// that can accelerate detection. Pass the default profile if none has
+    /// been learned yet.
+    pub fn push(&mut self, reading: SessionReading, profile: &ChargeProfile) {
+        self.readings.push(reading);
+
+        // need at least PHASE_WINDOW readings before making any determination
+        if self.readings.len() < PHASE_WINDOW {
+            return;
+        }
+
+        match self.phase {
+            ChargingPhase::Unknown | ChargingPhase::Cc => self.update_cc_phase(profile),
+            ChargingPhase::Cv => {} // once in CV, stay in CV
+        }
+    }
+
+    fn update_cc_phase(&mut self, profile: &ChargeProfile) {
+        let latest = self.readings.last().unwrap(); // safe: checked len above
+        let median = self.rolling_median_current();
+
+        // track the peak smoothed current as the CC plateau
+        if median > self.cc_plateau_ua {
+            self.cc_plateau_ua = median;
+        }
+
+        if self.phase == ChargingPhase::Unknown && self.cc_plateau_ua > 0.0 {
+            self.phase = ChargingPhase::Cc;
+        }
+
+        // if no plateau established yet, nothing more to check
+        if self.cc_plateau_ua == 0.0 {
+            return;
+        }
+
+        // use the learned switch percentage as a gating condition: don't start
+        // looking for the transition until we are within 5% of the known point
+        let near_switch =
+            !profile.is_ready() || latest.percentage >= (profile.switch_percentage - 0.05).max(0.0);
+
+        if !near_switch {
+            return;
+        }
+
+        // check whether the current has dropped below the CV threshold
+        let below_threshold = median < self.cc_plateau_ua * CV_DROP_THRESHOLD;
+
+        if below_threshold {
+            self.cv_confirm_count += 1;
+        } else {
+            // reset confirmation streak on any reading above the threshold
+            self.cv_confirm_count = 0;
+        }
+
+        if self.cv_confirm_count >= CV_CONFIRM_READINGS {
+            // transition confirmed: mark it at the first reading of the streak
+            let transition_idx = self.readings.len() - self.cv_confirm_count;
+            self.transition_index = Some(transition_idx);
+            self.phase = ChargingPhase::Cv;
+            log::info!(
+                "CC→CV transition detected at index {transition_idx} \
+                 (soc={:.1}%, current={:.0} µA)",
+                self.readings[transition_idx].percentage * 100.0,
+                self.readings[transition_idx].current_ua,
+            );
+        }
+    }
+
+    /// Compute the median current (µA) over the most recent [`PHASE_WINDOW`]
+    /// readings. Uses a sorted copy, so it is robust to transient spikes and
+    /// the load-induced dips visible in real data.
+    fn rolling_median_current(&self) -> f64 {
+        let window_start = self.readings.len().saturating_sub(PHASE_WINDOW);
+        let mut values: Vec<f64> = self.readings[window_start..]
+            .iter()
+            .map(|r| r.current_ua)
+            .collect();
+        values.sort_by(f64::total_cmp);
+        let mid = values.len() / 2;
+        if values.len().is_multiple_of(2) {
+            (values[mid - 1] + values[mid]) / 2.0
+        } else {
+            values[mid]
+        }
+    }
 }
 
 // ── legacy stub (kept until history.rs is fully migrated) ────────────────────
