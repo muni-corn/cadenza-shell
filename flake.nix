@@ -65,6 +65,7 @@
       perSystem =
         {
           config,
+          lib,
           pkgs,
           ...
         }:
@@ -101,6 +102,15 @@
               enable = true;
               channel = "nightly";
               mold.enable = true;
+            };
+
+            git-hooks.hooks.clippy = {
+              enable = true;
+              packageOverrides = {
+                cargo = config.rust-project.toolchain;
+                clippy = config.rust-project.toolchain;
+              };
+              settings.denyWarnings = lib.mkForce false;
             };
 
             packages = [
