@@ -161,6 +161,10 @@ pub struct SessionReading {
     pub charge_uah: f64,
 }
 
+/// Minimum number of CV-phase readings required before the OLS fit is
+/// considered valid enough to use for prediction.
+const CV_FIT_MIN_READINGS: usize = 3;
+
 /// Number of readings in the rolling window used to compute the median current
 /// for phase detection. At 10 s polling this covers ~1 minute.
 const PHASE_WINDOW: usize = 6;
@@ -172,6 +176,92 @@ const CV_DROP_THRESHOLD: f64 = 0.75;
 /// How many consecutive readings below `CV_DROP_THRESHOLD` are required before
 /// declaring the CC→CV transition. At 10 s polling this is ~1 minute.
 const CV_CONFIRM_READINGS: usize = 6;
+
+// ── CV exponential fitting
+// ────────────────────────────────────────────────────
+
+/// Incremental ordinary least-squares fit of `ln(I) = a − t/tau` in log-space,
+/// i.e. `I(t) = exp(a) · exp(−t/tau)` where `tau = −1/slope`.
+///
+/// Accumulates running sums so each new reading is O(1) to incorporate.
+#[derive(Debug, Default)]
+pub struct CvFit {
+    /// Number of data points incorporated so far.
+    n: f64,
+    /// Σ xᵢ (seconds since CV start)
+    sum_x: f64,
+    /// Σ yᵢ (ln(current_ua))
+    sum_y: f64,
+    /// Σ xᵢ²
+    sum_xx: f64,
+    /// Σ xᵢ yᵢ
+    sum_xy: f64,
+}
+
+impl CvFit {
+    /// Incorporate one new CV-phase data point.
+    ///
+    /// - `t_secs` – seconds elapsed since the CC→CV transition.
+    /// - `current_ua` – charging current at this point (µA). Values ≤ 0 are
+    ///   ignored to keep the log transform valid.
+    pub fn push(&mut self, t_secs: f64, current_ua: f64) {
+        if current_ua <= 0.0 {
+            return;
+        }
+        let x = t_secs;
+        let y = current_ua.ln();
+        self.n += 1.0;
+        self.sum_x += x;
+        self.sum_y += y;
+        self.sum_xx += x * x;
+        self.sum_xy += x * y;
+    }
+
+    /// Returns `true` when enough data points have been collected for a
+    /// reliable fit.
+    pub fn is_ready(&self) -> bool {
+        self.n >= CV_FIT_MIN_READINGS as f64
+    }
+
+    /// Compute the fitted decay time constant `tau` in seconds.
+    ///
+    /// Returns `None` if there are insufficient data points or the regression
+    /// is degenerate (all readings at the same time).
+    pub fn tau_secs(&self) -> Option<f64> {
+        if !self.is_ready() {
+            return None;
+        }
+        let denom = self.n * self.sum_xx - self.sum_x * self.sum_x;
+        if denom.abs() < f64::EPSILON {
+            return None;
+        }
+        let slope = (self.n * self.sum_xy - self.sum_x * self.sum_y) / denom;
+        // slope = -1/tau  =>  tau = -1/slope
+        if slope >= 0.0 {
+            // non-negative slope means current is not decaying; discard
+            return None;
+        }
+        Some(-1.0 / slope)
+    }
+
+    /// Compute the fitted initial current `I₀` (µA) at `t=0` (the transition
+    /// point).
+    ///
+    /// Returns `None` under the same conditions as [`Self::tau_secs`].
+    pub fn i0_ua(&self) -> Option<f64> {
+        if !self.is_ready() {
+            return None;
+        }
+        let denom = self.n * self.sum_xx - self.sum_x * self.sum_x;
+        if denom.abs() < f64::EPSILON {
+            return None;
+        }
+        let intercept = (self.sum_y * self.sum_xx - self.sum_x * self.sum_xy) / denom;
+        Some(intercept.exp())
+    }
+}
+
+// ── active session ─────────────────────────────────────────────────────────
 
 /// Transient state for the charging session that is currently in progress.
 ///
@@ -196,6 +286,10 @@ pub struct ChargingSession {
     /// Number of consecutive readings that have been below the CV drop
     /// threshold, used to confirm the transition before committing.
     cv_confirm_count: usize,
+
+    /// Incremental OLS fit of the CV exponential decay. Only updated once the
+    /// phase is confirmed as CV.
+    pub cv_fit: CvFit,
 }
 
 impl ChargingSession {
@@ -214,7 +308,7 @@ impl ChargingSession {
 
         match self.phase {
             ChargingPhase::Unknown | ChargingPhase::Cc => self.update_cc_phase(profile),
-            ChargingPhase::Cv => {} // once in CV, stay in CV
+            ChargingPhase::Cv => self.update_cv_fit(),
         }
     }
 
@@ -266,7 +360,25 @@ impl ChargingSession {
                 self.readings[transition_idx].percentage * 100.0,
                 self.readings[transition_idx].current_ua,
             );
+
+            // seed the CV fit with all readings from the transition onward
+            let t0 = self.readings[transition_idx].when;
+            for r in &self.readings[transition_idx..] {
+                let t_secs = (r.when - t0).num_milliseconds() as f64 / 1000.0;
+                self.cv_fit.push(t_secs, r.current_ua);
+            }
         }
+    }
+
+    /// Incorporate the latest reading into the CV exponential fit.
+    fn update_cv_fit(&mut self) {
+        let Some(transition_idx) = self.transition_index else {
+            return;
+        };
+        let t0 = self.readings[transition_idx].when;
+        let latest = self.readings.last().unwrap(); // safe: we have readings
+        let t_secs = (latest.when - t0).num_milliseconds() as f64 / 1000.0;
+        self.cv_fit.push(t_secs, latest.current_ua);
     }
 
     /// Compute the median current (µA) over the most recent [`PHASE_WINDOW`]
