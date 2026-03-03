@@ -492,7 +492,15 @@ pub fn predict_time_to_full_cc_cv(
 
     // tier 1: active CV fit
     if session.phase == ChargingPhase::Cv {
-        if let Some(t) = predict_cv_remaining(session, charge_now_uah, charge_full_uah) {
+        // prefer the session's own observed plateau; fall back to the learned
+        // profile value so a mid-charge restart (cc_plateau_ua == 0) still
+        // computes a sensible i_term instead of collapsing to 1 µA
+        let cc_plateau = if session.cc_plateau_ua > 0.0 {
+            session.cc_plateau_ua
+        } else {
+            profile.cc_current_ua
+        };
+        if let Some(t) = predict_cv_remaining(session, p_now, charge_full_uah, cc_plateau) {
             return t;
         }
     }
@@ -526,10 +534,15 @@ pub fn predict_time_to_full_cc_cv(
 /// ```text
 /// Δt = −tau · ln(1 − Q / (I(t_now) · tau))
 /// ```
+///
+/// `cc_plateau_ua` should be the session's observed plateau when available,
+/// falling back to the learned profile value so a mid-charge restart does not
+/// produce a near-zero `i_term`.
 fn predict_cv_remaining(
     session: &ChargingSession,
     charge_now_uah: f64,
     charge_full_uah: f64,
+    cc_plateau_ua: f64,
 ) -> Option<Duration> {
     let tau = session.cv_fit.tau_secs()?;
     let i0 = session.cv_fit.i0_ua()?;
