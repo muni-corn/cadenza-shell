@@ -35,6 +35,10 @@ pub struct HistoricalPowerUsage {
     /// The last time history was persisted to disk.
     #[serde(skip)]
     last_save: DateTime<Local>,
+
+    /// Current statistics on battery discharge.
+    #[serde(skip)]
+    discharging_statistics: DischargingStatistics,
 }
 
 impl Default for HistoricalPowerUsage {
@@ -44,6 +48,7 @@ impl Default for HistoricalPowerUsage {
             daily_averages: [0.0; TIME_SLOTS_PER_DAY as usize],
             weekly_averages: [0.0; TIME_SLOTS_PER_WEEK as usize],
             last_save: Local::now(),
+            discharging_statistics: Default::default(),
         }
     }
 }
@@ -144,7 +149,7 @@ impl HistoricalPowerUsage {
     /// subtracting the predicted power draw each slot until `wh_remaining`
     /// reaches zero.
     pub fn predict_time_to_empty(
-        &self,
+        &mut self,
         from_when: DateTime<Local>,
         mut wh_remaining: f64,
     ) -> Duration {
@@ -154,12 +159,11 @@ impl HistoricalPowerUsage {
 
         let hours_per_slot = 1.0 / TIME_SLOTS_PER_HOUR as f64;
         let mut elapsed = Duration::ZERO;
-        let mut current_time = from_when;
 
         // step forward slot by slot until energy runs out or a week has passed
         // (guard against infinite loops when history is zero everywhere)
         for _ in 0..TIME_SLOTS_PER_WEEK {
-            let power_watts = self.predict_discharging_power_at(current_time);
+            let power_watts = self.predict_discharging_power_at(from_when + elapsed);
 
             let energy_this_slot = power_watts * hours_per_slot;
             if energy_this_slot >= wh_remaining {
@@ -173,8 +177,10 @@ impl HistoricalPowerUsage {
 
             wh_remaining -= energy_this_slot;
             elapsed += Duration::from_mins(MINUTES_PER_TIME_SLOT.into());
-            current_time += Duration::from_mins(MINUTES_PER_TIME_SLOT.into());
         }
+
+        self.discharging_statistics
+            .update((from_when + elapsed).timestamp());
 
         elapsed
     }
@@ -219,4 +225,43 @@ fn get_slots(when: DateTime<Local>) -> (u32, u32) {
     let slot_of_week = day_of_week * TIME_SLOTS_PER_DAY + slot_of_day;
 
     (slot_of_day, slot_of_week)
+}
+
+#[derive(Default)]
+struct DischargingStatistics {
+    /// All timestamps (in seconds) of the predicted time-to-empty.
+    time_to_empty_estimates: Vec<f64>,
+}
+
+impl DischargingStatistics {
+    fn update(&mut self, new_time_to_empty_timestamp: i64) {
+        self.time_to_empty_estimates
+            .push(new_time_to_empty_timestamp as f64);
+
+        let count = self.time_to_empty_estimates.len() as f64;
+        let mean = self.time_to_empty_estimates.iter().sum::<f64>() / count;
+        let squared_differences = self
+            .time_to_empty_estimates
+            .iter()
+            .map(|x| (x - mean) * (x - mean));
+        let variance = squared_differences.sum::<f64>() / count;
+        let standard_deviation = variance.sqrt();
+
+        log::debug!("-----discharging statistics--------------------");
+        if let Some(mean_utc) = DateTime::from_timestamp(mean as i64, 0) {
+            log::debug!(
+                "time-to-empty estimate mean: {}",
+                DateTime::<Local>::from(mean_utc)
+            );
+        }
+
+        log::debug!(
+            "                   variance: {:>8.1} min^2",
+            variance / (60. * 60.)
+        );
+        log::debug!(
+            "                          σ: {:>8.1} min",
+            standard_deviation / 60.
+        );
+    }
 }

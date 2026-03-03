@@ -55,7 +55,7 @@ pub async fn start_battery_service() {
         &reading,
         active_session.as_ref(),
         &charge_profile,
-        &power_history,
+        &mut power_history,
     );
 
     *BATTERY_STATE.write() = Some(BatteryState {
@@ -223,7 +223,7 @@ fn compute_time_remaining(
     reading: &SysfsReading,
     active_session: Option<&ChargingSession>,
     charge_profile: &ChargeProfile,
-    power_history: &HistoricalPowerUsage,
+    power_history: &mut HistoricalPowerUsage,
 ) -> Duration {
     match reading.status {
         ChargingStatus::Charging => {

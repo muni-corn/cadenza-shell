@@ -904,7 +904,7 @@ impl ChargeStatistics {
         self.current_variance =
             self.current_variance * (1.0 - STATISTICS_ALPHA) + (error_now * STATISTICS_ALPHA);
 
-        log::debug!("------------------------------------------");
+        log::debug!("-----charging statistics--------------------");
         log::debug!("               current_ema: {:>12.1}", self.current_ema);
         log::debug!(
             "          current_variance: {:>12.1}",
