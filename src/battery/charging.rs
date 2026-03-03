@@ -311,6 +311,9 @@ pub struct ChargingSession {
     /// Incremental OLS fit of the CV exponential decay. Only updated once the
     /// phase is confirmed as CV.
     pub cv_fit: CvFit,
+
+    /// Current statistics on current and charge.
+    statistics: ChargeStatistics,
 }
 
 impl ChargingSession {
@@ -320,6 +323,8 @@ impl ChargingSession {
     /// that can accelerate detection. Pass the default profile if none has
     /// been learned yet.
     pub fn push(&mut self, reading: SessionReading, profile: &ChargeProfile) {
+        self.statistics
+            .update(reading.current_ua, reading.percentage);
         self.readings.push(reading);
 
         // need at least PHASE_WINDOW readings before making any determination
@@ -913,5 +918,101 @@ mod tests {
             (secs - expected).abs() / expected < 0.10,
             "expected ~{expected:.0} s, got {secs:.0} s"
         );
+    }
+}
+
+/// Weight for new readings to use in statistics below.
+const STATISTICS_ALPHA: f64 = 0.2;
+
+#[derive(Clone, Debug, Default)]
+struct ChargeStatistics {
+    current_ema: f64,
+    current_variance: f64,
+    slope_ema: f64,
+    slope_variance: f64,
+
+    last_current_ua: f64,
+    last_percentage: f64,
+}
+
+impl ChargeStatistics {
+    pub fn update(&mut self, current_ua: f64, percentage_now: f64) {
+        // if no current has been recorded yet, set it now and return now
+        // (everything else will be zero anyway)
+        if self.current_ema == 0.0 {
+            self.current_ema = current_ua;
+            self.last_current_ua = current_ua;
+            self.last_percentage = percentage_now;
+            return;
+        }
+
+        // update current (I) statistics
+        self.current_ema =
+            self.current_ema * (1.0 - STATISTICS_ALPHA) + current_ua * STATISTICS_ALPHA;
+
+        // variance is the mean of differences squared between actual values and the
+        // mean value of the data series
+        let diff_now = current_ua - self.current_ema;
+        let error_now = diff_now * diff_now;
+        self.current_variance =
+            self.current_variance * (1.0 - STATISTICS_ALPHA) + (error_now * STATISTICS_ALPHA);
+
+        log::debug!("------------------------------------------");
+        log::debug!("               current_ema: {:>12.1}", self.current_ema);
+        log::debug!(
+            "          current_variance: {:>12.1}",
+            self.current_variance
+        );
+        log::debug!(
+            "current_standard_deviation: {:>12.1}",
+            self.current_variance.sqrt()
+        );
+
+        // update slope statistics, per percentage
+        let slope_now_ua =
+            (current_ua - self.last_current_ua) / (percentage_now - self.last_percentage);
+
+        // variance is the mean of differences squared between actual values and the
+        // mean value of the data series
+        self.slope_ema =
+            self.slope_ema * (1.0 - STATISTICS_ALPHA) + slope_now_ua * STATISTICS_ALPHA;
+
+        let diff_now = slope_now_ua - self.slope_ema;
+        let error_now = diff_now * diff_now;
+        self.slope_variance =
+            self.slope_variance * (1.0 - STATISTICS_ALPHA) + (error_now * STATISTICS_ALPHA);
+
+        log::debug!(
+            "            percentage_now: {:>12.1}",
+            percentage_now * 100.
+        );
+        log::debug!("                 slope_now: {:>12.1}", slope_now_ua);
+        log::debug!("                 slope_ema: {:>12.1}", self.slope_ema);
+        log::debug!("            slope_variance: {:>12.1}", self.slope_variance);
+        log::debug!(
+            "  slope_standard_deviation: {:>12.1}",
+            self.slope_variance.sqrt()
+        );
+        log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
+        log::debug!(
+            "current now is {:>12.1} σ from current ema",
+            current_ua.abs() / self.current_variance.sqrt(),
+        );
+        log::debug!(
+            "current now is {:>12.1} σ from slope ema",
+            current_ua.abs() / self.slope_variance.sqrt(),
+        );
+        log::debug!(
+            "  slope now is {:>12.1} σ from current ema",
+            slope_now_ua.abs() / self.current_variance.sqrt(),
+        );
+        log::debug!(
+            "  slope now is {:>12.1} σ from slope ema",
+            slope_now_ua.abs() / self.slope_variance.sqrt(),
+        );
+
+        // finally, update stats
+        self.last_current_ua = current_ua;
+        self.last_percentage = percentage_now;
     }
 }
