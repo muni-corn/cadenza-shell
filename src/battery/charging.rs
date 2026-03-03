@@ -60,6 +60,7 @@ impl ChargeProfile {
             && self.cv_tau_secs > 0.0
             && self.cv_start_current_ua > 0.0
             && self.switch_percentage > 0.0
+				&& self.cc_current_ua > 0.0
     }
 
     /// Update the profile with parameters learned from a completed charging
