@@ -39,10 +39,6 @@ pub struct HistoricalPowerUsage {
     /// The last time history was persisted to disk.
     #[serde(skip)]
     last_save: DateTime<Local>,
-
-    /// All readings of the battery state.
-    #[serde(skip)]
-    all_readings: Vec<ReadingRecord>,
 }
 
 impl Default for HistoricalPowerUsage {
@@ -53,7 +49,6 @@ impl Default for HistoricalPowerUsage {
             weekly_averages: [0.0; TIME_SLOTS_PER_WEEK as usize],
             charging_coefficient: Default::default(),
             last_save: Local::now(),
-            all_readings: Default::default(),
         }
     }
 }
@@ -64,7 +59,6 @@ impl HistoricalPowerUsage {
     pub fn update(&mut self, reading: &SysfsReading) {
         let power_now = reading.power_watts();
 
-        self.all_readings.push(ReadingRecord::from(reading));
         match reading.status {
             ChargingStatus::Charging => {
                 if let Some(percentage_now) = reading.percentage() {
@@ -85,11 +79,6 @@ impl HistoricalPowerUsage {
             && let Err(e) = self.save_to_disk()
         {
             log::error!("couldn't save numbers: {e}");
-        }
-
-        // save csv files
-        if let Err(e) = self.save_csv() {
-            log::error!("couldn't save csv: {e}");
         }
 
         self.last_save = now;
@@ -252,32 +241,11 @@ impl HistoricalPowerUsage {
         Ok(get_state_directory()?.join("power_history.json"))
     }
 
-    /// Get the path to the CSV readings file.
-    fn get_csv_path() -> Result<PathBuf> {
-        Ok(get_state_directory()?.join("reading_history.csv"))
-    }
-
     pub fn read_from_disk() -> Result<Self> {
         let path = Self::get_state_path()?;
         let json = fs::read_to_string(&path).context("couldn't read power history")?;
 
-        let mut history: Self = serde_json::from_str(&json)?;
-        history.all_readings = Self::load_csv().unwrap_or_else(|e| {
-            log::warn!("couldn't load csv readings: {e}");
-            Vec::new()
-        });
-
-        Ok(history)
-    }
-
-    fn load_csv() -> Result<Vec<ReadingRecord>> {
-        let path = Self::get_csv_path()?;
-        let mut rdr = csv::Reader::from_path(&path).context("opening csv reader")?;
-        let readings = rdr
-            .deserialize()
-            .collect::<Result<Vec<ReadingRecord>, _>>()?;
-
-        Ok(readings)
+        Ok(serde_json::from_str(&json)?)
     }
 
     fn save_to_disk(&self) -> Result<()> {
@@ -285,21 +253,6 @@ impl HistoricalPowerUsage {
         let path = Self::get_state_path()?;
         fs::write(&path, json).context("couldn't write predictor state")?;
         log::debug!("saved power history state to {:?}", path);
-        Ok(())
-    }
-
-    fn save_csv(&self) -> Result<()> {
-        let filename = "reading_history.csv";
-        let path = get_state_directory()
-            .context("getting state directory for csv")?
-            .join(filename);
-
-        let mut wtr = csv::Writer::from_path(&path).context("opening writer from path")?;
-        for reading in &self.all_readings {
-            wtr.serialize(reading)
-                .context("serializing a ChargeReading")?;
-        }
-        wtr.flush().context("flushing writer")?;
         Ok(())
     }
 }
@@ -323,47 +276,4 @@ fn get_slots(when: DateTime<Local>) -> (u32, u32) {
     let slot_of_week = day_of_week * TIME_SLOTS_PER_DAY + slot_of_day;
 
     (slot_of_day, slot_of_week)
-}
-
-#[derive(Deserialize, Serialize)]
-struct ReadingRecord {
-    /// The time of the reading.
-    pub when: DateTime<Local>,
-
-    /// Current voltage in microvolts (µV).
-    pub voltage_now: u64,
-
-    /// Current draw in microamperes (µA).
-    pub current_now: i64,
-
-    /// Current capacity in microampere-hours (µAh).
-    pub charge_now: u64,
-
-    /// Full charge capacity in microampere-hours (µAh).
-    pub charge_full: u64,
-
-    /// Current capacity in microwatt-hours (µWh).
-    pub energy_now: u64,
-
-    /// Full charge capacity in microwatt-hours (µWh).
-    pub energy_full: u64,
-
-    /// Charging status.
-    pub status: ChargingStatus,
-}
-
-impl From<&SysfsReading> for ReadingRecord {
-    fn from(reading: &SysfsReading) -> Self {
-        let v = reading.voltage_now;
-        Self {
-            when: reading.when,
-            voltage_now: v,
-            current_now: reading.current_now,
-            charge_now: reading.capacity_now.as_microampere_hours(v),
-            charge_full: reading.capacity_full.as_microampere_hours(v),
-            energy_now: reading.capacity_now.as_microwatt_hours(v),
-            energy_full: reading.capacity_full.as_microwatt_hours(v),
-            status: reading.status,
-        }
-    }
 }
