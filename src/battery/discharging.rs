@@ -18,6 +18,10 @@ const HARMONICS: usize = 42;
 /// Duration of one full model period: one week in seconds.
 const PERIOD_SECS: f64 = 7.0 * 24.0 * 3600.0;
 
+/// Maximum time-to-empty prediction. Estimates beyond this are capped and the
+/// battery tile already displays "Until someday" for durations this long.
+const MAX_TTE: Duration = Duration::from_secs(48 * 3_600);
+
 /// Determines how much new power readings affect historial averages.
 ///
 /// Maintains about a month of readings per slot.
@@ -150,42 +154,53 @@ impl DischargeProfile {
         energy
     }
 
-    /// Uses integration over stored historical time-slot data to determine how
-    /// long it will take for the battery to deplete entirely.
+    /// Uses a closed-form Fourier energy integral with Newton's method to
+    /// determine how long it will take for the battery to deplete entirely.
     ///
-    /// Steps forward through 15-minute slots starting from `from_when`,
-    /// subtracting the predicted power draw each slot until `wh_remaining`
-    /// reaches zero.
+    /// Capped at [`MAX_TTE`] (48 hours).
     pub fn predict_time_to_empty(
         &mut self,
         from_when: DateTime<Local>,
-        mut wh_remaining: f64,
+        wh_remaining: f64,
     ) -> Duration {
         if wh_remaining == 0.0 {
             return Duration::ZERO;
         }
 
-        // 15-minute slots, 672 per week (4 slots/hour × 24 h × 7 days)
-        let hours_per_slot = 0.25_f64;
-        let mut elapsed = Duration::ZERO;
+        if self.ema_power == 0.0 {
+            return MAX_TTE;
+        }
 
-        // step forward slot by slot until energy runs out or a week has passed
-        // (guard against infinite loops when history is zero everywhere)
-        for _ in 0..672_u32 {
-            let power_watts = self.predict_discharging_power_at(from_when + elapsed);
+        let ws_remaining = wh_remaining * 3_600.0;
+        let t1 = week_offset_secs(from_when);
+        let max_secs = MAX_TTE.as_secs_f64();
 
-            let energy_this_slot = power_watts * hours_per_slot;
-            if energy_this_slot >= wh_remaining {
-                // battery drains partway through this slot — interpolate the
-                // fraction of the slot consumed
-                let fraction = wh_remaining / energy_this_slot;
-                elapsed += Duration::from_secs_f64(900.0 * fraction);
+        // initial guess: linear estimate from overall EMA power draw
+        let mut delta = (ws_remaining / self.ema_power).min(max_secs);
+
+        // Newton's method: find Δt such that energy_integral(t1, Δt) = ws_remaining.
+        //   f(Δt)  = E(t1, Δt) - ws_remaining
+        //   f'(Δt) = P(t1 + Δt)
+        for _ in 0..20 {
+            let f = self.energy_integral(t1, delta) - ws_remaining;
+            let future = from_when + Duration::from_secs_f64(delta);
+            let f_prime = self.predict_discharging_power_at(future);
+
+            if f_prime <= 0.0 {
                 break;
             }
 
-            wh_remaining -= energy_this_slot;
-            elapsed += Duration::from_mins(15);
+            let step = f / f_prime;
+            delta -= step;
+            delta = delta.clamp(0.0, max_secs);
+
+            if step.abs() < 1.0 {
+                // converged to within 1-second precision
+                break;
+            }
         }
+
+        let elapsed = Duration::from_secs_f64(delta);
 
         self.discharging_statistics
             .update((from_when + elapsed).timestamp());
