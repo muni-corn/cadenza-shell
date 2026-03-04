@@ -189,7 +189,7 @@ impl DischargeProfile {
 
     /// Get the path to the history file.
     fn get_state_path() -> Result<PathBuf> {
-        Ok(get_state_directory()?.join("power_history.json"))
+        Ok(get_state_directory()?.join("discharge_profile.json"))
     }
 
     pub fn read_from_disk() -> Result<Self> {
