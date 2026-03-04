@@ -268,6 +268,12 @@ struct DischargingStatistics {
     /// Total number of time-to-empty estimates recorded.
     n_updates: u64,
 
+    /// Smallest (most pessimistic) predicted end-of-charge timestamp observed.
+    min_observed: Option<i64>,
+
+    /// Largest (most optimistic) predicted end-of-charge timestamp observed.
+    max_observed: Option<i64>,
+
     /// Whether `ema` has been seeded with at least one value.
     initialized: bool,
 }
@@ -276,6 +282,15 @@ impl DischargingStatistics {
     fn update(&mut self, new_time_to_empty_timestamp: i64) {
         let value = new_time_to_empty_timestamp as f64;
         self.n_updates += 1;
+
+        self.min_observed = Some(match self.min_observed {
+            Some(prev) => prev.min(new_time_to_empty_timestamp),
+            None => new_time_to_empty_timestamp,
+        });
+        self.max_observed = Some(match self.max_observed {
+            Some(prev) => prev.max(new_time_to_empty_timestamp),
+            None => new_time_to_empty_timestamp,
+        });
 
         if !self.initialized {
             self.ema = value;
@@ -320,6 +335,23 @@ impl DischargingStatistics {
             "              bias (EMA Δ): {:>+11.1} min",
             self.deviation_ema / 60.0
         );
+
+        if let (Some(min_ts), Some(max_ts)) = (self.min_observed, self.max_observed) {
+            let span_hours = (max_ts - min_ts) as f64 / 3_600.0;
+            log::debug!("       observed TTE span: {:>12.1} h", span_hours);
+            if let Some(min_utc) = DateTime::from_timestamp(min_ts, 0) {
+                log::debug!(
+                    "      pessimistic end: {}",
+                    DateTime::<Local>::from(min_utc)
+                );
+            }
+            if let Some(max_utc) = DateTime::from_timestamp(max_ts, 0) {
+                log::debug!(
+                    "       optimistic end: {}",
+                    DateTime::<Local>::from(max_utc)
+                );
+            }
+        }
 
         if self.variance_ema > 0.0 {
             log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
