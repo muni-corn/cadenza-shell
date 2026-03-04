@@ -165,7 +165,9 @@ fn update_battery_state(
 
     manage_session(reading.status, &reading, charge_profile, active_session);
 
-    power_history.update(&reading);
+    if let ChargingStatus::Discharging = reading.status {
+        power_history.update(&reading);
+    }
 
     let time_remaining = compute_time_remaining(
         &reading,
