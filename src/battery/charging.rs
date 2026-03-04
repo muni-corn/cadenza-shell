@@ -324,8 +324,7 @@ impl ChargingSession {
     /// that can accelerate detection. Pass the default profile if none has
     /// been learned yet.
     pub fn push(&mut self, reading: SessionReading, profile: &ChargeProfile) {
-        self.statistics
-            .update(reading.current_ua, reading.percentage);
+        self.statistics.update(&reading);
         self.readings.push(reading);
 
         // need at least PHASE_WINDOW readings before making any determination
@@ -877,22 +876,23 @@ struct ChargeStatistics {
     slope_variance: f64,
 
     last_current_a: f64,
-    last_percentage: f64,
+    last_time: DateTime<Local>,
 
     initialized: bool,
 }
 
 impl ChargeStatistics {
-    pub fn update(&mut self, current_ua: f64, percentage_now: f64) {
+    pub fn update(&mut self, reading: &SessionReading) {
         // convert to amps for maybe-more-readable statistics output
-        let current_a = current_ua / 1_000_000.;
+        let current_a = reading.current_ua / 1_000_000.;
+        let now = reading.when;
 
         // if no current has been recorded yet, set it now and return now
         // (everything else will be zero anyway)
         if !self.initialized {
             self.current_ema = current_a;
             self.last_current_a = current_a;
-            self.last_percentage = percentage_now;
+            self.last_time = now;
             self.initialized = true;
             return;
         }
@@ -919,14 +919,10 @@ impl ChargeStatistics {
             "current_standard_deviation: {:>12.1}  A",
             self.current_variance.sqrt()
         );
-        log::debug!(
-            "            percentage_now: {:>12.1}  %",
-            percentage_now * 100.
-        );
 
         // update slope statistics, per percentage
-        let slope_now = if percentage_now != self.last_percentage {
-            (current_a - self.last_current_a) / (percentage_now - self.last_percentage)
+        let slope_now = if self.last_time != now {
+            (current_a - self.last_current_a) / (now - self.last_time).as_seconds_f64()
         } else {
             self.slope_ema
         };
@@ -940,17 +936,17 @@ impl ChargeStatistics {
         self.slope_variance =
             self.slope_variance * (1.0 - STATISTICS_ALPHA) + (diff_squared * STATISTICS_ALPHA);
 
-        log::debug!("                 slope_now: {:>12.1}  A / %", slope_now);
+        log::debug!("                 slope_now: {:>12.1}  A / s", slope_now);
         log::debug!(
-            "                 slope_ema: {:>12.1}  A / %",
+            "                 slope_ema: {:>12.1}  A / s",
             self.slope_ema
         );
         log::debug!(
-            "            slope_variance: {:>12.1} (A / %)^2",
+            "            slope_variance: {:>12.1} (A / s)^2",
             self.slope_variance
         );
         log::debug!(
-            "  slope_standard_deviation: {:>12.1}  A / %",
+            "  slope_standard_deviation: {:>12.1}  A / s",
             self.slope_variance.sqrt()
         );
         if self.current_variance > 0.0 || self.slope_variance > 0.0 {
@@ -971,6 +967,6 @@ impl ChargeStatistics {
 
         // finally, update stats
         self.last_current_a = current_a;
-        self.last_percentage = percentage_now;
+        self.last_time = now;
     }
 }
