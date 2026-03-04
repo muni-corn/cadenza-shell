@@ -258,6 +258,13 @@ struct DischargingStatistics {
     /// EMA of the squared deviation from `ema`, used as a variance estimate.
     variance_ema: f64,
 
+    /// EMA of the signed deviation from `ema`.
+    ///
+    /// Positive means recent estimates are running later (more optimistic) than
+    /// the long-run average; negative means they are running earlier
+    /// (more pessimistic).
+    deviation_ema: f64,
+
     /// Total number of time-to-empty estimates recorded.
     n_updates: u64,
 
@@ -279,6 +286,8 @@ impl DischargingStatistics {
             let diff = value - self.ema;
             self.variance_ema =
                 self.variance_ema * (1.0 - STATISTICS_ALPHA) + (diff * diff) * STATISTICS_ALPHA;
+            self.deviation_ema =
+                self.deviation_ema * (1.0 - STATISTICS_ALPHA) + diff * STATISTICS_ALPHA;
         }
 
         let standard_deviation = self.variance_ema.sqrt();
@@ -305,6 +314,11 @@ impl DischargingStatistics {
         log::debug!(
             "                          σ: {:>12.1} sec",
             standard_deviation
+        );
+
+        log::debug!(
+            "              bias (EMA Δ): {:>+11.1} min",
+            self.deviation_ema / 60.0
         );
 
         if self.variance_ema > 0.0 {
