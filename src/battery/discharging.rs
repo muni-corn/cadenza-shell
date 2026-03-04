@@ -10,6 +10,14 @@ use serde_big_array::BigArray;
 
 use crate::battery::{ChargingStatus, STATISTICS_ALPHA, sysfs::SysfsReading};
 
+/// Number of Fourier harmonics used to model the weekly power-usage cycle.
+///
+/// 42 harmonics resolve variations down to a 4-hour period (168 h / 42).
+const HARMONICS: usize = 42;
+
+/// Duration of one full model period: one week in seconds.
+const PERIOD_SECS: f64 = 7.0 * 24.0 * 3600.0;
+
 /// Records 15-minute time slots.
 const TIME_SLOTS_PER_HOUR: u32 = 4;
 
