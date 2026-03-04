@@ -32,7 +32,8 @@ const LEARNING_RATE: f64 = 1. / 360.;
 
 #[derive(Deserialize, Serialize)]
 pub struct DischargeProfile {
-    overall_discharging_average: f64,
+    /// Exponential moving average of instantaneous power draw, in watts.
+    ema_power: f64,
 
     /// Average power usage per day, in watts.
     #[serde(with = "BigArray")]
@@ -54,7 +55,7 @@ pub struct DischargeProfile {
 impl Default for DischargeProfile {
     fn default() -> Self {
         Self {
-            overall_discharging_average: Default::default(),
+            ema_power: Default::default(),
             daily_averages: [0.0; TIME_SLOTS_PER_DAY as usize],
             weekly_averages: [0.0; TIME_SLOTS_PER_WEEK as usize],
             last_save: Local::now(),
@@ -101,20 +102,17 @@ impl DischargeProfile {
         let day_bucket = &mut self.daily_averages[slot_of_day as usize];
         let week_bucket = &mut self.weekly_averages[slot_of_week as usize];
 
-        // set the overall average to power right now if it's never been set before;
-        // otherwise, calculate the moving average
-        if self.overall_discharging_average == 0.0 {
-            self.overall_discharging_average = power_now;
+        // seed the EMA on first observation; otherwise apply moving average
+        if self.ema_power == 0.0 {
+            self.ema_power = power_now;
         } else {
-            self.overall_discharging_average = self.overall_discharging_average
-                * (1.0 - LEARNING_RATE)
-                + power_now * LEARNING_RATE;
+            self.ema_power = self.ema_power * (1.0 - LEARNING_RATE) + power_now * LEARNING_RATE;
         }
 
-        // set the average in this day bucket to the overall average if it's never
+        // set the average in this day bucket to the overall ema if it's never
         // been set before; otherwise, calculate the moving average
         if *day_bucket == 0.0 {
-            *day_bucket = self.overall_discharging_average;
+            *day_bucket = self.ema_power;
         } else {
             *day_bucket = *day_bucket * (1.0 - LEARNING_RATE) + power_now * LEARNING_RATE;
         }
@@ -147,9 +145,7 @@ impl DischargeProfile {
             Some(day_bucket)
         };
 
-        week_opt
-            .or(day_opt)
-            .unwrap_or(self.overall_discharging_average)
+        week_opt.or(day_opt).unwrap_or(self.ema_power)
     }
 
     /// Uses integration over stored historical time-slot data to determine how
