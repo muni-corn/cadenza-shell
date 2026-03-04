@@ -68,7 +68,7 @@ impl DischargeProfile {
 
             // do nothing otherwise
             _ => {
-                log::warn!("update called in DischargeProfile while not charging");
+                log::warn!("update called in DischargeProfile while not discharging");
                 return;
             }
         }
