@@ -60,7 +60,7 @@ impl ChargeProfile {
             && self.cv_tau_secs > 0.0
             && self.cv_start_current_ua > 0.0
             && self.switch_percentage > 0.0
-				&& self.cc_current_ua > 0.0
+            && self.cc_current_ua > 0.0
     }
 
     /// Update the profile with parameters learned from a completed charging
@@ -248,37 +248,37 @@ impl CvFit {
     ///
     /// Returns `None` if there are insufficient data points or the regression
     /// is degenerate (all readings at the same time).
-    pub fn tau_secs(&self) -> Option<f64> {
+    pub fn tau_secs(&self) -> anyhow::Result<f64> {
         if !self.is_ready() {
-            return None;
+            anyhow::bail!("cv fit is not ready")
         }
         let denom = self.n * self.sum_xx - self.sum_x * self.sum_x;
         if denom.abs() < f64::EPSILON {
-            return None;
+            anyhow::bail!("denominator would be zero for tau")
         }
         let slope = (self.n * self.sum_xy - self.sum_x * self.sum_y) / denom;
         // slope = -1/tau  =>  tau = -1/slope
         if slope >= 0.0 {
             // non-negative slope means current is not decaying; discard
-            return None;
+            anyhow::bail!("current is not decaying")
         }
-        Some(-1.0 / slope)
+        Ok(-1.0 / slope)
     }
 
     /// Compute the fitted initial current `I₀` (µA) at `t=0` (the transition
     /// point).
     ///
     /// Returns `None` under the same conditions as [`Self::tau_secs`].
-    pub fn i0_ua(&self) -> Option<f64> {
+    pub fn i0_ua(&self) -> Result<f64> {
         if !self.is_ready() {
-            return None;
+            anyhow::bail!("cv fit is not ready")
         }
         let denom = self.n * self.sum_xx - self.sum_x * self.sum_x;
         if denom.abs() < f64::EPSILON {
-            return None;
+            anyhow::bail!("denominator would be zero for I_0")
         }
         let intercept = (self.sum_y * self.sum_xx - self.sum_x * self.sum_xy) / denom;
-        Some(intercept.exp())
+        Ok(intercept.exp())
     }
 }
 
@@ -415,13 +415,20 @@ impl ChargingSession {
             return;
         };
 
-        let Some(tau) = self.cv_fit.tau_secs() else {
-            log::debug!("session ended but CV fit is not ready; profile unchanged");
-            return;
+        let tau = match self.cv_fit.tau_secs() {
+            Ok(tau) => tau,
+            Err(e) => {
+                log::debug!("session ended but cv fit is not ready; profile unchanged: {e}");
+                return;
+            }
         };
 
-        let Some(i0) = self.cv_fit.i0_ua() else {
-            return;
+        let i0 = match self.cv_fit.i0_ua() {
+            Ok(i0) => i0,
+            Err(e) => {
+                log::debug!("session ended but cv fit is not ready; profile unchanged: {e}");
+                return;
+            }
         };
 
         let switch_pct = self.readings[transition_idx].percentage;
@@ -492,16 +499,9 @@ pub fn predict_time_to_full_cc_cv(
 
     // tier 1: active CV fit
     if session.phase == ChargingPhase::Cv {
-        // prefer the session's own observed plateau; fall back to the learned
-        // profile value so a mid-charge restart (cc_plateau_ua == 0) still
-        // computes a sensible i_term instead of collapsing to 1 µA
-        let cc_plateau = if session.cc_plateau_ua > 0.0 {
-            session.cc_plateau_ua
-        } else {
-            profile.cc_current_ua
-        };
-        if let Some(t) = predict_cv_remaining(session, p_now, charge_full_uah, cc_plateau) {
-            return t;
+        match predict_cv_remaining(session, charge_now_uah, charge_full_uah) {
+            Ok(t) => return t,
+            Err(e) => log::error!("couldn't predict with cv model: {e}"),
         }
     }
 
@@ -542,15 +542,20 @@ fn predict_cv_remaining(
     session: &ChargingSession,
     charge_now_uah: f64,
     charge_full_uah: f64,
-    cc_plateau_ua: f64,
-) -> Option<Duration> {
+) -> Result<Duration> {
     let tau = session.cv_fit.tau_secs()?;
     let i0 = session.cv_fit.i0_ua()?;
-    let transition_idx = session.transition_index?;
+    let transition_idx = session
+        .transition_index
+        .ok_or(anyhow::anyhow!("there is no `transition_idx`"))?;
 
     // elapsed seconds since the CV transition started
     let t0 = session.readings[transition_idx].when;
-    let t_now = session.readings.last()?.when;
+    let t_now = session
+        .readings
+        .last()
+        .ok_or(anyhow::anyhow!("there are no readings yet"))?
+        .when;
     let t_elapsed = (t_now - t0).num_milliseconds() as f64 / 1000.0;
 
     // current value on the fitted curve at t_now (µA)
@@ -563,11 +568,11 @@ fn predict_cv_remaining(
     let deliverable = i_now_fitted * tau;
     if charge_remaining_uas >= deliverable {
         // the exponential asymptote falls short of charge_full; don't use
-        return None;
+        anyhow::bail!("exponential asymptote doesn't reach `charge_full`")
     }
 
     let delta_t_secs = -tau * (1.0 - charge_remaining_uas / deliverable).ln();
-    Some(Duration::from_secs_f64(delta_t_secs))
+    Ok(Duration::from_secs_f64(delta_t_secs))
 }
 
 /// Tier 2: linear CC estimate to the switch point, then CV estimate using
@@ -691,7 +696,7 @@ mod tests {
         fit.push(0.0, 3000.0);
         fit.push(10.0, 2900.0);
         assert!(!fit.is_ready());
-        assert!(fit.tau_secs().is_none());
+        assert!(fit.tau_secs().is_err());
     }
 
     #[test]
@@ -731,7 +736,7 @@ mod tests {
         // if there's floating-point noise — but the slope should not be negative)
         let tau = fit.tau_secs();
         assert!(
-            tau.is_none(),
+            tau.is_err(),
             "flat current should yield None tau, got {tau:?}"
         );
     }
