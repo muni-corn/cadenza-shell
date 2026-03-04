@@ -194,26 +194,55 @@ impl DischargeProfile {
         // initial guess: linear estimate from overall EMA power draw
         let mut delta = (ws_remaining / self.ema_power).min(max_secs);
 
-        // Newton's method: find Δt such that energy_integral(from, Δt) = ws_remaining.
-        //   f(Δt)  = E(from, Δt) - ws_remaining
-        //   f'(Δt) = P(from + Δt)
-        for _ in 0..20 {
+        // bisection bounds: lo is always under-estimate, hi is always over-estimate.
+        // start with the tightest bracket we can establish cheaply.
+        let mut lo = 0.0_f64;
+        let mut hi = max_secs;
+
+        // hybrid Newton / bisection: find Δt such that
+        //   f(Δt) = energy_integral(from, Δt) - ws_remaining = 0
+        //
+        // at each step we prefer the Newton update (fast, quadratic convergence),
+        // but fall back to the bisection midpoint when Newton would step outside
+        // the known bracket or when f'(Δt) is zero (zero-power night-time region).
+        // this prevents the original code from halting prematurely when the
+        // predicted power at the endpoint is zero.
+        for _ in 0..40 {
             let f = self.energy_integral(from_when, delta) - ws_remaining;
+
+            // tighten the bracket around the root
+            if f < 0.0 {
+                lo = lo.max(delta);
+            } else {
+                hi = hi.min(delta);
+            }
+
+            if hi - lo < 1.0 {
+                // bracket is within 1-second precision
+                break;
+            }
+
             let future = from_when + Duration::from_secs_f64(delta);
             let f_prime = self.predict_discharging_power_at(future);
 
-            if f_prime <= 0.0 {
+            let next = if f_prime > 0.0 {
+                let newton = delta - f / f_prime;
+                if newton > lo && newton < hi {
+                    newton
+                } else {
+                    // Newton stepped outside the bracket; bisect instead
+                    (lo + hi) * 0.5
+                }
+            } else {
+                // zero-power region at the endpoint: bisect toward lo
+                (lo + hi) * 0.5
+            };
+
+            if (next - delta).abs() < 1.0 {
                 break;
             }
 
-            let step = f / f_prime;
-            delta -= step;
-            delta = delta.clamp(0.0, max_secs);
-
-            if step.abs() < 1.0 {
-                // converged to within 1-second precision
-                break;
-            }
+            delta = next;
         }
 
         let elapsed = Duration::from_secs_f64(delta);
