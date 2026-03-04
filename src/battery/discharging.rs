@@ -25,6 +25,14 @@ const TIME_SLOTS_PER_DAY: u32 = TIME_SLOTS_PER_HOUR * 24;
 const TIME_SLOTS_PER_WEEK: u32 = TIME_SLOTS_PER_DAY * 7;
 const MINUTES_PER_TIME_SLOT: u32 = 60 / TIME_SLOTS_PER_HOUR;
 
+/// Returns the default (zero-initialised) Fourier coefficient array.
+///
+/// Used as the serde `default` function for fields that may be absent in
+/// profiles saved before the Fourier model was introduced.
+fn default_coeffs() -> [f64; HARMONICS] {
+    [0.0; HARMONICS]
+}
+
 /// Determines how much new power readings affect historial averages.
 ///
 /// Maintains about a month of readings per slot.
@@ -43,6 +51,14 @@ pub struct DischargeProfile {
     #[serde(with = "BigArray")]
     weekly_averages: [f64; TIME_SLOTS_PER_WEEK as usize],
 
+    /// Fourier cosine coefficients for the weekly power-usage cycle.
+    #[serde(with = "BigArray", default = "default_coeffs")]
+    cosine_coeffs: [f64; HARMONICS],
+
+    /// Fourier sine coefficients for the weekly power-usage cycle.
+    #[serde(with = "BigArray", default = "default_coeffs")]
+    sine_coeffs: [f64; HARMONICS],
+
     /// The last time history was persisted to disk.
     #[serde(skip)]
     last_save: DateTime<Local>,
@@ -58,6 +74,8 @@ impl Default for DischargeProfile {
             ema_power: Default::default(),
             daily_averages: [0.0; TIME_SLOTS_PER_DAY as usize],
             weekly_averages: [0.0; TIME_SLOTS_PER_WEEK as usize],
+            cosine_coeffs: default_coeffs(),
+            sine_coeffs: default_coeffs(),
             last_save: Local::now(),
             discharging_statistics: Default::default(),
         }
