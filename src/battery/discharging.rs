@@ -4,11 +4,11 @@
 use std::{fs, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
-use chrono::{DateTime, Datelike, Local, TimeDelta, Timelike};
+use chrono::{DateTime, Datelike, Local, Timelike};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use crate::battery::{ChargingStatus, STATISTICS_ALPHA, sysfs::SysfsReading};
+use crate::battery::{ChargingStatus, SAVE_INTERVAL, STATISTICS_ALPHA, sysfs::SysfsReading};
 
 /// Number of Fourier harmonics used to model the weekly power-usage cycle.
 ///
@@ -84,7 +84,7 @@ impl DischargeProfile {
 
         // save state if 5 minutes or more have passed
         let now = Local::now();
-        if now.signed_duration_since(self.last_save) >= TimeDelta::minutes(5) {
+        if now.signed_duration_since(self.last_save) >= SAVE_INTERVAL {
             if let Err(e) = self.save_to_disk() {
                 log::error!("couldn't save discharge profile: {e}");
             } else {
