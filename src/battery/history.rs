@@ -229,23 +229,33 @@ fn get_slots(when: DateTime<Local>) -> (u32, u32) {
 
 #[derive(Default)]
 struct DischargingStatistics {
-    /// All timestamps (in seconds) of the predicted time-to-empty.
-    time_to_empty_estimates: Vec<f64>,
+    /// Exponential moving average of predicted time-to-empty timestamps
+    /// (seconds).
+    ema: f64,
+
+    /// EMA of the squared deviation from `ema`, used as a variance estimate.
+    variance_ema: f64,
+
+    /// Whether `ema` has been seeded with at least one value.
+    initialized: bool,
 }
 
 impl DischargingStatistics {
     fn update(&mut self, new_time_to_empty_timestamp: i64) {
-        self.time_to_empty_estimates
-            .push(new_time_to_empty_timestamp as f64);
+        let value = new_time_to_empty_timestamp as f64;
 
-        let count = self.time_to_empty_estimates.len() as f64;
-        let mean = self.time_to_empty_estimates.iter().sum::<f64>() / count;
-        let squared_differences = self
-            .time_to_empty_estimates
-            .iter()
-            .map(|x| (x - mean) * (x - mean));
-        let variance = squared_differences.sum::<f64>() / count;
-        let standard_deviation = variance.sqrt();
+        if !self.initialized {
+            self.ema = value;
+            self.initialized = true;
+            // variance is undefined for the first sample; skip logging it
+        } else {
+            self.ema = self.ema * (1.0 - LEARNING_RATE) + value * LEARNING_RATE;
+            let diff = value - self.ema;
+            self.variance_ema =
+                self.variance_ema * (1.0 - LEARNING_RATE) + (diff * diff) * LEARNING_RATE;
+        }
+
+        let standard_deviation = self.variance_ema.sqrt();
 
         log::debug!("-----discharging statistics--------------------");
         if let Some(new_utc) = DateTime::from_timestamp(new_time_to_empty_timestamp, 0) {
@@ -254,22 +264,28 @@ impl DischargingStatistics {
                 DateTime::<Local>::from(new_utc)
             );
         }
-        if let Some(mean_utc) = DateTime::from_timestamp(mean as i64, 0) {
+        if let Some(mean_utc) = DateTime::from_timestamp(self.ema as i64, 0) {
             log::debug!(
                 "time-to-empty estimate mean: {}",
                 DateTime::<Local>::from(mean_utc)
             );
         }
 
-        log::debug!("                   variance: {:>12.1} sec^2", variance);
+        log::debug!(
+            "                   variance: {:>12.1} sec^2",
+            self.variance_ema
+        );
         log::debug!(
             "                          σ: {:>12.1} sec",
             standard_deviation
         );
-        log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
-        log::debug!(
-            "current estimate is {:.1} σ from mean estimate",
-            (new_time_to_empty_timestamp as f64 - mean).abs() / standard_deviation
-        );
+
+        if self.variance_ema > 0.0 {
+            log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
+            log::debug!(
+                "current estimate is {:.1} σ from mean estimate",
+                (value - self.ema).abs() / standard_deviation
+            );
+        }
     }
 }
