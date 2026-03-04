@@ -884,14 +884,14 @@ struct ChargeStatistics {
 impl ChargeStatistics {
     pub fn update(&mut self, reading: &SessionReading) {
         // convert to amps for maybe-more-readable statistics output
-        let current_a = reading.current_ua / 1_000_000.;
+        let current_ua = reading.current_ua;
         let now = reading.when;
 
         // if no current has been recorded yet, set it now and return now
         // (everything else will be zero anyway)
         if !self.initialized {
-            self.current_ema = current_a;
-            self.last_current_a = current_a;
+            self.current_ema = current_ua;
+            self.last_current_a = current_ua;
             self.last_time = now;
             self.initialized = true;
             return;
@@ -899,30 +899,30 @@ impl ChargeStatistics {
 
         // update current (I) statistics
         self.current_ema =
-            self.current_ema * (1.0 - STATISTICS_ALPHA) + current_a * STATISTICS_ALPHA;
+            self.current_ema * (1.0 - STATISTICS_ALPHA) + current_ua * STATISTICS_ALPHA;
 
         // variance is the mean of differences squared between actual values and the
         // mean value of the data series
-        let diff_now = current_a - self.current_ema;
+        let diff_now = current_ua - self.current_ema;
         let diff_squared = diff_now * diff_now;
         self.current_variance =
             self.current_variance * (1.0 - STATISTICS_ALPHA) + (diff_squared * STATISTICS_ALPHA);
 
         log::debug!("-----charging statistics--------------------");
-        log::debug!("               current_now: {:>12.1}  A", current_a);
-        log::debug!("               current_ema: {:>12.1}  A", self.current_ema);
+        log::debug!("               current_now: {:>16.1}  µA", current_ua);
+        log::debug!("               current_ema: {:>16.1}  µA", self.current_ema);
         log::debug!(
-            "          current_variance: {:>12.1}  A^2",
+            "          current_variance: {:>16.1}  µA^2",
             self.current_variance
         );
         log::debug!(
-            "current_standard_deviation: {:>12.1}  A",
+            "current_standard_deviation: {:>16.1}  µA",
             self.current_variance.sqrt()
         );
 
         // update slope statistics, per percentage
         let slope_now = if self.last_time != now {
-            (current_a - self.last_current_a) / (now - self.last_time).as_seconds_f64()
+            (current_ua - self.last_current_a) / (now - self.last_time).as_seconds_f64()
         } else {
             self.slope_ema
         };
@@ -936,17 +936,17 @@ impl ChargeStatistics {
         self.slope_variance =
             self.slope_variance * (1.0 - STATISTICS_ALPHA) + (diff_squared * STATISTICS_ALPHA);
 
-        log::debug!("                 slope_now: {:>12.1}  A / s", slope_now);
+        log::debug!("                 slope_now: {:>16.1}  µA / s", slope_now);
         log::debug!(
-            "                 slope_ema: {:>12.1}  A / s",
+            "                 slope_ema: {:>16.1}  µA / s",
             self.slope_ema
         );
         log::debug!(
-            "            slope_variance: {:>12.1} (A / s)^2",
+            "            slope_variance: {:>16.1} (µA / s)^2",
             self.slope_variance
         );
         log::debug!(
-            "  slope_standard_deviation: {:>12.1}  A / s",
+            "  slope_standard_deviation: {:>16.1}  µA / s",
             self.slope_variance.sqrt()
         );
         if self.current_variance > 0.0 || self.slope_variance > 0.0 {
@@ -954,19 +954,19 @@ impl ChargeStatistics {
         }
         if self.current_variance > 0.0 {
             log::debug!(
-                "current now is {:>12.1} σ from current ema",
-                (current_a - self.current_ema).abs() / self.current_variance.sqrt(),
+                "current now is {:>5.1} σ from current ema",
+                (current_ua - self.current_ema).abs() / self.current_variance.sqrt(),
             );
         }
         if self.slope_variance > 0.0 {
             log::debug!(
-                "  slope now is {:>12.1} σ from slope ema",
+                "  slope now is {:>5.1} σ from slope ema",
                 (slope_now - self.slope_ema).abs() / self.slope_variance.sqrt(),
             );
         }
 
         // finally, update stats
-        self.last_current_a = current_a;
+        self.last_current_a = current_ua;
         self.last_time = now;
     }
 }
