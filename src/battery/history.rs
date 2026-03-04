@@ -248,6 +248,12 @@ impl DischargingStatistics {
         let standard_deviation = variance.sqrt();
 
         log::debug!("-----discharging statistics--------------------");
+        if let Some(new_utc) = DateTime::from_timestamp(new_time_to_empty_timestamp, 0) {
+            log::debug!(
+                " time-to-empty estimate now: {}",
+                DateTime::<Local>::from(new_utc)
+            );
+        }
         if let Some(mean_utc) = DateTime::from_timestamp(mean as i64, 0) {
             log::debug!(
                 "time-to-empty estimate mean: {}",
@@ -255,13 +261,15 @@ impl DischargingStatistics {
             );
         }
 
+        log::debug!("                   variance: {:>12.1} sec^2", variance);
         log::debug!(
-            "                   variance: {:>8.1} min^2",
-            variance / (60. * 60.)
+            "                          σ: {:>12.1} sec",
+            standard_deviation
         );
+        log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
         log::debug!(
-            "                          σ: {:>8.1} min",
-            standard_deviation / 60.
+            "current estimate is {:.1} σ from mean estimate",
+            (new_time_to_empty_timestamp as f64 - mean).abs() / standard_deviation
         );
     }
 }
