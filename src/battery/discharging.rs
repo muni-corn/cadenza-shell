@@ -127,7 +127,10 @@ impl DischargeProfile {
     ///
     /// Evaluates the truncated Fourier series
     /// `P(t) = a₀ + Σₖ [aₖ cos(ωₖ t) + bₖ sin(ωₖ t)]`
-    /// and clamps the result to zero to prevent negative power predictions.
+    /// and clamps the result to `[0, 3·ema_power]`. The lower bound prevents
+    /// negative power predictions; the upper bound guards against residual
+    /// estimation noise producing wild over-predictions while still allowing
+    /// genuine high-power spikes.
     pub fn predict_discharging_power_at(&self, when: DateTime<Local>) -> f64 {
         let t = week_offset_secs(when);
         let mut power = self.ema_power;
@@ -138,34 +141,38 @@ impl DischargeProfile {
                 self.cosine_coeffs[k - 1] * angle.cos() + self.sine_coeffs[k - 1] * angle.sin();
         }
 
-        // clamp to non-negative: a fitted curve can dip below zero
-        power.max(0.0)
+        power.clamp(0.0, 3.0 * self.ema_power.max(f64::MIN_POSITIVE))
     }
 
-    /// Computes the exact integral of modeled power from week offset `t1` to
-    /// `t1 + delta_secs`, returning energy in watt-seconds.
+    /// Estimates the energy consumed, in watt-seconds, if the device draws
+    /// power according to the Fourier model from `from` for `delta_secs`
+    /// seconds.
     ///
-    /// Uses the closed-form antiderivative of each sinusoidal term:
-    /// `∫ aₖ cos(ω t) dt = (aₖ/ω) sin(ω t)`,
-    /// `∫ bₖ sin(ω t) dt = -(bₖ/ω) cos(ω t)`.
-    fn energy_integral(&self, t1: f64, delta_secs: f64) -> f64 {
-        let t2 = t1 + delta_secs;
-        let mut energy = self.ema_power * delta_secs;
+    /// Uses the midpoint rule with 1-minute steps so that the same clamped
+    /// prediction function drives both the integral and its derivative in
+    /// Newton's method, keeping them consistent.
+    fn energy_integral(&self, from: DateTime<Local>, delta_secs: f64) -> f64 {
+        const STEP_SECS: f64 = 60.0;
 
-        for k in 1..=HARMONICS {
-            let omega = 2.0 * std::f64::consts::PI * k as f64 / PERIOD_SECS;
-            let inv_omega = 1.0 / omega;
-            energy +=
-                self.cosine_coeffs[k - 1] * inv_omega * ((omega * t2).sin() - (omega * t1).sin());
-            energy -=
-                self.sine_coeffs[k - 1] * inv_omega * ((omega * t2).cos() - (omega * t1).cos());
+        let steps = (delta_secs / STEP_SECS).ceil() as u64;
+        if steps == 0 {
+            return 0.0;
+        }
+
+        let actual_step = delta_secs / steps as f64;
+        let half_step = Duration::from_secs_f64(actual_step * 0.5);
+        let mut energy = 0.0;
+
+        for i in 0..steps {
+            let mid = from + Duration::from_secs_f64(i as f64 * actual_step) + half_step;
+            energy += self.predict_discharging_power_at(mid) * actual_step;
         }
 
         energy
     }
 
-    /// Uses a closed-form Fourier energy integral with Newton's method to
-    /// determine how long it will take for the battery to deplete entirely.
+    /// Uses numerical energy integration with Newton's method to determine
+    /// how long it will take for the battery to deplete entirely.
     ///
     /// Capped at [`MAX_TTE`] (48 hours).
     pub fn predict_time_to_empty(
@@ -182,17 +189,16 @@ impl DischargeProfile {
         }
 
         let ws_remaining = wh_remaining * 3_600.0;
-        let t1 = week_offset_secs(from_when);
         let max_secs = MAX_TTE.as_secs_f64();
 
         // initial guess: linear estimate from overall EMA power draw
         let mut delta = (ws_remaining / self.ema_power).min(max_secs);
 
-        // Newton's method: find Δt such that energy_integral(t1, Δt) = ws_remaining.
-        //   f(Δt)  = E(t1, Δt) - ws_remaining
-        //   f'(Δt) = P(t1 + Δt)
+        // Newton's method: find Δt such that energy_integral(from, Δt) = ws_remaining.
+        //   f(Δt)  = E(from, Δt) - ws_remaining
+        //   f'(Δt) = P(from + Δt)
         for _ in 0..20 {
-            let f = self.energy_integral(t1, delta) - ws_remaining;
+            let f = self.energy_integral(from_when, delta) - ws_remaining;
             let future = from_when + Duration::from_secs_f64(delta);
             let f_prime = self.predict_discharging_power_at(future);
 
