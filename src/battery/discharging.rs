@@ -156,26 +156,23 @@ impl DischargeProfile {
         }
     }
 
-    /// Returns the historical average power usage, in watts, recorded at the
-    /// given time.
+    /// Returns the modeled power draw, in watts, at the given time.
+    ///
+    /// Evaluates the truncated Fourier series
+    /// `P(t) = a₀ + Σₖ [aₖ cos(ωₖ t) + bₖ sin(ωₖ t)]`
+    /// and clamps the result to zero to prevent negative power predictions.
     pub fn predict_discharging_power_at(&self, when: DateTime<Local>) -> f64 {
-        let (slot_of_day, slot_of_week) = get_slots(when);
-        let day_bucket = self.daily_averages[slot_of_day as usize];
-        let week_bucket = self.weekly_averages[slot_of_week as usize];
+        let t = week_offset_secs(when);
+        let mut power = self.ema_power;
 
-        let week_opt = if week_bucket == 0.0 {
-            None
-        } else {
-            Some(week_bucket)
-        };
+        for k in 1..=HARMONICS {
+            let angle = 2.0 * std::f64::consts::PI * k as f64 / PERIOD_SECS * t;
+            power +=
+                self.cosine_coeffs[k - 1] * angle.cos() + self.sine_coeffs[k - 1] * angle.sin();
+        }
 
-        let day_opt = if day_bucket == 0.0 {
-            None
-        } else {
-            Some(day_bucket)
-        };
-
-        week_opt.or(day_opt).unwrap_or(self.ema_power)
+        // clamp to non-negative: a fitted curve can dip below zero
+        power.max(0.0)
     }
 
     /// Uses integration over stored historical time-slot data to determine how
