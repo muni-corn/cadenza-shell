@@ -75,13 +75,13 @@ impl DischargeProfile {
 
         // save state if 5 minutes or more have passed
         let now = Local::now();
-        if now.signed_duration_since(self.last_save) >= TimeDelta::minutes(5)
-            && let Err(e) = self.save_to_disk()
-        {
-            log::error!("couldn't save numbers: {e}");
+        if now.signed_duration_since(self.last_save) >= TimeDelta::minutes(5) {
+            if let Err(e) = self.save_to_disk() {
+                log::error!("couldn't save discharge profile: {e}");
+            } else {
+                self.last_save = now;
+            }
         }
-
-        self.last_save = now;
     }
 
     fn update_discharging(&mut self, power_now: f64) {
