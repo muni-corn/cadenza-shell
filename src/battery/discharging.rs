@@ -18,21 +18,6 @@ const HARMONICS: usize = 42;
 /// Duration of one full model period: one week in seconds.
 const PERIOD_SECS: f64 = 7.0 * 24.0 * 3600.0;
 
-/// Records 15-minute time slots.
-const TIME_SLOTS_PER_HOUR: u32 = 4;
-
-const TIME_SLOTS_PER_DAY: u32 = TIME_SLOTS_PER_HOUR * 24;
-const TIME_SLOTS_PER_WEEK: u32 = TIME_SLOTS_PER_DAY * 7;
-const MINUTES_PER_TIME_SLOT: u32 = 60 / TIME_SLOTS_PER_HOUR;
-
-/// Returns the default (zero-initialised) Fourier coefficient array.
-///
-/// Used as the serde `default` function for fields that may be absent in
-/// profiles saved before the Fourier model was introduced.
-fn default_coeffs() -> [f64; HARMONICS] {
-    [0.0; HARMONICS]
-}
-
 /// Determines how much new power readings affect historial averages.
 ///
 /// Maintains about a month of readings per slot.
@@ -43,20 +28,12 @@ pub struct DischargeProfile {
     /// Exponential moving average of instantaneous power draw, in watts.
     ema_power: f64,
 
-    /// Average power usage per day, in watts.
-    #[serde(with = "BigArray")]
-    daily_averages: [f64; TIME_SLOTS_PER_DAY as usize],
-
-    /// Average power usage per week, in watts.
-    #[serde(with = "BigArray")]
-    weekly_averages: [f64; TIME_SLOTS_PER_WEEK as usize],
-
     /// Fourier cosine coefficients for the weekly power-usage cycle.
-    #[serde(with = "BigArray", default = "default_coeffs")]
+    #[serde(with = "BigArray")]
     cosine_coeffs: [f64; HARMONICS],
 
     /// Fourier sine coefficients for the weekly power-usage cycle.
-    #[serde(with = "BigArray", default = "default_coeffs")]
+    #[serde(with = "BigArray")]
     sine_coeffs: [f64; HARMONICS],
 
     /// The last time history was persisted to disk.
@@ -72,10 +49,8 @@ impl Default for DischargeProfile {
     fn default() -> Self {
         Self {
             ema_power: Default::default(),
-            daily_averages: [0.0; TIME_SLOTS_PER_DAY as usize],
-            weekly_averages: [0.0; TIME_SLOTS_PER_WEEK as usize],
-            cosine_coeffs: default_coeffs(),
-            sine_coeffs: default_coeffs(),
+            cosine_coeffs: [0.0; HARMONICS],
+            sine_coeffs: [0.0; HARMONICS],
             last_save: Local::now(),
             discharging_statistics: Default::default(),
         }
@@ -114,33 +89,11 @@ impl DischargeProfile {
     fn update_discharging(&mut self, power_now: f64) {
         let now = Local::now();
 
-        let (slot_of_day, slot_of_week) = get_slots(now);
-
-        // get the actual buckets we'll edit
-        let day_bucket = &mut self.daily_averages[slot_of_day as usize];
-        let week_bucket = &mut self.weekly_averages[slot_of_week as usize];
-
         // seed the EMA on first observation; otherwise apply moving average
         if self.ema_power == 0.0 {
             self.ema_power = power_now;
         } else {
             self.ema_power = self.ema_power * (1.0 - LEARNING_RATE) + power_now * LEARNING_RATE;
-        }
-
-        // set the average in this day bucket to the overall ema if it's never
-        // been set before; otherwise, calculate the moving average
-        if *day_bucket == 0.0 {
-            *day_bucket = self.ema_power;
-        } else {
-            *day_bucket = *day_bucket * (1.0 - LEARNING_RATE) + power_now * LEARNING_RATE;
-        }
-
-        // set the average in this week bucket to the daily average if it's never
-        // been set before; otherwise, calculate the moving average
-        if *week_bucket == 0.0 {
-            *week_bucket = *day_bucket;
-        } else {
-            *week_bucket = *week_bucket * (1.0 - LEARNING_RATE) + power_now * LEARNING_RATE;
         }
 
         // update Fourier coefficients via online EMA:
@@ -190,12 +143,13 @@ impl DischargeProfile {
             return Duration::ZERO;
         }
 
-        let hours_per_slot = 1.0 / TIME_SLOTS_PER_HOUR as f64;
+        // 15-minute slots, 672 per week (4 slots/hour × 24 h × 7 days)
+        let hours_per_slot = 0.25_f64;
         let mut elapsed = Duration::ZERO;
 
         // step forward slot by slot until energy runs out or a week has passed
         // (guard against infinite loops when history is zero everywhere)
-        for _ in 0..TIME_SLOTS_PER_WEEK {
+        for _ in 0..672_u32 {
             let power_watts = self.predict_discharging_power_at(from_when + elapsed);
 
             let energy_this_slot = power_watts * hours_per_slot;
@@ -203,13 +157,12 @@ impl DischargeProfile {
                 // battery drains partway through this slot — interpolate the
                 // fraction of the slot consumed
                 let fraction = wh_remaining / energy_this_slot;
-                let slot_minutes = MINUTES_PER_TIME_SLOT as f64 * fraction;
-                elapsed += Duration::from_secs_f64(slot_minutes * 60.);
+                elapsed += Duration::from_secs_f64(900.0 * fraction);
                 break;
             }
 
             wh_remaining -= energy_this_slot;
-            elapsed += Duration::from_mins(MINUTES_PER_TIME_SLOT.into());
+            elapsed += Duration::from_mins(15);
         }
 
         self.discharging_statistics
@@ -257,18 +210,6 @@ fn week_offset_secs(when: DateTime<Local>) -> f64 {
     let second = when.second() as f64;
 
     day_of_week * 86_400.0 + hour * 3_600.0 + minute * 60.0 + second
-}
-
-/// Returns the day and week slot that correspond to the given date and time.
-fn get_slots(when: DateTime<Local>) -> (u32, u32) {
-    let slot_of_hour = when.minute() / MINUTES_PER_TIME_SLOT;
-    let hour_of_day = when.hour();
-    let slot_of_day = hour_of_day * TIME_SLOTS_PER_HOUR + slot_of_hour;
-
-    let day_of_week = when.weekday().num_days_from_monday();
-    let slot_of_week = day_of_week * TIME_SLOTS_PER_DAY + slot_of_day;
-
-    (slot_of_day, slot_of_week)
 }
 
 #[derive(Default)]
