@@ -627,32 +627,6 @@ fn predict_cc_plus_cv(
     Some(Duration::from_secs_f64(cc_secs + cv_secs))
 }
 
-// ── legacy fallback (used by history.rs when no CC/CV session is active) ─────
-
-/// Predict the time until the battery is full using the linear-taper
-/// coefficient model.
-///
-/// Assumes `power(p) = coefficient × (1 − p)`. Integrating over `[p_now, 1]`:
-///
-/// ```text
-/// time = (wh_capacity / coefficient) × ln(1 / (1 − p_now))
-/// ```
-///
-/// Returns [`Duration::MAX`] when the battery is already full or no
-/// coefficient has been learned yet.
-pub fn predict_time_to_full(
-    percentage_now: f64,
-    wh_capacity: f64,
-    charging_coefficient: f64,
-) -> Duration {
-    if percentage_now >= 1.0 || charging_coefficient == 0.0 {
-        return Duration::MAX;
-    }
-    // analytical integral of 1/power dp from p_now to 1
-    let hours_to_full = (wh_capacity / charging_coefficient) * (1.0 / (1.0 - percentage_now)).ln();
-    Duration::from_secs_f64(hours_to_full * 3600.0)
-}
-
 // ── tests ─────────────────────────────────────────────────────────────────────
 
 #[cfg(test)]
@@ -832,33 +806,6 @@ mod tests {
     }
 
     // ── predict_time_to_full tests ────────────────────────────────────────────
-
-    #[test]
-    fn legacy_predict_returns_max_when_full() {
-        assert_eq!(predict_time_to_full(1.0, 50.0, 10.0), Duration::MAX);
-    }
-
-    #[test]
-    fn legacy_predict_returns_max_with_no_coefficient() {
-        assert_eq!(predict_time_to_full(0.5, 50.0, 0.0), Duration::MAX);
-    }
-
-    #[test]
-    fn legacy_predict_varies_with_percentage() {
-        // the taper model power = coeff*(1-p) means charging slows dramatically
-        // near full: at 90% the remaining 10% takes LONGER than the 50% at 50%
-        // because the average power in the last stretch is very low.
-        // the integral gives time = (wh/coeff) * ln(1/(1-p)), so t(0.9) > t(0.5).
-        let t50 = predict_time_to_full(0.5, 50.0, 10.0);
-        let t90 = predict_time_to_full(0.9, 50.0, 10.0);
-        assert!(
-            t90 > t50,
-            "t90={t90:?} should be greater than t50={t50:?} (taper model)"
-        );
-        // sanity check that both are finite and positive
-        assert!(t50.as_secs_f64() > 0.0);
-        assert!(t90.as_secs_f64().is_finite());
-    }
 
     #[test]
     fn cv_prediction_uses_active_fit() {

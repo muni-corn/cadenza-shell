@@ -225,26 +225,34 @@ fn compute_time_remaining(
     charge_profile: &ChargeProfile,
     power_history: &HistoricalPowerUsage,
 ) -> Duration {
-    if reading.status == ChargingStatus::Charging
-        && let Some(session) = active_session
-    {
-        let current_ua = reading.current_now.unsigned_abs() as f64;
-        let charge_now_uah = reading
-            .capacity_now
-            .as_microampere_hours(reading.voltage_now) as f64;
-        let charge_full_uah = reading
-            .capacity_full
-            .as_microampere_hours(reading.voltage_now) as f64;
+    match reading.status {
+        ChargingStatus::Charging => {
+            if let Some(session) = active_session {
+                let current_ua = reading.current_now.unsigned_abs() as f64;
+                let charge_now_uah = reading
+                    .capacity_now
+                    .as_microampere_hours(reading.voltage_now)
+                    as f64;
+                let charge_full_uah = reading
+                    .capacity_full
+                    .as_microampere_hours(reading.voltage_now)
+                    as f64;
 
-        return predict_time_to_full_cc_cv(
-            session,
-            charge_profile,
-            current_ua,
-            charge_now_uah,
-            charge_full_uah,
-        );
+                predict_time_to_full_cc_cv(
+                    session,
+                    charge_profile,
+                    current_ua,
+                    charge_now_uah,
+                    charge_full_uah,
+                )
+            } else {
+                log::warn!("there is no active charging session to predict time remaining");
+                Duration::MAX
+            }
+        }
+        ChargingStatus::Discharging => {
+            power_history.predict_time_to_empty(Local::now(), reading.remaining_wh())
+        }
+        _ => Duration::MAX,
     }
-
-    // fallback: use the legacy history-based prediction
-    power_history.predict_time_remaining(reading, Local::now())
 }

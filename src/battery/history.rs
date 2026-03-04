@@ -8,7 +8,7 @@ use chrono::{DateTime, Datelike, Local, TimeDelta, Timelike};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use crate::battery::{ChargingStatus, charging, sysfs::SysfsReading};
+use crate::battery::{ChargingStatus, sysfs::SysfsReading};
 
 /// Records 15-minute time slots.
 const TIME_SLOTS_PER_HOUR: u32 = 4;
@@ -32,10 +32,6 @@ pub struct HistoricalPowerUsage {
     #[serde(with = "BigArray")]
     weekly_averages: [f64; TIME_SLOTS_PER_WEEK as usize],
 
-    /// The value of the slope that determines how much power will be drawn
-    /// based on percentage while charging.
-    charging_coefficient: f64,
-
     /// The last time history was persisted to disk.
     #[serde(skip)]
     last_save: DateTime<Local>,
@@ -47,7 +43,6 @@ impl Default for HistoricalPowerUsage {
             overall_discharging_average: Default::default(),
             daily_averages: [0.0; TIME_SLOTS_PER_DAY as usize],
             weekly_averages: [0.0; TIME_SLOTS_PER_WEEK as usize],
-            charging_coefficient: Default::default(),
             last_save: Local::now(),
         }
     }
@@ -60,17 +55,15 @@ impl HistoricalPowerUsage {
         let power_now = reading.power_watts();
 
         match reading.status {
-            ChargingStatus::Charging => {
-                if let Some(percentage_now) = reading.percentage() {
-                    self.update_charging(power_now, percentage_now)
-                }
-            }
             ChargingStatus::Discharging => {
                 self.update_discharging(power_now);
             }
 
             // do nothing otherwise
-            _ => return,
+            _ => {
+                log::warn!("update called in HistoricalPowerUsage while not charging");
+                return;
+            }
         }
 
         // save state if 5 minutes or more have passed
@@ -120,28 +113,6 @@ impl HistoricalPowerUsage {
         }
     }
 
-    fn update_charging(&mut self, power_now: f64, percentage_now: f64) {
-        if percentage_now >= 1.0 {
-            // don't update if the battery is full
-            return;
-        }
-
-        // if charging rate is linear (y = mx) based on percentage, then
-        // power = coefficient * (1.0 - percentage).
-        //
-        // to determine the coefficient, then,
-        // coefficient = power_now / (1.0 - percentage_now)
-        let new_coefficient = power_now / (1.0 - percentage_now);
-
-        // add it to the weighted average (or just set the value if the average
-        // doesn't exist)
-        self.charging_coefficient = if self.charging_coefficient == 0.0 {
-            new_coefficient
-        } else {
-            self.charging_coefficient * (1.0 - LEARNING_RATE) + new_coefficient * LEARNING_RATE
-        }
-    }
-
     /// Returns the historical average power usage, in watts, recorded at the
     /// given time.
     pub fn predict_discharging_power_at(&self, when: DateTime<Local>) -> f64 {
@@ -166,45 +137,17 @@ impl HistoricalPowerUsage {
             .unwrap_or(self.overall_discharging_average)
     }
 
-    /// Returns the amount of time until the battery will be either full or
-    /// empty based on the given sysfs reading.
-    pub fn predict_time_remaining(
-        &self,
-        reading: &SysfsReading,
-        from_when: DateTime<Local>,
-    ) -> Duration {
-        match reading.status {
-            ChargingStatus::Charging => {
-                let Some(percentage_now) = reading.percentage() else {
-                    return Duration::ZERO;
-                };
-
-                let wh_capacity = reading.capacity_wh();
-
-                self.predict_time_to_full(percentage_now, wh_capacity)
-            }
-            ChargingStatus::Discharging => {
-                let wh_remaining = reading.remaining_wh();
-                self.predict_time_to_empty(from_when, wh_remaining)
-            }
-            _ => Duration::ZERO,
-        }
-    }
-
-    /// Uses the stored charging coefficient and current percentage to determine
-    /// when the battery will be full. Delegates to
-    /// [`charging::predict_time_to_full`].
-    fn predict_time_to_full(&self, percentage_now: f64, wh_capacity: f64) -> Duration {
-        charging::predict_time_to_full(percentage_now, wh_capacity, self.charging_coefficient)
-    }
-
     /// Uses integration over stored historical time-slot data to determine how
     /// long it will take for the battery to deplete entirely.
     ///
     /// Steps forward through 15-minute slots starting from `from_when`,
     /// subtracting the predicted power draw each slot until `wh_remaining`
     /// reaches zero.
-    fn predict_time_to_empty(&self, from_when: DateTime<Local>, mut wh_remaining: f64) -> Duration {
+    pub fn predict_time_to_empty(
+        &self,
+        from_when: DateTime<Local>,
+        mut wh_remaining: f64,
+    ) -> Duration {
         if wh_remaining == 0.0 {
             return Duration::ZERO;
         }
