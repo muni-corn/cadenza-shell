@@ -268,7 +268,7 @@ impl CvFit {
     /// Compute the fitted initial current `I₀` (µA) at `t=0` (the transition
     /// point).
     ///
-    /// Returns `None` under the same conditions as [`Self::tau_secs`].
+    /// Returns an error under the same conditions as [`Self::tau_secs`].
     pub fn i0_ua(&self) -> Result<f64> {
         if !self.is_ready() {
             anyhow::bail!("cv fit is not ready")
