@@ -10,7 +10,7 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 
-use super::{history::get_state_directory, sysfs::SysfsReading};
+use super::{discharging::get_state_directory, sysfs::SysfsReading};
 
 /// Learning rate for exponential moving averages applied to [`ChargeProfile`]
 /// fields after each completed charging session.

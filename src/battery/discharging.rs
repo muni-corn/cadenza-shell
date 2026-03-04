@@ -23,7 +23,7 @@ const MINUTES_PER_TIME_SLOT: u32 = 60 / TIME_SLOTS_PER_HOUR;
 const LEARNING_RATE: f64 = 1. / 360.;
 
 #[derive(Deserialize, Serialize)]
-pub struct HistoricalPowerUsage {
+pub struct DischargeProfile {
     overall_discharging_average: f64,
 
     /// Average power usage per day, in watts.
@@ -43,7 +43,7 @@ pub struct HistoricalPowerUsage {
     discharging_statistics: DischargingStatistics,
 }
 
-impl Default for HistoricalPowerUsage {
+impl Default for DischargeProfile {
     fn default() -> Self {
         Self {
             overall_discharging_average: Default::default(),
@@ -55,7 +55,7 @@ impl Default for HistoricalPowerUsage {
     }
 }
 
-impl HistoricalPowerUsage {
+impl DischargeProfile {
     /// Updates historical records based on a current reading of the device's
     /// power state.
     pub fn update(&mut self, reading: &SysfsReading) {
@@ -68,7 +68,7 @@ impl HistoricalPowerUsage {
 
             // do nothing otherwise
             _ => {
-                log::warn!("update called in HistoricalPowerUsage while not charging");
+                log::warn!("update called in DischargeProfile while not charging");
                 return;
             }
         }

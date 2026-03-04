@@ -6,7 +6,7 @@ use tokio::io::unix::AsyncFd;
 use super::{BATTERY_STATE, BatteryState, ChargingStatus};
 use crate::battery::{
     charging::{ChargeProfile, ChargingSession, SessionReading, predict_time_to_full_cc_cv},
-    history::HistoricalPowerUsage,
+    discharging::DischargeProfile,
     sysfs::{SysfsReading, detect_battery_path, read_battery_sysfs},
     udev::{create_battery_monitor, is_battery_change},
 };
@@ -22,14 +22,14 @@ pub async fn start_battery_service() {
     };
 
     // load or create power usage history
-    let mut power_history = match HistoricalPowerUsage::read_from_disk() {
+    let mut power_history = match DischargeProfile::read_from_disk() {
         Ok(p) => {
             log::info!("loaded power history from previous session");
             p
         }
         Err(e) => {
             log::info!("creating new power usage log: {}", e);
-            HistoricalPowerUsage::default()
+            DischargeProfile::default()
         }
     };
 
@@ -94,7 +94,7 @@ pub async fn start_battery_service() {
 async fn watch_battery(
     battery_path: &Path,
     async_fd: AsyncFd<udev::MonitorSocket>,
-    power_history: &mut HistoricalPowerUsage,
+    power_history: &mut DischargeProfile,
     charge_profile: &mut ChargeProfile,
     active_session: &mut Option<ChargingSession>,
 ) -> Option<!> {
@@ -154,7 +154,7 @@ async fn watch_battery(
 /// Read the latest battery stats from sysfs and update [`BATTERY_STATE`].
 fn update_battery_state(
     battery_path: &Path,
-    power_history: &mut HistoricalPowerUsage,
+    power_history: &mut DischargeProfile,
     charge_profile: &mut ChargeProfile,
     active_session: &mut Option<ChargingSession>,
 ) {
@@ -225,7 +225,7 @@ fn compute_time_remaining(
     reading: &SysfsReading,
     active_session: Option<&ChargingSession>,
     charge_profile: &ChargeProfile,
-    power_history: &mut HistoricalPowerUsage,
+    power_history: &mut DischargeProfile,
 ) -> Duration {
     match reading.status {
         ChargingStatus::Charging => {
