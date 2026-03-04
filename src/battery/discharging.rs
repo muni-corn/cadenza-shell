@@ -12,8 +12,11 @@ use crate::battery::{ChargingStatus, STATISTICS_ALPHA, sysfs::SysfsReading};
 
 /// Number of Fourier harmonics used to model the weekly power-usage cycle.
 ///
-/// 42 harmonics resolve variations down to a 4-hour period (168 h / 42).
-const HARMONICS: usize = 42;
+/// 12 harmonics resolve variations down to a 14-hour period (168 h / 12),
+/// which is enough to capture daily and half-day usage patterns while keeping
+/// the serialized state small. Any existing state with a different array size
+/// will fail to deserialize and fall back to a fresh profile.
+const HARMONICS: usize = 12;
 
 /// Duration of one full model period: one week in seconds.
 const PERIOD_SECS: f64 = 7.0 * 24.0 * 3600.0;
@@ -22,9 +25,9 @@ const PERIOD_SECS: f64 = 7.0 * 24.0 * 3600.0;
 /// battery tile already displays "Until someday" for durations this long.
 const MAX_TTE: Duration = Duration::from_secs(48 * 3_600);
 
-/// Determines how much new power readings affect historial averages.
+/// Determines how much new power readings affect historical averages.
 ///
-/// Maintains about a month of readings per slot.
+/// Maintains roughly a month of readings before older observations decay.
 const LEARNING_RATE: f64 = 1. / 360.;
 
 #[derive(Deserialize, Serialize)]
