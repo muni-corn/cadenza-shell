@@ -225,6 +225,17 @@ pub(super) fn get_state_directory() -> Result<PathBuf> {
     Ok(cadenza_state)
 }
 
+/// Returns the number of seconds elapsed since Monday 00:00:00 local time in
+/// the current week.
+fn week_offset_secs(when: DateTime<Local>) -> f64 {
+    let day_of_week = when.weekday().num_days_from_monday() as f64;
+    let hour = when.hour() as f64;
+    let minute = when.minute() as f64;
+    let second = when.second() as f64;
+
+    day_of_week * 86_400.0 + hour * 3_600.0 + minute * 60.0 + second
+}
+
 /// Returns the day and week slot that correspond to the given date and time.
 fn get_slots(when: DateTime<Local>) -> (u32, u32) {
     let slot_of_hour = when.minute() / MINUTES_PER_TIME_SLOT;
