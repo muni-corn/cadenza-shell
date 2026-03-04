@@ -880,6 +880,8 @@ struct ChargeStatistics {
 
     last_current_a: f64,
     last_percentage: f64,
+
+    initialized: bool,
 }
 
 impl ChargeStatistics {
@@ -889,10 +891,11 @@ impl ChargeStatistics {
 
         // if no current has been recorded yet, set it now and return now
         // (everything else will be zero anyway)
-        if self.current_ema == 0.0 {
+        if !self.initialized {
             self.current_ema = current_a;
             self.last_current_a = current_a;
             self.last_percentage = percentage_now;
+            self.initialized = true;
             return;
         }
 
