@@ -142,6 +142,18 @@ impl DischargeProfile {
         } else {
             *week_bucket = *week_bucket * (1.0 - LEARNING_RATE) + power_now * LEARNING_RATE;
         }
+
+        // update Fourier coefficients via online EMA:
+        //   aₖ ← (1 - α) · aₖ + 2α · P · cos(ωₖ t)
+        //   bₖ ← (1 - α) · bₖ + 2α · P · sin(ωₖ t)
+        let t = week_offset_secs(now);
+        for k in 1..=HARMONICS {
+            let angle = 2.0 * std::f64::consts::PI * k as f64 / PERIOD_SECS * t;
+            self.cosine_coeffs[k - 1] = self.cosine_coeffs[k - 1] * (1.0 - LEARNING_RATE)
+                + 2.0 * power_now * angle.cos() * LEARNING_RATE;
+            self.sine_coeffs[k - 1] = self.sine_coeffs[k - 1] * (1.0 - LEARNING_RATE)
+                + 2.0 * power_now * angle.sin() * LEARNING_RATE;
+        }
     }
 
     /// Returns the historical average power usage, in watts, recorded at the
