@@ -407,3 +407,178 @@ impl DischargingStatistics {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use chrono::Local;
+
+    use super::*;
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    /// Return a [`DischargeProfile`] whose EMA power is `power_watts` and
+    /// whose Fourier coefficients are all zero (i.e., constant-power model).
+    fn constant_power_profile(power_watts: f64) -> DischargeProfile {
+        let mut p = DischargeProfile::default();
+        p.ema_power = power_watts;
+        p
+    }
+
+    /// Drive `profile` with `n` observations of `power_watts` sampled at 15-
+    /// minute intervals starting from `base`, and return the trained profile.
+    fn train_constant(
+        mut profile: DischargeProfile,
+        base: DateTime<Local>,
+        power_watts: f64,
+        n: usize,
+    ) -> DischargeProfile {
+        for i in 0..n {
+            let when = base + Duration::from_secs(i as u64 * 15 * 60);
+            // bypass the ChargingStatus check and call the inner fn directly
+            let t = week_offset_secs(when);
+            let power_now = power_watts;
+
+            if profile.ema_power == 0.0 {
+                profile.ema_power = power_now;
+            } else {
+                profile.ema_power =
+                    profile.ema_power * (1.0 - LEARNING_RATE) + power_now * LEARNING_RATE;
+            }
+
+            let deviation = power_now - profile.ema_power;
+            for k in 1..=HARMONICS {
+                let angle = 2.0 * std::f64::consts::PI * k as f64 / PERIOD_SECS * t;
+                profile.cosine_coeffs[k - 1] = profile.cosine_coeffs[k - 1] * (1.0 - LEARNING_RATE)
+                    + 2.0 * deviation * angle.cos() * LEARNING_RATE;
+                profile.sine_coeffs[k - 1] = profile.sine_coeffs[k - 1] * (1.0 - LEARNING_RATE)
+                    + 2.0 * deviation * angle.sin() * LEARNING_RATE;
+            }
+        }
+        profile
+    }
+
+    // ── predict_discharging_power_at ──────────────────────────────────────────
+
+    #[test]
+    fn predict_power_zero_coefficients_returns_ema() {
+        // when all Fourier coefficients are zero the series collapses to a₀ = ema_power
+        let power = 12.5;
+        let profile = constant_power_profile(power);
+        let when = Local::now();
+        let predicted = profile.predict_discharging_power_at(when);
+        assert!(
+            (predicted - power).abs() < 1e-9,
+            "expected {power} W, got {predicted} W"
+        );
+    }
+
+    #[test]
+    fn predict_power_clamped_to_zero_minimum() {
+        // even with wildly negative coefficients the prediction must be non-negative
+        let mut profile = constant_power_profile(1.0);
+        // force a large negative perturbation into the first coefficient
+        profile.cosine_coeffs[0] = -1000.0;
+        let predicted = profile.predict_discharging_power_at(Local::now());
+        assert!(predicted >= 0.0, "prediction was negative: {predicted}");
+    }
+
+    #[test]
+    fn predict_power_clamped_to_3x_ema_maximum() {
+        let ema = 10.0;
+        let mut profile = constant_power_profile(ema);
+        // force a massive positive perturbation
+        profile.cosine_coeffs[0] = 1_000.0;
+        let predicted = profile.predict_discharging_power_at(Local::now());
+        assert!(
+            predicted <= 3.0 * ema + 1e-9,
+            "prediction exceeded 3x ema: {predicted}"
+        );
+    }
+
+    // ── energy_integral ───────────────────────────────────────────────────────
+
+    #[test]
+    fn energy_integral_constant_power_matches_analytic() {
+        // for zero coefficients, integral = ema_power * delta_secs
+        let power = 8.0;
+        let profile = constant_power_profile(power);
+        let from = Local::now();
+        let delta = 3_600.0; // 1 hour
+        let energy = profile.energy_integral(from, delta);
+        let expected = power * delta;
+        // allow up to 0.1% error from midpoint-rule approximation
+        assert!(
+            (energy - expected).abs() / expected < 0.001,
+            "integral {energy:.1} Ws expected {expected:.1} Ws"
+        );
+    }
+
+    #[test]
+    fn energy_integral_zero_delta_returns_zero() {
+        let profile = constant_power_profile(10.0);
+        let energy = profile.energy_integral(Local::now(), 0.0);
+        assert_eq!(energy, 0.0);
+    }
+
+    // ── predict_time_to_empty ─────────────────────────────────────────────────
+
+    #[test]
+    fn tte_zero_wh_returns_zero_duration() {
+        let mut profile = constant_power_profile(10.0);
+        let tte = profile.predict_time_to_empty(Local::now(), 0.0);
+        assert_eq!(tte, Duration::ZERO);
+    }
+
+    #[test]
+    fn tte_zero_ema_returns_max_tte() {
+        let mut profile = constant_power_profile(0.0);
+        let tte = profile.predict_time_to_empty(Local::now(), 30.0);
+        assert_eq!(tte, MAX_TTE);
+    }
+
+    #[test]
+    fn tte_constant_power_matches_analytic() {
+        // with zero Fourier coefficients TTE = wh_remaining / ema_power
+        let power_w = 12.0;
+        let wh = 30.0;
+        let mut profile = constant_power_profile(power_w);
+        let from = Local::now();
+        let tte = profile.predict_time_to_empty(from, wh);
+
+        let expected_secs = wh / power_w * 3_600.0;
+        let error_secs = (tte.as_secs_f64() - expected_secs).abs();
+        assert!(
+            error_secs < 5.0,
+            "TTE error {error_secs:.1}s exceeds 5 s (expected {expected_secs:.1}s, got {:.1}s)",
+            tte.as_secs_f64()
+        );
+    }
+
+    #[test]
+    fn tte_capped_at_max_tte() {
+        // a very large battery and tiny power draw should cap at MAX_TTE
+        let mut profile = constant_power_profile(0.1); // 0.1 W
+        let tte = profile.predict_time_to_empty(Local::now(), 100.0); // 100 Wh → 1000 h
+        assert_eq!(tte, MAX_TTE, "TTE should be capped at MAX_TTE (48 h)");
+    }
+
+    #[test]
+    fn tte_converges_after_constant_training() {
+        // after many constant-power observations the harmonic corrections are
+        // close to zero and TTE should still match wh / P within a few percent
+        let power_w = 10.0;
+        let wh = 20.0;
+        let base = Local::now();
+        let profile = train_constant(constant_power_profile(power_w), base, power_w, 500);
+        let mut profile = profile;
+        let tte = profile.predict_time_to_empty(base, wh);
+
+        let expected_secs = wh / power_w * 3_600.0;
+        let relative_error = (tte.as_secs_f64() - expected_secs).abs() / expected_secs;
+        assert!(
+            relative_error < 0.05,
+            "relative TTE error {:.1}% exceeds 5% after training",
+            relative_error * 100.0
+        );
+    }
+}
