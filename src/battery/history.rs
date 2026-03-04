@@ -18,7 +18,9 @@ const TIME_SLOTS_PER_WEEK: u32 = TIME_SLOTS_PER_DAY * 7;
 const MINUTES_PER_TIME_SLOT: u32 = 60 / TIME_SLOTS_PER_HOUR;
 
 /// Determines how much new power readings affect historial averages.
-const LEARNING_RATE: f64 = 0.1;
+///
+/// Maintains about a month of readings per slot.
+const LEARNING_RATE: f64 = 1. / 360.;
 
 #[derive(Deserialize, Serialize)]
 pub struct HistoricalPowerUsage {
