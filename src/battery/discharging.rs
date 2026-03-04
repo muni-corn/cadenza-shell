@@ -266,10 +266,10 @@ impl DischargingStatistics {
                 DateTime::<Local>::from(new_utc)
             );
         }
-        if let Some(mean_utc) = DateTime::from_timestamp(self.ema as i64, 0) {
+        if let Some(ema_utc) = DateTime::from_timestamp(self.ema as i64, 0) {
             log::debug!(
-                "time-to-empty estimate mean: {}",
-                DateTime::<Local>::from(mean_utc)
+                "time-to-empty estimate ema: {}",
+                DateTime::<Local>::from(ema_utc)
             );
         }
 
@@ -285,7 +285,7 @@ impl DischargingStatistics {
         if self.variance_ema > 0.0 {
             log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
             log::debug!(
-                "current estimate is {:.1} σ from mean estimate",
+                "current estimate is {:.1} σ from ema estimate",
                 (value - self.ema).abs() / standard_deviation
             );
         }
