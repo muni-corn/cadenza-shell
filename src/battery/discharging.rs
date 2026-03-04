@@ -128,6 +128,28 @@ impl DischargeProfile {
         power.max(0.0)
     }
 
+    /// Computes the exact integral of modeled power from week offset `t1` to
+    /// `t1 + delta_secs`, returning energy in watt-seconds.
+    ///
+    /// Uses the closed-form antiderivative of each sinusoidal term:
+    /// `∫ aₖ cos(ω t) dt = (aₖ/ω) sin(ω t)`,
+    /// `∫ bₖ sin(ω t) dt = -(bₖ/ω) cos(ω t)`.
+    fn energy_integral(&self, t1: f64, delta_secs: f64) -> f64 {
+        let t2 = t1 + delta_secs;
+        let mut energy = self.ema_power * delta_secs;
+
+        for k in 1..=HARMONICS {
+            let omega = 2.0 * std::f64::consts::PI * k as f64 / PERIOD_SECS;
+            let inv_omega = 1.0 / omega;
+            energy +=
+                self.cosine_coeffs[k - 1] * inv_omega * ((omega * t2).sin() - (omega * t1).sin());
+            energy -=
+                self.sine_coeffs[k - 1] * inv_omega * ((omega * t2).cos() - (omega * t1).cos());
+        }
+
+        energy
+    }
+
     /// Uses integration over stored historical time-slot data to determine how
     /// long it will take for the battery to deplete entirely.
     ///
