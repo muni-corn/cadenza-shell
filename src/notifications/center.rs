@@ -155,7 +155,7 @@ impl SimpleComponent for NotificationCenter {
         if self.visible {
             // Sort notifications by timestamp (newest first)
             let mut notifications: Vec<&Notification> = self.notifications.values().collect();
-            notifications.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+            notifications.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
 
             // Clear and repopulate the FactoryVecDeque
             {
