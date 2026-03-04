@@ -330,11 +330,11 @@ impl DischargingStatistics {
 
         self.min_observed = Some(match self.min_observed {
             Some(prev) => prev.min(new_time_to_empty_timestamp),
-            None => new_time_to_empty_timestamp,
+            _ => new_time_to_empty_timestamp,
         });
         self.max_observed = Some(match self.max_observed {
             Some(prev) => prev.max(new_time_to_empty_timestamp),
-            None => new_time_to_empty_timestamp,
+            _ => new_time_to_empty_timestamp,
         });
 
         if !self.initialized {
@@ -353,56 +353,88 @@ impl DischargingStatistics {
         let standard_deviation = self.variance_ema.sqrt();
 
         log::debug!("-----discharging statistics--------------------");
-        log::debug!("               n predictions: {:>12}", self.n_updates);
+
         if let Some(new_utc) = DateTime::from_timestamp(new_time_to_empty_timestamp, 0) {
             log::debug!(
-                " time-to-empty estimate now: {}",
+                "{:>17}: {}",
+                "tte estimate now",
                 DateTime::<Local>::from(new_utc)
             );
         }
         if let Some(ema_utc) = DateTime::from_timestamp(self.ema as i64, 0) {
             log::debug!(
-                "time-to-empty estimate ema: {}",
+                "{:>17}: {}",
+                "tte estimate ema",
                 DateTime::<Local>::from(ema_utc)
             );
         }
 
-        log::debug!(
-            "                   variance: {:>12.1} sec^2",
-            self.variance_ema
-        );
-        log::debug!(
-            "                          σ: {:>12.1} sec",
-            standard_deviation
-        );
+        log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
+
+        if let Some(min_ts) = self.min_observed
+            && let Some(min_utc) = DateTime::from_timestamp(min_ts, 0)
+        {
+            log::debug!(
+                "{:>17}: {}",
+                "earliest end",
+                DateTime::<Local>::from(min_utc)
+            );
+        }
+
+        let pessimistic_ts = self.ema - standard_deviation;
+        if let Some(pessimistic_utc) = DateTime::from_timestamp(pessimistic_ts as i64, 0) {
+            log::debug!(
+                "{:>17}: {}",
+                "pessimistic end",
+                DateTime::<Local>::from(pessimistic_utc)
+            );
+        }
+
+        let pessimistic_ts = self.ema + standard_deviation;
+        if let Some(optimistic_utc) = DateTime::from_timestamp(pessimistic_ts as i64, 0) {
+            log::debug!(
+                "{:>17}: {}",
+                "optimistic end",
+                DateTime::<Local>::from(optimistic_utc)
+            );
+        }
+
+        if let Some(max_ts) = self.max_observed
+            && let Some(max_utc) = DateTime::from_timestamp(max_ts, 0)
+        {
+            log::debug!("{:>17}: {}", "latest end", DateTime::<Local>::from(max_utc));
+        }
+
+        log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
+
+        log::debug!("{:>17}: {:>6}", "predictions made", self.n_updates);
+
+        if let (Some(min_ts), Some(max_ts)) = (self.min_observed, self.max_observed) {
+            let span_hours = (max_ts - min_ts) as f64 / 3600.;
+            log::debug!("{:>17}: {:>6.1} h", "observed tte span", span_hours);
+        }
 
         log::debug!(
-            "              bias (EMA Δ): {:>+11.1} min",
+            "{:>17}: {:>6.1} min^2",
+            "variance",
+            self.variance_ema / 3600.
+        );
+
+        log::debug!("{:>17}: {:>6.1} min", "σ", standard_deviation / 60.);
+
+        log::debug!(
+            "{:>17}: {:>+6.1} min",
+            "bias (ema Δ)",
             self.deviation_ema / 60.0
         );
 
-        if let (Some(min_ts), Some(max_ts)) = (self.min_observed, self.max_observed) {
-            let span_hours = (max_ts - min_ts) as f64 / 3_600.0;
-            log::debug!("       observed TTE span: {:>12.1} h", span_hours);
-            if let Some(min_utc) = DateTime::from_timestamp(min_ts, 0) {
-                log::debug!(
-                    "      pessimistic end: {}",
-                    DateTime::<Local>::from(min_utc)
-                );
-            }
-            if let Some(max_utc) = DateTime::from_timestamp(max_ts, 0) {
-                log::debug!(
-                    "       optimistic end: {}",
-                    DateTime::<Local>::from(max_utc)
-                );
-            }
-        }
-
+        let bias_now = value - self.ema;
         if self.variance_ema > 0.0 {
             log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
             log::debug!(
-                "current estimate is {:.1} σ from ema estimate",
-                (value - self.ema).abs() / standard_deviation
+                "current estimate is {:+.1} min ({:.1}σ) from ema estimate",
+                bias_now / 60.,
+                bias_now.abs() / standard_deviation
             );
         }
     }
@@ -419,9 +451,10 @@ mod tests {
     /// Return a [`DischargeProfile`] whose EMA power is `power_watts` and
     /// whose Fourier coefficients are all zero (i.e., constant-power model).
     fn constant_power_profile(power_watts: f64) -> DischargeProfile {
-        let mut p = DischargeProfile::default();
-        p.ema_power = power_watts;
-        p
+        DischargeProfile {
+            ema_power: power_watts,
+            ..Default::default()
+        }
     }
 
     /// Drive `profile` with `n` observations of `power_watts` sampled at 15-
