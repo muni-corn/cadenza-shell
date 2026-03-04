@@ -100,16 +100,23 @@ impl DischargeProfile {
             self.ema_power = self.ema_power * (1.0 - LEARNING_RATE) + power_now * LEARNING_RATE;
         }
 
-        // update Fourier coefficients via online EMA:
-        //   aₖ ← (1 - α) · aₖ + 2α · P · cos(ωₖ t)
-        //   bₖ ← (1 - α) · bₖ + 2α · P · sin(ωₖ t)
+        // update Fourier coefficients via online EMA using the mean-subtracted
+        // deviation signal. projecting the raw power_now onto each harmonic would
+        // introduce DC leakage: coefficients pick up the level of ema_power and
+        // constructively interfere at prediction time, producing over-predictions.
+        // subtracting the mean before projection keeps coefficients zero-mean and
+        // unbiased regardless of the sampling distribution.
+        //
+        //   aₖ ← (1 - α) · aₖ + 2α · (P − P̄) · cos(ωₖ t)
+        //   bₖ ← (1 - α) · bₖ + 2α · (P − P̄) · sin(ωₖ t)
+        let deviation = power_now - self.ema_power;
         let t = week_offset_secs(now);
         for k in 1..=HARMONICS {
             let angle = 2.0 * std::f64::consts::PI * k as f64 / PERIOD_SECS * t;
             self.cosine_coeffs[k - 1] = self.cosine_coeffs[k - 1] * (1.0 - LEARNING_RATE)
-                + 2.0 * power_now * angle.cos() * LEARNING_RATE;
+                + 2.0 * deviation * angle.cos() * LEARNING_RATE;
             self.sine_coeffs[k - 1] = self.sine_coeffs[k - 1] * (1.0 - LEARNING_RATE)
-                + 2.0 * power_now * angle.sin() * LEARNING_RATE;
+                + 2.0 * deviation * angle.sin() * LEARNING_RATE;
         }
     }
 
