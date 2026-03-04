@@ -13,6 +13,9 @@ pub use watcher::start_battery_service;
 
 pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
 
+/// For a moving average over 10 readings.
+const STATISTICS_ALPHA: f64 = 1. / 10.;
+
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct BatteryState {
     pub percentage: f32,

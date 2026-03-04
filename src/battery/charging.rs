@@ -11,6 +11,7 @@ use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 
 use super::{discharging::get_state_directory, sysfs::SysfsReading};
+use crate::battery::STATISTICS_ALPHA;
 
 /// Learning rate for exponential moving averages applied to [`ChargeProfile`]
 /// fields after each completed charging session.
@@ -867,9 +868,6 @@ mod tests {
         );
     }
 }
-
-/// Weight for new readings to use in statistics below.
-const STATISTICS_ALPHA: f64 = 0.2;
 
 #[derive(Clone, Debug, Default)]
 struct ChargeStatistics {

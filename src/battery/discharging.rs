@@ -8,7 +8,7 @@ use chrono::{DateTime, Datelike, Local, TimeDelta, Timelike};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use crate::battery::{ChargingStatus, sysfs::SysfsReading};
+use crate::battery::{ChargingStatus, STATISTICS_ALPHA, sysfs::SysfsReading};
 
 /// Records 15-minute time slots.
 const TIME_SLOTS_PER_HOUR: u32 = 4;
@@ -251,10 +251,10 @@ impl DischargingStatistics {
             self.initialized = true;
             // variance is undefined for the first sample; skip logging it
         } else {
-            self.ema = self.ema * (1.0 - LEARNING_RATE) + value * LEARNING_RATE;
+            self.ema = self.ema * (1.0 - STATISTICS_ALPHA) + value * STATISTICS_ALPHA;
             let diff = value - self.ema;
             self.variance_ema =
-                self.variance_ema * (1.0 - LEARNING_RATE) + (diff * diff) * LEARNING_RATE;
+                self.variance_ema * (1.0 - STATISTICS_ALPHA) + (diff * diff) * STATISTICS_ALPHA;
         }
 
         let standard_deviation = self.variance_ema.sqrt();
