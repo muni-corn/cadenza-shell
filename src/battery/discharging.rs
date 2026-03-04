@@ -258,6 +258,9 @@ struct DischargingStatistics {
     /// EMA of the squared deviation from `ema`, used as a variance estimate.
     variance_ema: f64,
 
+    /// Total number of time-to-empty estimates recorded.
+    n_updates: u64,
+
     /// Whether `ema` has been seeded with at least one value.
     initialized: bool,
 }
@@ -265,6 +268,7 @@ struct DischargingStatistics {
 impl DischargingStatistics {
     fn update(&mut self, new_time_to_empty_timestamp: i64) {
         let value = new_time_to_empty_timestamp as f64;
+        self.n_updates += 1;
 
         if !self.initialized {
             self.ema = value;
@@ -280,6 +284,7 @@ impl DischargingStatistics {
         let standard_deviation = self.variance_ema.sqrt();
 
         log::debug!("-----discharging statistics--------------------");
+        log::debug!("               n predictions: {:>12}", self.n_updates);
         if let Some(new_utc) = DateTime::from_timestamp(new_time_to_empty_timestamp, 0) {
             log::debug!(
                 " time-to-empty estimate now: {}",
