@@ -952,15 +952,21 @@ impl ChargeStatistics {
             "  slope_standard_deviation: {:>12.1}  A / %",
             self.slope_variance.sqrt()
         );
-        log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
-        log::debug!(
-            "current now is {:>12.1} σ from current ema",
-            (current_a - self.current_ema).abs() / self.current_variance.sqrt(),
-        );
-        log::debug!(
-            "  slope now is {:>12.1} σ from slope ema",
-            (slope_now - self.slope_ema).abs() / self.slope_variance.sqrt(),
-        );
+        if self.current_variance > 0.0 || self.slope_variance > 0.0 {
+            log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
+        }
+        if self.current_variance > 0.0 {
+            log::debug!(
+                "current now is {:>12.1} σ from current ema",
+                (current_a - self.current_ema).abs() / self.current_variance.sqrt(),
+            );
+        }
+        if self.slope_variance > 0.0 {
+            log::debug!(
+                "  slope now is {:>12.1} σ from slope ema",
+                (slope_now - self.slope_ema).abs() / self.slope_variance.sqrt(),
+            );
+        }
 
         // finally, update stats
         self.last_current_a = current_a;
