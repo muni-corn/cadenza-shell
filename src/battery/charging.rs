@@ -188,16 +188,16 @@ impl SessionReading {
 const CV_FIT_MIN_READINGS: usize = 3;
 
 /// Number of readings in the rolling window used to compute the median current
-/// for phase detection. At 10 s polling this covers ~1 minute.
-const PHASE_WINDOW: usize = 6;
+/// for phase detection. At 10 s polling this covers ~2 minutes.
+const PHASE_WINDOW: usize = 12;
 
 /// A current drop to this fraction of the CC plateau triggers a transition
-/// check. Chosen to be robust against the noisy dips visible in your data.
-const CV_DROP_THRESHOLD: f64 = 0.75;
+/// check. Chosen to be robust against noisy dips.
+const CV_DROP_THRESHOLD: f64 = 0.85;
 
 /// How many consecutive readings below `CV_DROP_THRESHOLD` are required before
 /// declaring the CC→CV transition. At 10 s polling this is ~1 minute.
-const CV_CONFIRM_READINGS: usize = 6;
+const CV_CONFIRM_READINGS: usize = 12;
 
 // ── CV exponential fitting
 // ────────────────────────────────────────────────────
