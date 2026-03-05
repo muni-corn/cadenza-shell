@@ -25,11 +25,6 @@ const PERIOD_SECS: f64 = 7.0 * 24.0 * 3600.0;
 /// battery tile already displays "Until someday" for durations this long.
 const MAX_TTE: Duration = Duration::from_secs(48 * 3_600);
 
-/// Determines how much new power readings affect historical averages.
-///
-/// Maintains roughly a month of readings before older observations decay.
-const LEARNING_RATE: f64 = 1. / 360.;
-
 #[derive(Deserialize, Serialize)]
 pub struct DischargeProfile {
     /// Exponential moving average of instantaneous power draw, in watts.
@@ -42,6 +37,10 @@ pub struct DischargeProfile {
     /// Fourier sine coefficients for the weekly power-usage cycle.
     #[serde(with = "BigArray")]
     sine_coeffs: [f64; HARMONICS],
+
+    /// How many samples have been taken.
+    #[serde(default)]
+    sample_count: u32,
 
     /// The last time history was persisted to disk.
     #[serde(skip)]
@@ -58,6 +57,7 @@ impl Default for DischargeProfile {
             ema_power: Default::default(),
             cosine_coeffs: [0.0; HARMONICS],
             sine_coeffs: [0.0; HARMONICS],
+            sample_count: 0,
             last_save: Local::now(),
             discharging_statistics: Default::default(),
         }
@@ -73,6 +73,7 @@ impl DischargeProfile {
         match reading.status {
             ChargingStatus::Discharging => {
                 self.update_discharging(power_now);
+                self.sample_count += 1;
             }
 
             // do nothing otherwise
@@ -95,12 +96,14 @@ impl DischargeProfile {
 
     fn update_discharging(&mut self, power_now: f64) {
         let now = Local::now();
+        let alpha = self.sample_count as f64 / (self.sample_count as f64 + 1.);
 
-        // seed the EMA on first observation; otherwise apply moving average
-        if self.ema_power == 0.0 {
+        // seed the EMA on first observation; otherwise apply moving average.
+        // sample count is updated after this function is called.
+        if self.sample_count == 0 {
             self.ema_power = power_now;
         } else {
-            self.ema_power = self.ema_power * (1.0 - LEARNING_RATE) + power_now * LEARNING_RATE;
+            self.ema_power = self.ema_power * (1.0 - alpha) + power_now * alpha;
         }
 
         // update Fourier coefficients via online EMA using the mean-subtracted
@@ -115,11 +118,11 @@ impl DischargeProfile {
         let deviation = power_now - self.ema_power;
         let t = week_offset_secs(now);
         for k in 1..=HARMONICS {
+            let cosine_coeff = &mut self.cosine_coeffs[k - 1];
+            let sine_coeff = &mut self.sine_coeffs[k - 1];
             let angle = 2.0 * std::f64::consts::PI * k as f64 / PERIOD_SECS * t;
-            self.cosine_coeffs[k - 1] = self.cosine_coeffs[k - 1] * (1.0 - LEARNING_RATE)
-                + 2.0 * deviation * angle.cos() * LEARNING_RATE;
-            self.sine_coeffs[k - 1] = self.sine_coeffs[k - 1] * (1.0 - LEARNING_RATE)
-                + 2.0 * deviation * angle.sin() * LEARNING_RATE;
+            *cosine_coeff = *cosine_coeff * (1.0 - alpha) + 2.0 * deviation * angle.cos() * alpha;
+            *sine_coeff = *sine_coeff * (1.0 - alpha) + 2.0 * deviation * angle.sin() * alpha;
         }
     }
 
@@ -470,21 +473,21 @@ mod tests {
             // bypass the ChargingStatus check and call the inner fn directly
             let t = week_offset_secs(when);
             let power_now = power_watts;
+            let alpha = i as f64 / (i as f64 + 1.);
 
             if profile.ema_power == 0.0 {
                 profile.ema_power = power_now;
             } else {
-                profile.ema_power =
-                    profile.ema_power * (1.0 - LEARNING_RATE) + power_now * LEARNING_RATE;
+                profile.ema_power = profile.ema_power * (1.0 - alpha) + power_now * alpha;
             }
 
             let deviation = power_now - profile.ema_power;
             for k in 1..=HARMONICS {
                 let angle = 2.0 * std::f64::consts::PI * k as f64 / PERIOD_SECS * t;
-                profile.cosine_coeffs[k - 1] = profile.cosine_coeffs[k - 1] * (1.0 - LEARNING_RATE)
-                    + 2.0 * deviation * angle.cos() * LEARNING_RATE;
-                profile.sine_coeffs[k - 1] = profile.sine_coeffs[k - 1] * (1.0 - LEARNING_RATE)
-                    + 2.0 * deviation * angle.sin() * LEARNING_RATE;
+                profile.cosine_coeffs[k - 1] = profile.cosine_coeffs[k - 1] * (1.0 - alpha)
+                    + 2.0 * deviation * angle.cos() * alpha;
+                profile.sine_coeffs[k - 1] = profile.sine_coeffs[k - 1] * (1.0 - alpha)
+                    + 2.0 * deviation * angle.sin() * alpha;
             }
         }
         profile
