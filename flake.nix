@@ -80,6 +80,7 @@
             glib
             pango
             gdk-pixbuf
+            libadwaita
             libpulseaudio.dev
             udev.dev
             pipewire
