@@ -12,11 +12,11 @@ use crate::battery::{ChargingStatus, SAVE_INTERVAL, STATISTICS_ALPHA, sysfs::Sys
 
 /// Number of Fourier harmonics used to model the weekly power-usage cycle.
 ///
-/// 12 harmonics resolve variations down to a 14-hour period (168 h / 12),
+/// 28 harmonics resolve variations down to a 6-hour period (168 h / 28),
 /// which is enough to capture daily and half-day usage patterns while keeping
 /// the serialized state small. Any existing state with a different array size
 /// will fail to deserialize and fall back to a fresh profile.
-const HARMONICS: usize = 12;
+const HARMONICS: usize = 28;
 
 /// Duration of one full model period: one week in seconds.
 const PERIOD_SECS: f64 = 7.0 * 24.0 * 3600.0;
