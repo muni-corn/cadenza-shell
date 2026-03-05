@@ -144,7 +144,7 @@ impl DischargeProfile {
                 self.cosine_coeffs[k - 1] * angle.cos() + self.sine_coeffs[k - 1] * angle.sin();
         }
 
-        power.clamp(0.0, 3.0 * self.ema_power.max(f64::MIN_POSITIVE))
+        power.max(0.0)
     }
 
     /// Estimates the energy consumed, in watt-seconds, if the device draws
