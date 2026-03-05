@@ -411,7 +411,7 @@ impl DischargingStatistics {
             );
         }
 
-        let pessimistic_ts = self.ema - standard_deviation;
+        let pessimistic_ts = new_time_to_empty_timestamp as f64 - standard_deviation;
         if let Some(pessimistic_utc) = DateTime::from_timestamp(pessimistic_ts as i64, 0) {
             log::debug!(
                 "{:>17}: {}",
@@ -420,8 +420,8 @@ impl DischargingStatistics {
             );
         }
 
-        let pessimistic_ts = self.ema + standard_deviation;
-        if let Some(optimistic_utc) = DateTime::from_timestamp(pessimistic_ts as i64, 0) {
+        let optimistic_ts = new_time_to_empty_timestamp as f64 + standard_deviation;
+        if let Some(optimistic_utc) = DateTime::from_timestamp(optimistic_ts as i64, 0) {
             log::debug!(
                 "{:>17}: {}",
                 "optimistic end",
