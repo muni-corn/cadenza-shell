@@ -1,6 +1,7 @@
 //! Stores a user's historical power usage. This data is used to make informed
 //! predictions on future battery drain and estimated time remaining.
 
+use core::{cmp::PartialOrd, iter::Iterator};
 use std::{fs, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
@@ -123,6 +124,25 @@ impl DischargeProfile {
             let angle = 2.0 * std::f64::consts::PI * k as f64 / PERIOD_SECS * t;
             *cosine_coeff = *cosine_coeff * (1.0 - alpha) + 2.0 * deviation * angle.cos() * alpha;
             *sine_coeff = *sine_coeff * (1.0 - alpha) + 2.0 * deviation * angle.sin() * alpha;
+        }
+
+        // find the smallest coefficient pair, for funsies
+        if let Some((smallest_coefficient_ordinal, smallest_a, smallest_b)) = self
+            .cosine_coeffs
+            .iter()
+            .copied()
+            .zip(self.sine_coeffs.iter().copied())
+            .enumerate()
+            .min_by(|(_, (a1, b1)), (_, (a2, b2))| {
+                (a1 * a1 + b1 * b1)
+                    .partial_cmp(&(a2 * a2 + b2 * b2))
+                    .unwrap_or(core::cmp::Ordering::Equal)
+            })
+            .map(|(i, (a, b))| (i + 1, a, b))
+        {
+            log::debug!(
+                "most useless harmonic: #{smallest_coefficient_ordinal} (a = {smallest_a}, b = {smallest_b})"
+            );
         }
     }
 
