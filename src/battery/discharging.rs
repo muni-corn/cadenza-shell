@@ -191,7 +191,7 @@ impl DischargeProfile {
             return MAX_TTE;
         }
 
-        let ws_remaining = wh_remaining * 3_600.0;
+        let ws_remaining = wh_remaining * SECONDS_PER_HOUR as f64;
         let max_secs = MAX_TTE.as_secs_f64();
 
         // initial guess: linear estimate from overall EMA power draw
@@ -286,6 +286,10 @@ pub(super) fn get_state_directory() -> Result<PathBuf> {
     Ok(cadenza_state)
 }
 
+const SECONDS_PER_MINUTE: u32 = 60;
+const SECONDS_PER_HOUR: u32 = SECONDS_PER_MINUTE * 60;
+const SECONDS_PER_DAY: u32 = SECONDS_PER_HOUR * 24;
+
 /// Returns the number of seconds elapsed since Monday 00:00:00 local time in
 /// the current week.
 fn week_offset_secs(when: DateTime<Local>) -> f64 {
@@ -294,7 +298,10 @@ fn week_offset_secs(when: DateTime<Local>) -> f64 {
     let minute = when.minute() as f64;
     let second = when.second() as f64;
 
-    day_of_week * 86_400.0 + hour * 3_600.0 + minute * 60.0 + second
+    day_of_week * SECONDS_PER_DAY as f64
+        + hour * SECONDS_PER_HOUR as f64
+        + minute * SECONDS_PER_MINUTE as f64
+        + second
 }
 
 #[derive(Default)]
@@ -413,14 +420,14 @@ impl DischargingStatistics {
         log::debug!("{:>17}: {:>6}", "predictions made", self.n_updates);
 
         if let (Some(min_ts), Some(max_ts)) = (self.min_observed, self.max_observed) {
-            let span_hours = (max_ts - min_ts) as f64 / 3600.;
+            let span_hours = (max_ts - min_ts) as f64 / SECONDS_PER_HOUR as f64;
             log::debug!("{:>17}: {:>6.1} h", "observed tte span", span_hours);
         }
 
         log::debug!(
             "{:>17}: {:>6.1} min^2",
             "variance",
-            self.variance_ema / 3600.
+            self.variance_ema / SECONDS_PER_HOUR as f64
         );
 
         log::debug!("{:>17}: {:>6.1} min", "σ", standard_deviation / 60.);
