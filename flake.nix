@@ -2,7 +2,7 @@
   description = "muni's desktop shell";
 
   inputs = {
-    nixpkgs.url = "github:nixos/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
 
     devenv = {
       url = "github:cachix/devenv";
@@ -21,11 +21,6 @@
 
     git-hooks-nix = {
       url = "github:cachix/git-hooks.nix";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    rust-flake = {
-      url = "github:juspay/rust-flake";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -57,8 +52,6 @@
 
       imports = [
         inputs.git-hooks-nix.flakeModule
-        inputs.rust-flake.flakeModules.default
-        inputs.rust-flake.flakeModules.nixpkgs
         inputs.musicaloft-style.flakeModule
       ];
 
@@ -70,8 +63,6 @@
           ...
         }:
         let
-          pname = "cadenza-shell";
-
           # GTK/Rust dependencies
           buildInputs = with pkgs; [
             dbus.dev
@@ -102,14 +93,15 @@
             languages.rust = {
               enable = true;
               channel = "nightly";
+              version = "2026-02-14";
               mold.enable = true;
             };
 
             git-hooks.hooks.clippy = {
               enable = true;
               packageOverrides = {
-                cargo = config.rust-project.toolchain;
-                clippy = config.rust-project.toolchain;
+                cargo = config.devenv.shells.default.languages.rust.toolchainPackage;
+                clippy = config.devenv.shells.default.languages.rust.toolchainPackage;
               };
               settings.denyWarnings = lib.mkForce false;
             };
@@ -124,26 +116,7 @@
             ++ nativeBuildInputs;
           };
 
-          # setup rust packages
-          rust-project = {
-            # ensure scss files are included with build
-            src = pkgs.lib.cleanSourceWith {
-              src = inputs.self;
-              filter =
-                path: type:
-                (pkgs.lib.hasSuffix ".scss" path) || (config.rust-project.crane-lib.filterCargoSources path type);
-            };
-
-            # use the same rust toolchain from the dev shell for consistency
-            toolchain = config.devenv.shells.default.languages.rust.toolchainPackage;
-
-            # specify dependencies
-            defaults.perCrate.crane.args = {
-              inherit nativeBuildInputs buildInputs;
-            };
-          };
-
-          packages.default = config.rust-project.crates.${pname}.crane.outputs.packages.${pname};
+          packages.default = config.devenv.shells.default.languages.rust.import ./. { };
         };
     };
 }
