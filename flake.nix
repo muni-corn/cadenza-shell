@@ -4,6 +4,11 @@
   inputs = {
     nixpkgs.url = "github:cachix/devenv-nixpkgs/rolling";
 
+    crate2nix = {
+      url = "github:nix-community/crate2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+
     devenv = {
       url = "github:cachix/devenv";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -16,11 +21,6 @@
 
     musicaloft-style = {
       url = "github:musicaloft/musicaloft-style";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
-
-    git-hooks-nix = {
-      url = "github:cachix/git-hooks.nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
@@ -50,10 +50,7 @@
         "aarch64-darwin"
       ];
 
-      imports = [
-        inputs.git-hooks-nix.flakeModule
-        inputs.musicaloft-style.flakeModule
-      ];
+      imports = [ inputs.musicaloft-style.flakeModule ];
 
       perSystem =
         {
@@ -63,7 +60,7 @@
           ...
         }:
         let
-          # GTK/Rust dependencies
+          # gtk/rust dependencies
           buildInputs = with pkgs; [
             dbus.dev
             gtk4
