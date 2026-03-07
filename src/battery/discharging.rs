@@ -9,7 +9,9 @@ use chrono::{DateTime, Datelike, Local, Timelike};
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 
-use crate::battery::{ChargingStatus, SAVE_INTERVAL, STATISTICS_ALPHA, sysfs::SysfsReading};
+use crate::battery::{
+    ChargingStatus, READ_INTERVAL_SECONDS, SAVE_INTERVAL, STATISTICS_ALPHA, sysfs::SysfsReading,
+};
 
 /// Number of Fourier harmonics used to model the weekly power-usage cycle.
 ///
@@ -25,6 +27,17 @@ const PERIOD_SECS: f64 = 7.0 * 24.0 * 3600.0;
 /// Maximum time-to-empty prediction. Estimates beyond this are capped and the
 /// battery tile already displays "Until someday" for durations this long.
 const MAX_TTE: Duration = Duration::from_secs(48 * 3_600);
+
+/// How much of a day we expect users to be awake.
+const WAKING_HOURS_PERCENTAGE: f64 = 16. / 24.;
+
+/// How many periods we want to keep readings for.
+const READING_LIFETIME_PERIODS: f64 = 4.;
+
+/// The amount of readings in the maximum learning period.
+const READINGS_PER_LIFETIME: u32 =
+    (PERIOD_SECS * READING_LIFETIME_PERIODS * WAKING_HOURS_PERCENTAGE) as u32
+        / READ_INTERVAL_SECONDS;
 
 #[derive(Deserialize, Serialize)]
 pub struct DischargeProfile {
@@ -97,7 +110,8 @@ impl DischargeProfile {
 
     fn update_discharging(&mut self, power_now: f64) {
         let now = Local::now();
-        let alpha = self.sample_count as f64 / (self.sample_count as f64 + 1.);
+        let effective_sample_count = self.sample_count.min(READINGS_PER_LIFETIME);
+        let alpha = effective_sample_count as f64 / (effective_sample_count as f64 + 1.);
 
         // seed the EMA on first observation; otherwise apply moving average.
         // sample count is updated after this function is called.

@@ -5,14 +5,12 @@ use tokio::io::unix::AsyncFd;
 
 use super::{BATTERY_STATE, BatteryState, ChargingStatus};
 use crate::battery::{
+    READ_INTERVAL_SECONDS,
     charging::{ChargeProfile, ChargingSession, SessionReading, predict_time_to_full_cc_cv},
     discharging::DischargeProfile,
     sysfs::{SysfsReading, detect_battery_path, read_battery_sysfs},
     udev::{create_battery_monitor, is_battery_change},
 };
-
-/// Interval between periodic battery stat polls.
-const BATTERY_POLL_INTERVAL: Duration = Duration::from_secs(10);
 
 pub async fn start_battery_service() {
     // detect battery sysfs path
@@ -98,7 +96,8 @@ async fn watch_battery(
     charge_profile: &mut ChargeProfile,
     active_session: &mut Option<ChargingSession>,
 ) -> Option<!> {
-    let mut poll_interval = tokio::time::interval(BATTERY_POLL_INTERVAL);
+    let mut poll_interval =
+        tokio::time::interval(Duration::from_secs(READ_INTERVAL_SECONDS.into()));
 
     // skip the first tick, which fires immediately
     poll_interval.tick().await;

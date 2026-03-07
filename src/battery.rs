@@ -20,6 +20,9 @@ const STATISTICS_ALPHA: f64 = 1. / 10.;
 /// How often to save profiles to disk.
 const SAVE_INTERVAL: TimeDelta = TimeDelta::seconds(30);
 
+/// How often to read the battery state.
+const READ_INTERVAL_SECONDS: u32 = 10;
+
 #[derive(Debug, Copy, Clone, PartialEq, Default)]
 pub struct BatteryState {
     pub percentage: f32,
