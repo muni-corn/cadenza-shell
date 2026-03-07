@@ -5,9 +5,8 @@ use relm4::prelude::*;
 
 use crate::{
     battery::{BATTERY_STATE, BatteryState, ChargingStatus},
-    icon_names::{BATTERY_CHARGE_REGULAR, BATTERY_CHECKMARK_REGULAR},
     tiles::Attention,
-    utils::icons::{BATTERY_ICON_NAMES, percentage_to_icon_from_list},
+    utils::icons::{BATTERY_CHARGING_ICON_NAMES, BATTERY_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Tile, TileInit, TileMsg},
 };
 
@@ -125,11 +124,10 @@ impl SimpleComponent for BatteryTile {
 impl BatteryTile {
     fn get_icon(&self) -> &str {
         if self.charging {
-            if self.current_percentage > 0.99 {
-                BATTERY_CHECKMARK_REGULAR
-            } else {
-                BATTERY_CHARGE_REGULAR
-            }
+            percentage_to_icon_from_list(
+                self.current_percentage.into(),
+                BATTERY_CHARGING_ICON_NAMES,
+            )
         } else {
             percentage_to_icon_from_list(self.current_percentage.into(), BATTERY_ICON_NAMES)
         }

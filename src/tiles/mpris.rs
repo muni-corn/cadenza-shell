@@ -2,7 +2,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    icon_names::{MUSIC_NOTE_1_REGULAR, PAUSE_REGULAR},
+    icon_names::{MEDIA_PLAYBACK_PAUSE, MUSIC_NOTE_SINGLE},
     mpris::{MPRIS_STATE, MprisState},
     widgets::tile::{Tile, TileMsg},
 };
@@ -59,8 +59,8 @@ impl SimpleComponent for MprisTile {
                 status,
             }) => {
                 let icon = match status {
-                    mpris::PlaybackStatus::Playing => MUSIC_NOTE_1_REGULAR,
-                    _ => PAUSE_REGULAR,
+                    mpris::PlaybackStatus::Playing => MUSIC_NOTE_SINGLE,
+                    _ => MEDIA_PLAYBACK_PAUSE,
                 }
                 .to_string();
 

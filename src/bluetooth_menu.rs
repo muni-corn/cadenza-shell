@@ -4,10 +4,7 @@ use relm4::prelude::*;
 
 use crate::{
     bluetooth::{BLUETOOTH_STATE, BluetoothState},
-    icon_names::{
-        BLUETOOTH_CONNECTED_REGULAR, BLUETOOTH_DISABLED_REGULAR, BLUETOOTH_REGULAR,
-        BLUETOOTH_SEARCHING_REGULAR,
-    },
+    icon_names::{BLUETOOTH, BLUETOOTH_DOTS, BLUETOOTH_NO, BLUETOOTH_X},
 };
 
 #[derive(Debug)]
@@ -225,10 +222,10 @@ impl SimpleComponent for BluetoothMenu {
 
 fn get_icon(state: &Option<BluetoothState>) -> &str {
     match state {
-        Some(s) if s.powered && s.discovering => BLUETOOTH_SEARCHING_REGULAR,
-        Some(s) if s.powered && s.connected_device_count > 0 => BLUETOOTH_CONNECTED_REGULAR,
-        Some(s) if s.powered => BLUETOOTH_REGULAR,
-        _ => BLUETOOTH_DISABLED_REGULAR,
+        Some(s) if s.powered && s.discovering => BLUETOOTH_DOTS,
+        Some(s) if s.powered && s.connected_device_count > 0 => BLUETOOTH,
+        Some(s) if s.powered => BLUETOOTH_X,
+        _ => BLUETOOTH_NO,
     }
 }
 

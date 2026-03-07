@@ -8,10 +8,8 @@ use tokio::time::sleep;
 
 use crate::{
     icon_names::{
-        WEATHER_CLOUDY_REGULAR, WEATHER_FOG_REGULAR, WEATHER_MOON_REGULAR,
-        WEATHER_PARTLY_CLOUDY_DAY_REGULAR, WEATHER_PARTLY_CLOUDY_NIGHT_REGULAR,
-        WEATHER_RAIN_REGULAR, WEATHER_RAIN_SHOWERS_DAY_REGULAR, WEATHER_SNOW_REGULAR,
-        WEATHER_SNOW_SHOWER_DAY_REGULAR, WEATHER_SUNNY_REGULAR, WEATHER_THUNDERSTORM_REGULAR,
+        DISPLAY_BRIGHTNESS, FEW_CLOUDS, FOG, MOON, MOON_CLOUD, RAIN, RAINDROPS, ROUND_CLOUD, SNOW,
+        SNOWFLAKE, STORM,
     },
     weather::types::{WeatherState, WttrReport},
 };
@@ -54,37 +52,31 @@ fn map_icon(code: &str, dark: bool) -> &'static str {
     match code {
         "113" => {
             if dark {
-                WEATHER_MOON_REGULAR
+                MOON
             } else {
-                WEATHER_SUNNY_REGULAR
+                DISPLAY_BRIGHTNESS
             }
         }
         "116" => {
             if dark {
-                WEATHER_PARTLY_CLOUDY_NIGHT_REGULAR
+                MOON_CLOUD
             } else {
-                WEATHER_PARTLY_CLOUDY_DAY_REGULAR
+                FEW_CLOUDS
             }
         }
-        "119" | "122" => {
-            if dark {
-                WEATHER_PARTLY_CLOUDY_NIGHT_REGULAR
-            } else {
-                WEATHER_CLOUDY_REGULAR
-            }
-        }
-        "143" | "248" | "260" => WEATHER_FOG_REGULAR,
-        "176" | "263" | "266" | "293" | "296" | "353" => WEATHER_RAIN_SHOWERS_DAY_REGULAR,
-        "299" | "302" | "305" | "308" | "311" | "314" | "356" | "359" => WEATHER_RAIN_REGULAR,
-        "200" | "386" | "389" | "392" | "395" => WEATHER_THUNDERSTORM_REGULAR,
-        "182" | "185" | "317" | "320" | "350" | "362" | "365" => WEATHER_SNOW_SHOWER_DAY_REGULAR,
+        "119" | "122" => ROUND_CLOUD,
+        "143" | "248" | "260" => FOG,
+        "176" | "263" | "266" | "293" | "296" | "353" => RAIN,
+        "299" | "302" | "305" | "308" | "311" | "314" | "356" | "359" => RAINDROPS,
+        "200" | "386" | "389" | "392" | "395" => STORM,
+        "182" | "185" | "317" | "320" | "350" | "362" | "365" => SNOW,
         "179" | "223" | "227" | "230" | "323" | "326" | "329" | "332" | "335" | "338" | "368"
-        | "371" => WEATHER_SNOW_REGULAR,
+        | "371" => SNOWFLAKE,
         _ => {
             if dark {
-                WEATHER_MOON_REGULAR
+                MOON_CLOUD
             } else {
-                WEATHER_CLOUDY_REGULAR
+                FEW_CLOUDS
             }
         }
     }

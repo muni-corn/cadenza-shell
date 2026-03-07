@@ -4,7 +4,7 @@ use relm4::prelude::*;
 use crate::{
     bluetooth::{BLUETOOTH_STATE, BluetoothState},
     bluetooth_menu::BluetoothMenu,
-    icon_names::{BLUETOOTH_CONNECTED_REGULAR, BLUETOOTH_DISABLED_REGULAR, BLUETOOTH_REGULAR},
+    icon_names::{BLUETOOTH, BLUETOOTH_NO, BLUETOOTH_X},
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
 
@@ -128,12 +128,12 @@ impl Component for BluetoothTile {
 fn get_bluetooth_icon(state: &BluetoothState) -> String {
     if state.powered {
         if state.connected_device_count > 0 {
-            BLUETOOTH_CONNECTED_REGULAR
+            BLUETOOTH
         } else {
-            BLUETOOTH_REGULAR
+            BLUETOOTH_X
         }
     } else {
-        BLUETOOTH_DISABLED_REGULAR
+        BLUETOOTH_NO
     }
     .to_string()
 }

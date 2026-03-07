@@ -4,7 +4,7 @@ use gtk4::prelude::*;
 use relm4::{WorkerController, prelude::*};
 
 use crate::{
-    icon_names::{ALERT_BADGE_REGULAR, ALERT_REGULAR},
+    icon_names::BELL,
     notifications::{
         NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
         fresh::{FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput},
@@ -67,7 +67,7 @@ impl SimpleComponent for NotificationsTile {
             root,
             tile: Tile::builder()
                 .launch(TileInit {
-                    icon_name: Some(ALERT_REGULAR.to_string()),
+                    icon_name: Some(BELL.to_string()),
                     ..Default::default()
                 })
                 .forward(sender.input_sender(), |msg| match msg {
@@ -168,12 +168,6 @@ impl SimpleComponent for NotificationsTile {
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         // update tile appearance based on notification count
-        let icon = if self.notification_count > 0 {
-            ALERT_BADGE_REGULAR
-        } else {
-            ALERT_REGULAR
-        };
-
         let primary_text = if self.notification_count > 0 {
             Some(self.notification_count.to_string())
         } else {
@@ -186,7 +180,6 @@ impl SimpleComponent for NotificationsTile {
             Attention::Dim
         };
 
-        widgets.tile.emit(TileMsg::SetIcon(Some(icon.to_string())));
         widgets.tile.emit(TileMsg::SetPrimary(primary_text));
         widgets.tile.emit(TileMsg::SetAttention(attention));
     }

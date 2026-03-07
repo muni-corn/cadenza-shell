@@ -26,7 +26,7 @@ pango = "0.21"
 pulse = { version = "2.30", package = "libpulse-binding" }
 relm4 = { version = "0.10.1", features = ["libadwaita", "adw"] }
 relm4-components = "0.10"
-relm4-icons = { git = "https://github.com/muni-corn/relm4-icons", branch = "more-fluent-icons" }
+relm4-icons = "0.10"
 reqwest = { version = "0.12", default-features = false, features = [
   "rustls-tls",
   "json",
@@ -45,7 +45,7 @@ zbus = { version = "5", default-features = false, features = ["tokio"] }
 
 [build-dependencies]
 glib-build-tools = "0.21"
-relm4-icons-build = { git = "https://github.com/muni-corn/relm4-icons", branch = "more-fluent-icons" }
+relm4-icons-build = "0.10"
 
 [features]
 default = []

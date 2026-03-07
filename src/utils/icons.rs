@@ -1,37 +1,48 @@
 use crate::icon_names::*;
 
 // icon constants for various widgets
-pub const BRIGHTNESS_ICON_NAMES: &[&str] = &[BRIGHTNESS_LOW_REGULAR, BRIGHTNESS_HIGH_REGULAR];
+pub const BRIGHTNESS_ICON_NAMES: &[&str] = &[DISPLAY_BRIGHTNESS];
 
-pub const VOLUME_ICONS: &[&str] = &[SPEAKER_0_REGULAR, SPEAKER_1_REGULAR, SPEAKER_2_REGULAR];
-pub const VOLUME_MUTED: &str = SPEAKER_OFF_REGULAR;
-pub const VOLUME_ZERO: &str = SPEAKER_MUTE_REGULAR;
+pub const VOLUME_ICONS: &[&str] = &[SPEAKER_MIN, SPEAKER_MID, SPEAKER_MAX];
+pub const VOLUME_MUTED: &str = SPEAKER_CROSS;
+pub const VOLUME_ZERO: &str = SPEAKER_CROSS;
 
 pub const BATTERY_ICON_NAMES: &[&str] = &[
-    BATTERY_1_REGULAR,
-    BATTERY_2_REGULAR,
-    BATTERY_3_REGULAR,
-    BATTERY_4_REGULAR,
-    BATTERY_5_REGULAR,
-    BATTERY_6_REGULAR,
-    BATTERY_7_REGULAR,
-    BATTERY_8_REGULAR,
-    BATTERY_9_REGULAR,
-    BATTERY_10_REGULAR,
+    BATTERY_EMPTY,
+    BATTERY_10,
+    BATTERY_20,
+    BATTERY_30,
+    BATTERY_40,
+    BATTERY_50,
+    BATTERY_60,
+    BATTERY_70,
+    BATTERY_80,
+    BATTERY_90,
+    BATTERY_100,
 ];
 
-pub const NETWORK_WIFI: &str = WIFI_1_REGULAR;
-pub const NETWORK_WIFI_ICON_NAMES: &[&str] = &[
-    WIFI_4_REGULAR,
-    WIFI_3_REGULAR,
-    WIFI_2_REGULAR,
-    WIFI_1_REGULAR,
+pub const BATTERY_CHARGING_ICON_NAMES: &[&str] = &[
+    BATTERY_0_CH,
+    BATTERY_10_CH,
+    BATTERY_20_CH,
+    BATTERY_30_CH,
+    BATTERY_40_CH,
+    BATTERY_50_CH,
+    BATTERY_60_CH,
+    BATTERY_70_CH,
+    BATTERY_80_CH,
+    BATTERY_90_CH,
+    BATTERY_100_CH,
 ];
-pub const NETWORK_WIFI_DISABLED: &str = WIFI_OFF_REGULAR;
-pub const NETWORK_WIFI_DISCONNECTED: &str = WIFI_WARNING_REGULAR;
-pub const NETWORK_WIRED_DISABLED: &str = GLOBE_OFF_REGULAR;
-pub const NETWORK_WIRED_CONNECTED: &str = EARTH_REGULAR;
-pub const NETWORK_WIRED_UNREACHABLE: &str = GLOBE_ERROR_REGULAR;
+
+pub const NETWORK_WIFI: &str = RADIOWAVES_1;
+pub const NETWORK_WIFI_ICON_NAMES: &[&str] =
+    &[RADIOWAVES_4, RADIOWAVES_3, RADIOWAVES_2, RADIOWAVES_1];
+pub const NETWORK_WIFI_DISABLED: &str = RADIOWAVES_NO;
+pub const NETWORK_WIFI_DISCONNECTED: &str = RADIOWAVES_X;
+pub const NETWORK_WIRED_DISABLED: &str = RADIOWAVES_NO;
+pub const NETWORK_WIRED_CONNECTED: &str = LAN;
+pub const NETWORK_WIRED_UNREACHABLE: &str = LAN_QUESTION;
 
 /// Get an icon from a list based on a percentage value from 0.0 to 1.0.
 pub fn percentage_to_icon_from_list<'a>(percentage: f64, icons: &'a [&'a str]) -> &'a str {
