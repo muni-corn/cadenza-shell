@@ -3,7 +3,7 @@ use std::collections::{HashMap, hash_map};
 use bluer::{Adapter, AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, Session};
 use futures_lite::StreamExt;
 use relm4::SharedState;
-use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 pub static BLUETOOTH_STATE: SharedState<Option<BluetoothState>> = SharedState::new();
 
@@ -73,9 +73,9 @@ pub async fn run_bluetooth_service() {
 
     // set up bluetooth monitoring
     match start_event_listening(adapter).await {
-        Ok(mut event_rx) => {
+        Ok((event_tx, mut event_rx)) => {
             while let Some(event) = event_rx.recv().await {
-                update(event).await;
+                update(event, &event_tx).await;
             }
         }
         Err(e) => {
@@ -86,7 +86,10 @@ pub async fn run_bluetooth_service() {
 
 async fn start_event_listening(
     adapter: Adapter,
-) -> anyhow::Result<UnboundedReceiver<BluetoothEvent>> {
+) -> anyhow::Result<(
+    UnboundedSender<BluetoothEvent>,
+    UnboundedReceiver<BluetoothEvent>,
+)> {
     let (event_tx, event_rx) = unbounded_channel();
 
     // monitor adapter events
@@ -136,17 +139,29 @@ async fn start_event_listening(
         }
     }
 
-    Ok(event_rx)
+    Ok((event_tx, event_rx))
 }
 
-async fn update(input: BluetoothEvent) {
-    update_from_event(input).await;
+async fn update(input: BluetoothEvent, event_tx: &UnboundedSender<BluetoothEvent>) {
+    // update_from_event is sync so the write lock is always released before the
+    // async subscription and count-poll steps below
+    let new_device = update_from_event(input);
     update_connected_device_count().await;
+
+    // subscribe to property changes for any newly added device; this must
+    // happen outside the write lock (hence the two-step approach above)
+    if let Some((address, device)) = new_device {
+        subscribe_device_events(address, device, event_tx).await;
+    }
 }
 
-async fn update_from_event(input: BluetoothEvent) {
+/// Applies a bluetooth event to [`BLUETOOTH_STATE`] synchronously.
+///
+/// Returns `Some((address, device))` when a new device was added that needs
+/// an event subscription set up (handled asynchronously by the caller).
+fn update_from_event(input: BluetoothEvent) -> Option<(Address, Device)> {
     let Some(ref mut state) = *BLUETOOTH_STATE.write() else {
-        return;
+        return None;
     };
 
     log::debug!("updating bluetooth state with event: {:?}", input);
@@ -155,30 +170,58 @@ async fn update_from_event(input: BluetoothEvent) {
         BluetoothEvent::Adapter(adapter_event) => match adapter_event {
             AdapterEvent::DeviceAdded(address) => {
                 let Ok(device) = state.adapter.device(address) else {
-                    return;
+                    return None;
                 };
-                state.devices.insert(address, device);
+                state.devices.insert(address, device.clone());
+                Some((address, device))
             }
             AdapterEvent::DeviceRemoved(address) => {
                 state.devices.remove(&address);
+                None
             }
-            AdapterEvent::PropertyChanged(adapter_property) => match adapter_property {
-                AdapterProperty::Powered(p) => {
-                    state.powered = p;
+            AdapterEvent::PropertyChanged(adapter_property) => {
+                match adapter_property {
+                    AdapterProperty::Powered(p) => state.powered = p,
+                    AdapterProperty::Discovering(d) => state.discovering = d,
+                    p => log::warn!("unhandled AdapterProperty event: {p:?}"),
                 }
-                AdapterProperty::Discovering(d) => {
-                    state.discovering = d;
-                }
-                p => log::warn!("unhandled AdapterProperty event: {p:?}"),
-            },
-        },
-        BluetoothEvent::Device(address, device_event) => match device_event {
-            DeviceEvent::PropertyChanged(device_property) => {
-                log::warn!(
-                    "unhandled ProperyChanged event for device {address}: {device_property:?}"
-                )
+                None
             }
         },
+        BluetoothEvent::Device(address, device_event) => {
+            match device_event {
+                DeviceEvent::PropertyChanged(device_property) => {
+                    log::debug!("device {address} property changed: {device_property:?}");
+                }
+            }
+            None
+        }
+    }
+}
+
+/// Subscribes to BlueZ property change events for a device and forwards them
+/// into the shared event channel.
+async fn subscribe_device_events(
+    address: Address,
+    device: Device,
+    event_tx: &UnboundedSender<BluetoothEvent>,
+) {
+    match device.events().await {
+        Ok(mut device_events) => {
+            let tx = event_tx.clone();
+            relm4::spawn(async move {
+                while let Some(event) = device_events.next().await {
+                    tx.send(BluetoothEvent::Device(address, event))
+                        .unwrap_or_else(|e| {
+                            log::error!("couldn't send device bluetooth event for {address}: {e}")
+                        });
+                }
+                log::warn!("bluetooth event stream ended for device {address}");
+            });
+        }
+        Err(e) => {
+            log::warn!("couldn't subscribe to events for device {address}: {e}");
+        }
     }
 }
 
