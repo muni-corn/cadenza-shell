@@ -14,6 +14,7 @@ use crate::{
         },
         types::{ConnectivityState, DeviceType, State},
     },
+    sleep_monitor,
     utils::icons::{
         NETWORK_WIFI_DISABLED, NETWORK_WIFI_ICON_NAMES, NETWORK_WIRED_CONNECTED,
         NETWORK_WIRED_DISABLED, percentage_to_icon_from_list,
@@ -81,6 +82,25 @@ pub async fn run_network_service() {
     else {
         return;
     };
+
+    // subscribe to system wake events and forward them into the event channel
+    let mut wake_rx = sleep_monitor::subscribe_wake();
+    let event_tx_wake = event_tx.clone();
+    relm4::spawn(async move {
+        loop {
+            match wake_rx.recv().await {
+                Ok(()) => {
+                    event_tx_wake
+                        .send(NetworkPropertyChange::Wake)
+                        .unwrap_or_else(|e| log::error!("couldn't send wake event: {e}"));
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    log::warn!("network wake receiver lagged, missed {n} wake event(s)");
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    });
 
     // fetch initial state immediately so the tile is correct before any events
     // arrive
