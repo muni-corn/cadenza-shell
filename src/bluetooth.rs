@@ -62,10 +62,19 @@ pub async fn run_bluetooth_service() {
         }
     };
 
+    // poll initial connected count once; subsequent changes are tracked
+    // incrementally via DeviceProperty::Connected events
+    let mut connected_device_count: u8 = 0;
+    for device in devices.values() {
+        if device.is_connected().await.unwrap_or(false) {
+            connected_device_count = connected_device_count.saturating_add(1);
+        }
+    }
+
     let state = BluetoothState {
         _session: session,
         powered: adapter.is_powered().await.unwrap_or(false),
-        connected_device_count: 0,
+        connected_device_count,
         devices,
         discovering: adapter.is_discovering().await.unwrap_or(false),
         adapter: adapter.clone(),
@@ -146,11 +155,10 @@ async fn start_event_listening(
 
 async fn update(input: BluetoothEvent, event_tx: &UnboundedSender<BluetoothEvent>) {
     // update_from_event is sync so the write lock is always released before the
-    // async subscription and count-poll steps below
+    // async subscription below
     let new_device = update_from_event(input);
-    update_connected_device_count().await;
 
-    // subscribe to property changes for any newly added device; this must
+    // subscribe to events for any newly added device; this must
     // happen outside the write lock (hence the two-step approach above)
     if let Some((address, device)) = new_device {
         subscribe_device_events(address, device, event_tx).await;
@@ -237,28 +245,5 @@ async fn subscribe_device_events(
         Err(e) => {
             log::warn!("couldn't subscribe to events for device {address}: {e}");
         }
-    }
-}
-
-async fn update_connected_device_count() {
-    log::debug!("updating connected device count for bluetooth");
-
-    let devices = {
-        let state = BLUETOOTH_STATE.read();
-        let Some(ref state) = *state else {
-            return;
-        };
-        state.devices.clone()
-    };
-
-    let mut count = 0;
-    for device in devices.values() {
-        if device.is_connected().await.unwrap_or(false) {
-            count += 1;
-        }
-    }
-
-    if let Some(ref mut state) = *BLUETOOTH_STATE.write() {
-        state.connected_device_count = count;
     }
 }
