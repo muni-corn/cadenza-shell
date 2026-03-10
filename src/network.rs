@@ -72,7 +72,7 @@ pub enum NetworkPropertyChange {
 pub async fn run_network_service() {
     // setup property watching
     match setup_property_watching().await {
-        Ok(mut event_rx) => {
+        Ok((conn, mut event_rx)) => {
             while let Some(event) = event_rx.recv().await {
                 match event {
                     NetworkPropertyChange::State(state) => {
@@ -81,15 +81,17 @@ pub async fn run_network_service() {
                     NetworkPropertyChange::Connectivity(connectivity) => {
                         NETWORK_STATE.write().connectivity = connectivity
                     }
-                    NetworkPropertyChange::Primary(path) => match fetch_network_info(path).await {
-                        Ok(new_info) => {
-                            log::debug!("fetched new network info: {:?}", new_info);
-                            *NETWORK_STATE.write() = new_info;
+                    NetworkPropertyChange::Primary(path) => {
+                        match fetch_network_info(&conn, path).await {
+                            Ok(new_info) => {
+                                log::debug!("fetched new network info: {:?}", new_info);
+                                *NETWORK_STATE.write() = new_info;
+                            }
+                            Err(e) => {
+                                log::error!("couldn't fetch new network info: {e}");
+                            }
                         }
-                        Err(e) => {
-                            log::error!("couldn't fetch new network info: {e}");
-                        }
-                    },
+                    }
                 }
             }
             log::warn!("network service has stopped receiving events");
@@ -100,7 +102,11 @@ pub async fn run_network_service() {
     }
 }
 
-async fn setup_property_watching() -> anyhow::Result<UnboundedReceiver<NetworkPropertyChange>> {
+/// Sets up D-Bus property watchers for NetworkManager.
+///
+/// Returns the shared connection and a receiver for property change events.
+async fn setup_property_watching()
+-> anyhow::Result<(zbus::Connection, UnboundedReceiver<NetworkPropertyChange>)> {
     let conn = zbus::Connection::system().await?;
     let nm_proxy = NetworkManagerProxy::new(&conn).await?;
 
@@ -162,14 +168,14 @@ async fn setup_property_watching() -> anyhow::Result<UnboundedReceiver<NetworkPr
         log::warn!("stream for primary connection state changes has closed");
     });
 
-    Ok(event_rx)
+    Ok((conn, event_rx))
 }
 
 async fn fetch_network_info(
+    conn: &zbus::Connection,
     primary_connection_path: OwnedObjectPath,
 ) -> anyhow::Result<NetworkInfo> {
-    let conn = zbus::Connection::system().await?;
-    let nm_proxy = NetworkManagerProxy::new(&conn).await?;
+    let nm_proxy = NetworkManagerProxy::new(conn).await?;
 
     // get overall state
     let connection_state = nm_proxy.state().await?;
@@ -183,7 +189,7 @@ async fn fetch_network_info(
     );
     if is_connected {
         // get primary connection details
-        let active_conn_proxy = ActiveConnectionProxy::builder(&conn)
+        let active_conn_proxy = ActiveConnectionProxy::builder(conn)
             .path(&primary_connection_path)?
             .build()
             .await?;
@@ -193,7 +199,7 @@ async fn fetch_network_info(
         log::debug!("active network device paths: {:?}", active_device_paths);
 
         if let Some(device_path) = active_device_paths.first() {
-            let device_proxy = NetworkDeviceProxy::builder(&conn)
+            let device_proxy = NetworkDeviceProxy::builder(conn)
                 .path(device_path)?
                 .build()
                 .await?;
@@ -203,7 +209,7 @@ async fn fetch_network_info(
             let specific_info = match device_type {
                 DeviceType::Ethernet => Some(SpecificNetworkInfo::Wired),
                 DeviceType::Wifi => {
-                    let wifi_info = get_wifi_info(&conn, device_path).await?;
+                    let wifi_info = get_wifi_info(conn, device_path).await?;
                     Some(SpecificNetworkInfo::WiFi {
                         wifi_ssid: wifi_info.0,
                         wifi_strength: wifi_info.1,
