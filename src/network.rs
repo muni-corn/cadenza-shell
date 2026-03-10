@@ -71,35 +71,48 @@ pub enum NetworkPropertyChange {
 
 pub async fn run_network_service() {
     // setup property watching
-    match setup_property_watching().await {
-        Ok((conn, mut event_rx)) => {
-            while let Some(event) = event_rx.recv().await {
-                match event {
-                    NetworkPropertyChange::State(state) => {
-                        NETWORK_STATE.write().connection_state = state
-                    }
-                    NetworkPropertyChange::Connectivity(connectivity) => {
-                        NETWORK_STATE.write().connectivity = connectivity
-                    }
-                    NetworkPropertyChange::Primary(path) => {
-                        match fetch_network_info(&conn, path).await {
-                            Ok(new_info) => {
-                                log::debug!("fetched new network info: {:?}", new_info);
-                                *NETWORK_STATE.write() = new_info;
-                            }
-                            Err(e) => {
-                                log::error!("couldn't fetch new network info: {e}");
-                            }
-                        }
-                    }
-                }
+    let Ok((conn, mut event_rx)) = setup_property_watching()
+        .await
+        .inspect_err(|e| log::error!("failed to setup network property watching: {e}"))
+    else {
+        return;
+    };
+
+    // fetch initial state immediately so the tile is correct before any events
+    // arrive
+    if let Err(e) = fetch_and_apply_primary(&conn).await {
+        log::warn!("couldn't fetch initial network state: {e}");
+    }
+
+    while let Some(event) = event_rx.recv().await {
+        match event {
+            NetworkPropertyChange::State(state) => NETWORK_STATE.write().connection_state = state,
+            NetworkPropertyChange::Connectivity(connectivity) => {
+                NETWORK_STATE.write().connectivity = connectivity
             }
-            log::warn!("network service has stopped receiving events");
-        }
-        Err(e) => {
-            log::error!("failed to setup network property watching: {}", e);
+            NetworkPropertyChange::Primary(path) => match fetch_network_info(&conn, path).await {
+                Ok(new_info) => {
+                    log::debug!("fetched new network info: {:?}", new_info);
+                    *NETWORK_STATE.write() = new_info;
+                }
+                Err(e) => {
+                    log::error!("couldn't fetch new network info: {e}");
+                }
+            },
         }
     }
+    log::warn!("network service has stopped receiving events");
+}
+
+/// Queries NM for the current primary connection path and fetches full network
+/// info, writing the result into [`NETWORK_STATE`].
+async fn fetch_and_apply_primary(conn: &zbus::Connection) -> anyhow::Result<()> {
+    let nm_proxy = NetworkManagerProxy::new(conn).await?;
+    let primary_path = nm_proxy.primary_connection().await?;
+    let info = fetch_network_info(conn, primary_path).await?;
+    log::debug!("fetched initial network info: {:?}", info);
+    *NETWORK_STATE.write() = info;
+    Ok(())
 }
 
 /// Sets up D-Bus property watchers for NetworkManager.
