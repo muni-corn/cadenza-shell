@@ -7,12 +7,16 @@ use futures_lite::StreamExt;
 use relm4::SharedState;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
+use crate::sleep_monitor;
+
 pub static BLUETOOTH_STATE: SharedState<Option<BluetoothState>> = SharedState::new();
 
 #[derive(Debug)]
 pub enum BluetoothEvent {
     Adapter(AdapterEvent),
     Device(Address, DeviceEvent),
+    /// The system has just woken from sleep; triggers a full state refresh.
+    Wake,
 }
 
 #[derive(Clone, Debug)]
@@ -83,16 +87,36 @@ pub async fn run_bluetooth_service() {
     *BLUETOOTH_STATE.write() = Some(state);
 
     // set up bluetooth monitoring
-    match start_event_listening(adapter).await {
-        Ok((event_tx, mut event_rx)) => {
-            while let Some(event) = event_rx.recv().await {
-                update(event, &event_tx).await;
+    let Ok((event_tx, mut event_rx)) = start_event_listening(adapter)
+        .await
+        .inspect_err(|e| log::error!("failed to setup bluetooth monitoring: {e}"))
+    else {
+        return;
+    };
+
+    // subscribe to system wake events and forward them into the event channel
+    let mut wake_rx = sleep_monitor::subscribe_wake();
+    let event_tx_wake = event_tx.clone();
+    relm4::spawn(async move {
+        loop {
+            match wake_rx.recv().await {
+                Ok(()) => {
+                    event_tx_wake
+                        .send(BluetoothEvent::Wake)
+                        .unwrap_or_else(|e| log::error!("couldn't send wake event: {e}"));
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                    log::warn!("bluetooth wake receiver lagged, missed {n} wake event(s)");
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
         }
-        Err(e) => {
-            log::error!("failed to setup bluetooth monitoring: {}", e);
-        }
+    });
+
+    while let Some(event) = event_rx.recv().await {
+        update(event, &event_tx).await;
     }
+    log::warn!("bluetooth service has stopped receiving events");
 }
 
 async fn start_event_listening(
@@ -142,6 +166,11 @@ async fn start_event_listening(
 }
 
 async fn update(input: BluetoothEvent, event_tx: &UnboundedSender<BluetoothEvent>) {
+    if let BluetoothEvent::Wake = input {
+        refresh_state_after_wake().await;
+        return;
+    }
+
     // update_from_event is sync so the write lock is always released before the
     // async subscription below
     let new_device = update_from_event(input);
@@ -150,6 +179,37 @@ async fn update(input: BluetoothEvent, event_tx: &UnboundedSender<BluetoothEvent
     // happen outside the write lock (hence the two-step approach above)
     if let Some((address, device)) = new_device {
         subscribe_device_events(address, device, event_tx).await;
+    }
+}
+
+/// Re-polls adapter powered/discovering state and connected device count after
+/// a system wake, since D-Bus events may have been missed during sleep.
+async fn refresh_state_after_wake() {
+    log::debug!("system wake: refreshing bluetooth state");
+
+    // clone the adapter and devices list without holding the write lock
+    let (adapter, devices) = {
+        let state = BLUETOOTH_STATE.read();
+        let Some(ref state) = *state else {
+            return;
+        };
+        (state.adapter.clone(), state.devices.clone())
+    };
+
+    let powered = adapter.is_powered().await.unwrap_or(false);
+    let discovering = adapter.is_discovering().await.unwrap_or(false);
+
+    let mut connected_device_count: u8 = 0;
+    for device in devices.values() {
+        if device.is_connected().await.unwrap_or(false) {
+            connected_device_count = connected_device_count.saturating_add(1);
+        }
+    }
+
+    if let Some(ref mut state) = *BLUETOOTH_STATE.write() {
+        state.powered = powered;
+        state.discovering = discovering;
+        state.connected_device_count = connected_device_count;
     }
 }
 
@@ -186,6 +246,8 @@ fn update_from_event(input: BluetoothEvent) -> Option<(Address, Device)> {
                 None
             }
         },
+        // wake is handled before this function is called
+        BluetoothEvent::Wake => None,
         BluetoothEvent::Device(address, device_event) => {
             match device_event {
                 DeviceEvent::PropertyChanged(DeviceProperty::Connected(connected)) => {
