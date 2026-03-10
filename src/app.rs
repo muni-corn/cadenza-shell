@@ -13,6 +13,7 @@ use crate::{
     network::run_network_service,
     niri,
     pulseaudio::run_pulseaudio_loop,
+    sleep_monitor::run_sleep_monitor,
     weather::start_weather_polling,
     widgets::{
         bar::{Bar, BarInit, BarMsg, BarOutput},
@@ -62,6 +63,9 @@ impl AsyncComponent for CadenzaShellModel {
             .inspect_err(|e| log::error!("couldn't setup tray client: {}", e))
             .ok()
             .map(|c| Arc::new(Mutex::new(c)));
+
+        // start sleep monitor (must be first so other services can subscribe)
+        sender.command(|_, shutdown| shutdown.register(run_sleep_monitor()).drop_on_shutdown());
 
         // start battery watching
         sender.command(|_, shutdown| {

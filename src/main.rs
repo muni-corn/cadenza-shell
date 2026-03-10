@@ -16,6 +16,7 @@ mod niri;
 mod notifications;
 mod pulseaudio;
 mod settings;
+mod sleep_monitor;
 mod style;
 mod tiles;
 mod utils;
