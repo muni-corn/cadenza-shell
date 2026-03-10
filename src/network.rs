@@ -3,7 +3,7 @@ pub mod types;
 
 use futures_lite::StreamExt;
 use relm4::SharedState;
-use tokio::sync::mpsc::{self, UnboundedReceiver};
+use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use zbus::zvariant::OwnedObjectPath;
 
 use crate::{
@@ -66,12 +66,16 @@ pub enum SpecificNetworkInfo {
 pub enum NetworkPropertyChange {
     State(State),
     Connectivity(ConnectivityState),
+    /// The primary connection object path changed; triggers a full refetch.
     Primary(OwnedObjectPath),
+    /// The active access point's signal strength changed.
+    Strength(u8),
+    /// The system just woke from sleep; triggers a full refetch.
+    Wake,
 }
 
 pub async fn run_network_service() {
-    // setup property watching
-    let Ok((conn, mut event_rx)) = setup_property_watching()
+    let Ok((conn, event_tx, mut event_rx)) = setup_property_watching()
         .await
         .inspect_err(|e| log::error!("failed to setup network property watching: {e}"))
     else {
@@ -80,7 +84,8 @@ pub async fn run_network_service() {
 
     // fetch initial state immediately so the tile is correct before any events
     // arrive
-    if let Err(e) = fetch_and_apply_primary(&conn).await {
+    let mut strength_task: Option<tokio::task::AbortHandle> = None;
+    if let Err(e) = handle_primary_change(&conn, &event_tx, &mut strength_task).await {
         log::warn!("couldn't fetch initial network state: {e}");
     }
 
@@ -90,36 +95,75 @@ pub async fn run_network_service() {
             NetworkPropertyChange::Connectivity(connectivity) => {
                 NETWORK_STATE.write().connectivity = connectivity
             }
-            NetworkPropertyChange::Primary(path) => match fetch_network_info(&conn, path).await {
-                Ok(new_info) => {
-                    log::debug!("fetched new network info: {:?}", new_info);
-                    *NETWORK_STATE.write() = new_info;
+            NetworkPropertyChange::Primary(_) => {
+                if let Err(e) = handle_primary_change(&conn, &event_tx, &mut strength_task).await {
+                    log::error!("couldn't handle primary connection change: {e}");
                 }
-                Err(e) => {
-                    log::error!("couldn't fetch new network info: {e}");
+            }
+            NetworkPropertyChange::Strength(strength) => {
+                let mut state = NETWORK_STATE.write();
+                if let Some(SpecificNetworkInfo::WiFi {
+                    ref mut wifi_strength,
+                    ..
+                }) = state.specific_info
+                {
+                    *wifi_strength = strength;
                 }
-            },
+            }
+            NetworkPropertyChange::Wake => {
+                log::debug!("system wake: refreshing network state");
+                if let Err(e) = handle_primary_change(&conn, &event_tx, &mut strength_task).await {
+                    log::warn!("couldn't refresh network state after wake: {e}");
+                }
+            }
         }
     }
     log::warn!("network service has stopped receiving events");
 }
 
-/// Queries NM for the current primary connection path and fetches full network
-/// info, writing the result into [`NETWORK_STATE`].
-async fn fetch_and_apply_primary(conn: &zbus::Connection) -> anyhow::Result<()> {
+/// Fetches current NM state, updates [`NETWORK_STATE`], and (re)subscribes to
+/// access point signal strength changes if on WiFi.
+///
+/// Any previously running strength subscription task is cancelled first.
+async fn handle_primary_change(
+    conn: &zbus::Connection,
+    event_tx: &UnboundedSender<NetworkPropertyChange>,
+    strength_task: &mut Option<tokio::task::AbortHandle>,
+) -> anyhow::Result<()> {
+    // cancel previous strength subscription before fetching
+    if let Some(handle) = strength_task.take() {
+        handle.abort();
+    }
+
     let nm_proxy = NetworkManagerProxy::new(conn).await?;
     let primary_path = nm_proxy.primary_connection().await?;
-    let info = fetch_network_info(conn, primary_path).await?;
-    log::debug!("fetched initial network info: {:?}", info);
+    let (info, ap_path) = fetch_network_info(conn, primary_path).await?;
+
+    log::debug!("fetched network info: {:?}", info);
     *NETWORK_STATE.write() = info;
+
+    // subscribe to strength changes for the new access point
+    if let Some(ap_path) = ap_path {
+        let tx = event_tx.clone();
+        let conn_clone = conn.clone();
+        let handle = relm4::spawn(async move {
+            subscribe_ap_strength(conn_clone, ap_path, tx).await;
+        });
+        *strength_task = Some(handle.abort_handle());
+    }
+
     Ok(())
 }
 
 /// Sets up D-Bus property watchers for NetworkManager.
 ///
-/// Returns the shared connection and a receiver for property change events.
-async fn setup_property_watching()
--> anyhow::Result<(zbus::Connection, UnboundedReceiver<NetworkPropertyChange>)> {
+/// Returns the shared connection, a sender for injecting events (used when
+/// spawning the strength subscription task), and the event receiver.
+async fn setup_property_watching() -> anyhow::Result<(
+    zbus::Connection,
+    UnboundedSender<NetworkPropertyChange>,
+    UnboundedReceiver<NetworkPropertyChange>,
+)> {
     let conn = zbus::Connection::system().await?;
     let nm_proxy = NetworkManagerProxy::new(&conn).await?;
 
@@ -164,6 +208,7 @@ async fn setup_property_watching()
 
     // watch for primary connection changes
     let mut primary_connection_stream = nm_proxy.receive_primary_connection_changed().await;
+    let event_tx_clone = event_tx.clone();
     relm4::spawn(async move {
         while let Some(change) = primary_connection_stream.next().await {
             if let Ok(new_primary_connection_path) = change
@@ -171,7 +216,7 @@ async fn setup_property_watching()
                 .await
                 .inspect_err(|e| log::error!("couldn't get primary connection change value: {e}"))
             {
-                event_tx
+                event_tx_clone
                     .send(NetworkPropertyChange::Primary(new_primary_connection_path))
                     .unwrap_or_else(|e| {
                         log::error!("couldn't send primary connection path change: {e}")
@@ -181,13 +226,17 @@ async fn setup_property_watching()
         log::warn!("stream for primary connection state changes has closed");
     });
 
-    Ok((conn, event_rx))
+    Ok((conn, event_tx, event_rx))
 }
 
+/// Fetches full network info for the given primary connection path.
+///
+/// Returns the `NetworkInfo` and, if connected via WiFi, the active access
+/// point object path (for setting up a strength subscription).
 async fn fetch_network_info(
     conn: &zbus::Connection,
     primary_connection_path: OwnedObjectPath,
-) -> anyhow::Result<NetworkInfo> {
+) -> anyhow::Result<(NetworkInfo, Option<OwnedObjectPath>)> {
     let nm_proxy = NetworkManagerProxy::new(conn).await?;
 
     // get overall state
@@ -219,43 +268,66 @@ async fn fetch_network_info(
 
             let device_type = device_proxy.device_type().await?;
 
-            let specific_info = match device_type {
-                DeviceType::Ethernet => Some(SpecificNetworkInfo::Wired),
+            match device_type {
+                DeviceType::Ethernet => Ok((
+                    NetworkInfo {
+                        connection_state,
+                        connectivity,
+                        specific_info: Some(SpecificNetworkInfo::Wired),
+                    },
+                    None,
+                )),
                 DeviceType::Wifi => {
-                    let wifi_info = get_wifi_info(conn, device_path).await?;
-                    Some(SpecificNetworkInfo::WiFi {
-                        wifi_ssid: wifi_info.0,
-                        wifi_strength: wifi_info.1,
-                    })
+                    let (ssid, strength, ap_path) = get_wifi_info(conn, device_path).await?;
+                    Ok((
+                        NetworkInfo {
+                            connection_state,
+                            connectivity,
+                            specific_info: Some(SpecificNetworkInfo::WiFi {
+                                wifi_ssid: ssid,
+                                wifi_strength: strength,
+                            }),
+                        },
+                        Some(ap_path),
+                    ))
                 }
-                _ => None,
-            };
-
-            Ok(NetworkInfo {
-                connection_state,
-                connectivity,
-                specific_info,
-            })
+                _ => Ok((
+                    NetworkInfo {
+                        connection_state,
+                        connectivity,
+                        specific_info: None,
+                    },
+                    None,
+                )),
+            }
         } else {
-            Ok(NetworkInfo {
+            Ok((
+                NetworkInfo {
+                    connection_state,
+                    connectivity,
+                    specific_info: None,
+                },
+                None,
+            ))
+        }
+    } else {
+        Ok((
+            NetworkInfo {
                 connection_state,
                 connectivity,
                 specific_info: None,
-            })
-        }
-    } else {
-        Ok(NetworkInfo {
-            connection_state,
-            connectivity,
-            specific_info: None,
-        })
+            },
+            None,
+        ))
     }
 }
 
+/// Returns the SSID, current strength, and object path of the active access
+/// point for the given wireless device.
 async fn get_wifi_info(
     conn: &zbus::Connection,
     device_path: &zbus::zvariant::OwnedObjectPath,
-) -> anyhow::Result<(String, u8)> {
+) -> anyhow::Result<(String, u8, OwnedObjectPath)> {
     let wifi_proxy = WirelessDeviceProxy::builder(conn)
         .path(device_path)?
         .build()
@@ -288,7 +360,49 @@ async fn get_wifi_info(
         anyhow::bail!("ssid is whitespace only");
     }
 
-    Ok((ssid, strength))
+    Ok((ssid, strength, ap_path))
+}
+
+/// Subscribes to strength property changes on an access point and forwards
+/// them as [`NetworkPropertyChange::Strength`] events.
+///
+/// This task runs until the stream closes or the task is aborted (e.g. when
+/// the primary connection changes or the system sleeps).
+async fn subscribe_ap_strength(
+    conn: zbus::Connection,
+    ap_path: OwnedObjectPath,
+    tx: UnboundedSender<NetworkPropertyChange>,
+) {
+    let builder = match AccessPointProxy::builder(&conn).path(&ap_path) {
+        Ok(b) => b,
+        Err(e) => {
+            log::error!("invalid access point path {ap_path}: {e}");
+            return;
+        }
+    };
+    let ap_proxy = match builder.build().await {
+        Ok(p) => p,
+        Err(e) => {
+            log::error!("couldn't build access point proxy for strength subscription: {e}");
+            return;
+        }
+    };
+
+    let mut stream = ap_proxy.receive_strength_changed().await;
+    log::debug!("subscribed to strength changes for access point {ap_path}");
+
+    while let Some(change) = stream.next().await {
+        if let Ok(strength) = change
+            .get()
+            .await
+            .inspect_err(|e| log::debug!("couldn't get strength value: {e}"))
+        {
+            tx.send(NetworkPropertyChange::Strength(strength))
+                .unwrap_or_else(|e| log::error!("couldn't send strength change: {e}"));
+        }
+    }
+
+    log::debug!("strength subscription for access point {ap_path} ended");
 }
 
 /// Returns an appropriate icon name for the current networking state.
