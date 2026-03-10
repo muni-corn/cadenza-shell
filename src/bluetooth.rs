@@ -1,6 +1,8 @@
 use std::collections::{HashMap, hash_map};
 
-use bluer::{Adapter, AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, Session};
+use bluer::{
+    Adapter, AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, DeviceProperty, Session,
+};
 use futures_lite::StreamExt;
 use relm4::SharedState;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
@@ -190,6 +192,19 @@ fn update_from_event(input: BluetoothEvent) -> Option<(Address, Device)> {
         },
         BluetoothEvent::Device(address, device_event) => {
             match device_event {
+                DeviceEvent::PropertyChanged(DeviceProperty::Connected(connected)) => {
+                    if connected {
+                        state.connected_device_count =
+                            state.connected_device_count.saturating_add(1);
+                    } else {
+                        state.connected_device_count =
+                            state.connected_device_count.saturating_sub(1);
+                    }
+                    log::debug!(
+                        "device {address} connected={connected}, count={}",
+                        state.connected_device_count
+                    );
+                }
                 DeviceEvent::PropertyChanged(device_property) => {
                     log::debug!("device {address} property changed: {device_property:?}");
                 }
