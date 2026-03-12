@@ -111,7 +111,7 @@ impl DischargeProfile {
     fn update_discharging(&mut self, power_now: f64) {
         let now = Local::now();
         let effective_sample_count = self.sample_count.min(READINGS_PER_LIFETIME);
-        let alpha = effective_sample_count as f64 / (effective_sample_count as f64 + 1.);
+        let alpha = 1. / (effective_sample_count as f64 + 1.);
 
         // seed the EMA on first observation; otherwise apply moving average.
         // sample count is updated after this function is called.
@@ -514,7 +514,7 @@ mod tests {
             // bypass the ChargingStatus check and call the inner fn directly
             let t = week_offset_secs(when);
             let power_now = power_watts;
-            let alpha = i as f64 / (i as f64 + 1.);
+            let alpha = 1. / (i as f64 + 1.);
 
             if profile.ema_power == 0.0 {
                 profile.ema_power = power_now;
