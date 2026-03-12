@@ -164,7 +164,7 @@
                     in
                     {
                       postPatch = ''
-                                              cat > build.rs << 'BUILDSCRIPT'
+                        cat > build.rs << 'BUILDSCRIPT'
                         fn main() {
                             let out_dir = std::env::var("OUT_DIR").unwrap();
                             std::fs::write(
