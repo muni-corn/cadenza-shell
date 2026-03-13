@@ -10,7 +10,7 @@
     };
 
     devenv = {
-      url = "github:muni-corn/devenv/rust-toolchain-import-fix";
+      url = "github:cachix/devenv";
       inputs.nixpkgs.follows = "nixpkgs";
     };
 
