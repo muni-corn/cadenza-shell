@@ -218,9 +218,8 @@ async fn refresh_state_after_wake() {
 /// Returns `Some((address, device))` when a new device was added that needs
 /// an event subscription set up (handled asynchronously by the caller).
 fn update_from_event(input: BluetoothEvent) -> Option<(Address, Device)> {
-    let Some(ref mut state) = *BLUETOOTH_STATE.write() else {
-        return None;
-    };
+    let mut guard = BLUETOOTH_STATE.write();
+    let state = (*guard).as_mut()?;
 
     log::debug!("updating bluetooth state with event: {:?}", input);
 
