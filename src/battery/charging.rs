@@ -158,9 +158,6 @@ pub struct SessionReading {
 
     /// State of charge as a fraction `[0, 1]`.
     pub percentage: f64,
-
-    /// Remaining capacity in microampere-hours (µAh).
-    pub charge_uah: f64,
 }
 
 // ── session reading
@@ -173,12 +170,10 @@ impl SessionReading {
     pub fn from_sysfs(r: &SysfsReading) -> Option<Self> {
         let percentage = r.percentage()?;
         // prefer µAh; convert from µWh via voltage if necessary
-        let charge_uah = r.capacity_now.as_microampere_hours(r.voltage_now) as f64;
         Some(Self {
             when: r.when,
             current_ua: r.current_now.unsigned_abs() as f64,
             percentage,
-            charge_uah,
         })
     }
 }
@@ -650,7 +645,6 @@ mod tests {
             when,
             current_ua,
             percentage,
-            charge_uah: percentage * 5000.0, // 5 Ah battery
         }
     }
 
@@ -831,7 +825,6 @@ mod tests {
             when: base,
             current_ua: i0,
             percentage: charge_now_uah / charge_full_uah,
-            charge_uah: charge_now_uah,
         });
 
         // seed CV fit with 10 minutes of data
@@ -843,7 +836,6 @@ mod tests {
                 when: base + chrono::Duration::seconds(t as i64),
                 current_ua: current,
                 percentage: 0.9,
-                charge_uah: charge_now_uah,
             });
         }
 
