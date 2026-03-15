@@ -55,15 +55,6 @@ impl Default for ChargeProfile {
 }
 
 impl ChargeProfile {
-    /// Returns `true` if this profile has enough data to make predictions.
-    pub fn is_ready(&self) -> bool {
-        self.sessions_learned > 0
-            && self.cv_tau_secs > 0.0
-            && self.cv_start_current_ua > 0.0
-            && self.switch_percentage > 0.0
-            && self.cc_current_ua > 0.0
-    }
-
     /// Update the profile with parameters learned from a completed charging
     /// session using an exponential moving average.
     ///
@@ -353,9 +344,7 @@ impl ChargingSession {
 
         // use the learned switch percentage as a gating condition: don't start
         // looking for the transition until we are within 5% of the known point
-        let near_switch =
-            !profile.is_ready() || latest.percentage >= (profile.switch_percentage - 0.05).max(0.0);
-
+        let near_switch = latest.percentage >= (profile.switch_percentage - 0.05).max(0.0);
         if !near_switch {
             return;
         }
@@ -506,15 +495,13 @@ pub fn predict_time_to_full_cc_cv(
     }
 
     // tier 2: CC phase with a learned profile
-    if profile.is_ready()
-        && let Some(t) = predict_cc_plus_cv(
-            session,
-            profile,
-            current_ua,
-            charge_now_uah,
-            charge_full_uah,
-        )
-    {
+    if let Some(t) = predict_cc_plus_cv(
+        session,
+        profile,
+        current_ua,
+        charge_now_uah,
+        charge_full_uah,
+    ) {
         return t;
     }
 
