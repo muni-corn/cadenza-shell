@@ -458,31 +458,27 @@ impl ChargingSession {
     /// and the load-induced dips visible in real data.
     fn rolling_median_current(&self, readings: usize) -> f64 {
         let window_start = self.readings.len().saturating_sub(readings);
-        let mut values: Vec<f64> = self.readings[window_start..]
-            .iter()
-            .map(|r| r.current_ua)
-            .collect();
-        values.sort_by(f64::total_cmp);
-        let mid = values.len() / 2;
-        if values.len().is_multiple_of(2) {
-            (values[mid - 1] + values[mid]) / 2.0
-        } else {
-            values[mid]
-        }
+        let values = self.readings[window_start..].iter().map(|r| r.current_ua);
+        median_of(values)
     }
 
     /// Compute the median current (µA) over all readings.
     fn median_current(&self) -> f64 {
-        let mut values: Vec<f64> = self.readings.iter().map(|r| r.current_ua).collect();
-        values.sort_by(f64::total_cmp);
-        let mid = values.len() / 2;
-        if values.len().is_multiple_of(2) {
-            // average the two middle values
-            (values[mid - 1] + values[mid]) / 2.0
-        } else {
-            // the middle value
-            values[mid]
-        }
+        let values = self.readings.iter().map(|r| r.current_ua);
+        median_of(values)
+    }
+}
+
+fn median_of(iter: impl Iterator<Item = f64>) -> f64 {
+    let mut values = iter.collect::<Vec<_>>();
+    values.sort_by(f64::total_cmp);
+    let mid = values.len() / 2;
+    if values.len().is_multiple_of(2) {
+        // average the two middle values
+        (values[mid - 1] + values[mid]) / 2.0
+    } else {
+        // the middle value
+        values[mid]
     }
 }
 
