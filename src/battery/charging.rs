@@ -297,6 +297,10 @@ pub struct ChargingSession {
     /// Incremental OLS fit of the CV exponential decay. Only updated once the
     /// phase is confirmed as CV.
     pub cv_fit: CvFit,
+
+    /// CSV writer for per-reading session diagnostics. Initialized lazily on
+    /// the first reading; `None` if the file could not be created.
+    csv_writer: Option<csv::Writer<fs::File>>,
 }
 
 impl ChargingSession {
@@ -308,6 +312,19 @@ impl ChargingSession {
     pub fn push(&mut self, reading: SessionReading, profile: &ChargeProfile) {
         self.readings.push(reading);
 
+        // lazily open the csv on the very first reading
+        if self.csv_writer.is_none()
+            && let Some(first) = self.readings.first()
+        {
+            let start_time = first.when;
+            match self.try_open_csv(start_time) {
+                Ok(writer) => self.csv_writer = Some(writer),
+                Err(e) => log::error!("couldn't create charging session csv: {e}"),
+            }
+        }
+
+        self.write_csv_row();
+
         // need at least PHASE_WINDOW readings before making any determination
         if self.readings.len() < PHASE_WINDOW {
             return;
@@ -316,6 +333,64 @@ impl ChargingSession {
         match self.phase {
             ChargingPhase::Unknown | ChargingPhase::Cc => self.update_cc_phase(profile),
             ChargingPhase::Cv => self.update_cv_fit(),
+        }
+    }
+
+    /// Open and return a new CSV writer for this session, writing the header.
+    fn try_open_csv(&self, session_start: DateTime<Local>) -> Result<csv::Writer<fs::File>> {
+        let dir = get_state_directory()?;
+        let filename = format!(
+            "charging_session_stats_{}.csv",
+            session_start.format("%Y-%m-%dT%H-%M-%S")
+        );
+        let path = dir.join(&filename);
+        let file = fs::File::create(&path).with_context(|| format!("creating {filename}"))?;
+        let mut writer = csv::Writer::from_writer(file);
+        writer.write_record([
+            "when",
+            "percentage",
+            "current_now",
+            "session_median_current",
+            "rolling_current_12",
+            "rolling_current_20",
+            "rolling_current_40",
+        ])?;
+        writer.flush()?;
+        log::info!("started charging session csv at {path:?}");
+        Ok(writer)
+    }
+
+    /// Append one diagnostic row for the most recent reading.
+    fn write_csv_row(&mut self) {
+        let Some(latest) = self.readings.last() else {
+            return;
+        };
+        let when = latest.when.to_rfc3339();
+        let percentage = latest.percentage * 100.0;
+        let current_now = latest.current_ua;
+        let session_median = self.median_current();
+        let rolling_12 = self.rolling_median_current(12);
+        let rolling_20 = self.rolling_median_current(20);
+        let rolling_40 = self.rolling_median_current(40);
+
+        let Some(writer) = self.csv_writer.as_mut() else {
+            return;
+        };
+        let row = [
+            when,
+            format!("{percentage:.2}"),
+            format!("{current_now:.0}"),
+            format!("{session_median:.0}"),
+            format!("{rolling_12:.0}"),
+            format!("{rolling_20:.0}"),
+            format!("{rolling_40:.0}"),
+        ];
+        if let Err(e) = writer.write_record(&row) {
+            log::error!("couldn't write charging session csv row: {e}");
+            return;
+        }
+        if let Err(e) = writer.flush() {
+            log::error!("couldn't flush charging session csv: {e}");
         }
     }
 
