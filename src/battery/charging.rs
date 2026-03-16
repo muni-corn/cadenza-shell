@@ -11,7 +11,6 @@ use chrono::{DateTime, Local};
 use serde::{Deserialize, Serialize};
 
 use super::{discharging::get_state_directory, sysfs::SysfsReading};
-use crate::battery::STATISTICS_ALPHA;
 
 /// Learning rate for exponential moving averages applied to [`ChargeProfile`]
 /// fields after each completed charging session.
@@ -298,9 +297,6 @@ pub struct ChargingSession {
     /// Incremental OLS fit of the CV exponential decay. Only updated once the
     /// phase is confirmed as CV.
     pub cv_fit: CvFit,
-
-    /// Current statistics on current and charge.
-    statistics: ChargeStatistics,
 }
 
 impl ChargingSession {
@@ -310,7 +306,6 @@ impl ChargingSession {
     /// that can accelerate detection. Pass the default profile if none has
     /// been learned yet.
     pub fn push(&mut self, reading: SessionReading, profile: &ChargeProfile) {
-        self.statistics.update(&reading);
         self.readings.push(reading);
 
         // need at least PHASE_WINDOW readings before making any determination
@@ -331,10 +326,10 @@ impl ChargingSession {
         let median = self.median_current();
         let rolling_median = self.rolling_median_current(CV_CONFIRM_READINGS);
 
-        log::debug!("-----median statistics--------------------");
-        log::debug!("    percentage: {:.1}%", latest.percentage * 100.);
-        log::debug!("overall median: {median} µA");
-        log::debug!("rolling median: {rolling_median} µA");
+        log::debug!("-----charging statistics--------------------");
+        log::debug!("      percentage: {:.1}%", latest.percentage * 100.);
+        log::debug!("plateau (median): {median} µA");
+        log::debug!("  rolling median: {rolling_median} µA");
 
         // we determine the cc plateau as the median current of all readings. if that
         // currently differs while we're still in cc charging, update it
@@ -347,8 +342,8 @@ impl ChargingSession {
         }
 
         // use the learned switch percentage as a gating condition: don't start looking
-        // for the transition until we are within 5% of the known point or 50% overall
-        let near_switch = latest.percentage >= (profile.switch_percentage - 0.05).max(0.5);
+        // for the transition until we are within 5% of the known point
+        let near_switch = latest.percentage >= (profile.switch_percentage - 0.05).max(0.0);
         if !near_switch {
             log::debug!("not near switching; not checking rolling median");
             return;
@@ -878,108 +873,5 @@ mod tests {
             (secs - expected).abs() / expected < 0.10,
             "expected ~{expected:.0} s, got {secs:.0} s"
         );
-    }
-}
-
-#[derive(Clone, Debug, Default)]
-struct ChargeStatistics {
-    current_ema: f64,
-    current_variance: f64,
-    slope_ema: f64,
-    slope_variance: f64,
-
-    last_current_a: f64,
-    last_time: DateTime<Local>,
-
-    initialized: bool,
-}
-
-impl ChargeStatistics {
-    pub fn update(&mut self, reading: &SessionReading) {
-        // convert to amps for maybe-more-readable statistics output
-        let current_ua = reading.current_ua;
-        let now = reading.when;
-
-        // if no current has been recorded yet, set it now and return now
-        // (everything else will be zero anyway)
-        if !self.initialized {
-            self.current_ema = current_ua;
-            self.last_current_a = current_ua;
-            self.last_time = now;
-            self.initialized = true;
-            return;
-        }
-
-        // update current (I) statistics
-        self.current_ema =
-            self.current_ema * (1.0 - STATISTICS_ALPHA) + current_ua * STATISTICS_ALPHA;
-
-        // variance is the mean of differences squared between actual values and the
-        // mean value of the data series
-        let diff_now = current_ua - self.current_ema;
-        let diff_squared = diff_now * diff_now;
-        self.current_variance =
-            self.current_variance * (1.0 - STATISTICS_ALPHA) + (diff_squared * STATISTICS_ALPHA);
-
-        log::debug!("-----charging statistics--------------------");
-        log::debug!("               current_now: {:>16.1}  µA", current_ua);
-        log::debug!("               current_ema: {:>16.1}  µA", self.current_ema);
-        log::debug!(
-            "          current_variance: {:>16.1}  µA^2",
-            self.current_variance
-        );
-        log::debug!(
-            "current_standard_deviation: {:>16.1}  µA",
-            self.current_variance.sqrt()
-        );
-
-        // update slope statistics, per percentage
-        let slope_now = if self.last_time != now {
-            (current_ua - self.last_current_a) / (now - self.last_time).as_seconds_f64()
-        } else {
-            self.slope_ema
-        };
-
-        // variance is the mean of differences squared between actual values and the
-        // mean value of the data series
-        self.slope_ema = self.slope_ema * (1.0 - STATISTICS_ALPHA) + slope_now * STATISTICS_ALPHA;
-
-        let diff_now = slope_now - self.slope_ema;
-        let diff_squared = diff_now * diff_now;
-        self.slope_variance =
-            self.slope_variance * (1.0 - STATISTICS_ALPHA) + (diff_squared * STATISTICS_ALPHA);
-
-        log::debug!("                 slope_now: {:>16.1}  µA / s", slope_now);
-        log::debug!(
-            "                 slope_ema: {:>16.1}  µA / s",
-            self.slope_ema
-        );
-        log::debug!(
-            "            slope_variance: {:>16.1} (µA / s)^2",
-            self.slope_variance
-        );
-        log::debug!(
-            "  slope_standard_deviation: {:>16.1}  µA / s",
-            self.slope_variance.sqrt()
-        );
-        if self.current_variance > 0.0 || self.slope_variance > 0.0 {
-            log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
-        }
-        if self.current_variance > 0.0 {
-            log::debug!(
-                "current now is {:>5.1} σ from current ema",
-                (current_ua - self.current_ema).abs() / self.current_variance.sqrt(),
-            );
-        }
-        if self.slope_variance > 0.0 {
-            log::debug!(
-                "  slope now is {:>5.1} σ from slope ema",
-                (slope_now - self.slope_ema).abs() / self.slope_variance.sqrt(),
-            );
-        }
-
-        // finally, update stats
-        self.last_current_a = current_ua;
-        self.last_time = now;
     }
 }
