@@ -1,7 +1,7 @@
 //! Stores a user's historical power usage. This data is used to make informed
 //! predictions on future battery drain and estimated time remaining.
 
-use core::{cmp::PartialOrd, iter::Iterator};
+use core::iter::Iterator;
 use std::{fs, path::PathBuf, time::Duration};
 
 use anyhow::{Context, Result};
@@ -148,9 +148,7 @@ impl DischargeProfile {
             .zip(self.sine_coeffs.iter().copied())
             .enumerate()
             .min_by(|(_, (a1, b1)), (_, (a2, b2))| {
-                (a1 * a1 + b1 * b1)
-                    .partial_cmp(&(a2 * a2 + b2 * b2))
-                    .unwrap_or(core::cmp::Ordering::Equal)
+                (a1 * a1 + b1 * b1).total_cmp(&(a2 * a2 + b2 * b2))
             })
             .map(|(i, (a, b))| (i + 1, a, b))
         {
