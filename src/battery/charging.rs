@@ -24,7 +24,7 @@ const PROFILE_LEARNING_RATE: f64 = 0.2;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChargeProfile {
     /// Average current during the CC (constant-current) phase, in microamperes.
-    pub cc_current_ua: f64,
+    pub cc_plateau_ua: f64,
 
     /// Battery state-of-charge fraction at which the CC-to-CV transition is
     /// typically observed, in the range `[0, 1]`.
@@ -45,7 +45,7 @@ pub struct ChargeProfile {
 impl Default for ChargeProfile {
     fn default() -> Self {
         Self {
-            cc_current_ua: 0.0,
+            cc_plateau_ua: 0.0,
             switch_percentage: 0.0,
             cv_tau_secs: 0.0,
             cv_start_current_ua: 0.0,
@@ -58,23 +58,23 @@ impl ChargeProfile {
     /// Update the profile with parameters learned from a completed charging
     /// session using an exponential moving average.
     ///
-    /// - `cc_current_ua` – plateau current observed during the CC phase (µA).
+    /// - `cc_plateau_ua` – plateau current observed during the CC phase (µA).
     /// - `switch_pct` – state-of-charge fraction at which the CC→CV transition
     ///   was detected.
     /// - `cv_start_ua` – current at the moment of the CC→CV transition (µA).
     /// - `tau_secs` – fitted exponential decay constant for the CV phase (s).
-    pub fn update(&mut self, cc_current_ua: f64, switch_pct: f64, cv_start_ua: f64, tau_secs: f64) {
+    pub fn update(&mut self, cc_plateau_ua: f64, switch_pct: f64, cv_start_ua: f64, tau_secs: f64) {
         let alpha = PROFILE_LEARNING_RATE;
         let one_minus = 1.0 - alpha;
 
         if self.sessions_learned == 0 {
             // first session: seed directly rather than blending with zeros
-            self.cc_current_ua = cc_current_ua;
+            self.cc_plateau_ua = cc_plateau_ua;
             self.switch_percentage = switch_pct;
             self.cv_start_current_ua = cv_start_ua;
             self.cv_tau_secs = tau_secs;
         } else {
-            self.cc_current_ua = self.cc_current_ua * one_minus + cc_current_ua * alpha;
+            self.cc_plateau_ua = self.cc_plateau_ua * one_minus + cc_plateau_ua * alpha;
             self.switch_percentage = self.switch_percentage * one_minus + switch_pct * alpha;
             self.cv_start_current_ua = self.cv_start_current_ua * one_minus + cv_start_ua * alpha;
             self.cv_tau_secs = self.cv_tau_secs * one_minus + tau_secs * alpha;
@@ -182,7 +182,7 @@ const PHASE_WINDOW: usize = 12;
 const CV_DROP_THRESHOLD: f64 = 0.85;
 
 /// How many consecutive readings below `CV_DROP_THRESHOLD` are required before
-/// declaring the CC→CV transition. At 10 s polling this is ~1 minute.
+/// declaring the CC/CV transition. At 10 s polling this is ~1 minute.
 const CV_CONFIRM_READINGS: usize = 12;
 
 // ── CV exponential fitting
@@ -283,7 +283,7 @@ pub struct ChargingSession {
     /// Currently detected phase.
     pub phase: ChargingPhase,
 
-    /// Smoothed peak current observed while in the CC phase (µA). Updated as
+    /// Median current observed while in the CC phase (µA). Updated as
     /// long as `phase == Cc`.
     pub cc_plateau_ua: f64,
 
@@ -325,11 +325,20 @@ impl ChargingSession {
     }
 
     fn update_cc_phase(&mut self, profile: &ChargeProfile) {
-        let latest = self.readings.last().unwrap(); // safe: checked len above
-        let median = self.rolling_median_current();
+        let Some(latest) = self.readings.last() else {
+            return;
+        };
+        let median = self.median_current();
+        let rolling_median = self.rolling_median_current(CV_CONFIRM_READINGS);
 
-        // track the peak smoothed current as the CC plateau
-        if median > self.cc_plateau_ua {
+        log::debug!("-----median statistics--------------------");
+        log::debug!("    percentage: {:.1}%", latest.percentage * 100.);
+        log::debug!("overall median: {median} µA");
+        log::debug!("rolling median: {rolling_median} µA");
+
+        // we determine the cc plateau as the median current of all readings. if that
+        // currently differs while we're still in cc charging, update it
+        if median != self.cc_plateau_ua {
             self.cc_plateau_ua = median;
         }
 
@@ -337,29 +346,37 @@ impl ChargingSession {
             self.phase = ChargingPhase::Cc;
         }
 
-        // if no plateau established yet, nothing more to check
-        if self.cc_plateau_ua == 0.0 {
-            return;
-        }
-
-        // use the learned switch percentage as a gating condition: don't start
-        // looking for the transition until we are within 5% of the known point
-        let near_switch = latest.percentage >= (profile.switch_percentage - 0.05).max(0.0);
+        // use the learned switch percentage as a gating condition: don't start looking
+        // for the transition until we are within 5% of the known point or 50% overall
+        let near_switch = latest.percentage >= (profile.switch_percentage - 0.05).max(0.5);
         if !near_switch {
+            log::debug!("not near switching; not checking rolling median");
             return;
         }
 
-        // check whether the current has dropped below the CV threshold
-        let below_threshold = median < self.cc_plateau_ua * CV_DROP_THRESHOLD;
+        log::debug!("near cc/cv switch; checking now");
 
-        if below_threshold {
+        // check whether the rolling median current has dropped below the CV threshold
+        let threshold = self.cc_plateau_ua * CV_DROP_THRESHOLD;
+        if rolling_median < threshold {
+            log::debug!(
+                "rolling median current ({rolling_median} µA) is below threshold ({threshold} µA); counting"
+            );
             self.cv_confirm_count += 1;
         } else {
             // reset confirmation streak on any reading above the threshold
+            log::debug!(
+                "rolling median current ({rolling_median} µA) is *not* below threshold ({threshold} µA); resetting count"
+            );
             self.cv_confirm_count = 0;
         }
 
         if self.cv_confirm_count >= CV_CONFIRM_READINGS {
+            log::debug!(
+                "rolling median current has been below threshold for {} readings; cv phase detected!",
+                self.cv_confirm_count
+            );
+
             // transition confirmed: mark it at the first reading of the streak
             let transition_idx = self.readings.len() - self.cv_confirm_count;
             self.transition_index = Some(transition_idx);
@@ -382,11 +399,14 @@ impl ChargingSession {
 
     /// Incorporate the latest reading into the CV exponential fit.
     fn update_cv_fit(&mut self) {
-        let Some(transition_idx) = self.transition_index else {
+        let (Some(t0), Some(latest)) = (
+            self.transition_index
+                .and_then(|i| self.readings.get(i))
+                .map(|r| r.when),
+            self.readings.last(),
+        ) else {
             return;
         };
-        let t0 = self.readings[transition_idx].when;
-        let latest = self.readings.last().unwrap(); // safe: we have readings
         let t_secs = (latest.when - t0).num_milliseconds() as f64 / 1000.0;
         self.cv_fit.push(t_secs, latest.current_ua);
     }
@@ -400,14 +420,14 @@ impl ChargingSession {
     /// from `Charging`.
     pub fn end(&self, profile: &mut ChargeProfile) {
         let Some(transition_idx) = self.transition_index else {
-            log::debug!("session ended without a detected CC→CV transition; profile unchanged");
+            log::debug!("session ended without a detected cc/cv transition; profile unchanged");
             return;
         };
 
         let tau = match self.cv_fit.tau_secs() {
             Ok(tau) => tau,
             Err(e) => {
-                log::debug!("session ended but cv fit is not ready; profile unchanged: {e}");
+                log::debug!("session ended but cv fit (tau) is not ready; profile unchanged: {e}");
                 return;
             }
         };
@@ -415,21 +435,21 @@ impl ChargingSession {
         let i0 = match self.cv_fit.i0_ua() {
             Ok(i0) => i0,
             Err(e) => {
-                log::debug!("session ended but cv fit is not ready; profile unchanged: {e}");
+                log::debug!("session ended but cv fit (i0) is not ready; profile unchanged: {e}");
                 return;
             }
         };
 
         let switch_pct = self.readings[transition_idx].percentage;
-        let cc_current_ua = self.cc_plateau_ua;
+        let cc_plateau_ua = self.cc_plateau_ua;
 
         log::info!(
-            "charging session complete: cc={cc_current_ua:.0} µA, \
+            "charging session complete: cc={cc_plateau_ua:.0} µA, \
              switch={:.1}%, tau={tau:.0} s, I₀={i0:.0} µA",
             switch_pct * 100.0,
         );
 
-        profile.update(cc_current_ua, switch_pct, i0, tau);
+        profile.update(cc_plateau_ua, switch_pct, i0, tau);
 
         if let Err(e) = profile.save() {
             log::error!("couldn't save charge profile: {e}");
@@ -438,11 +458,11 @@ impl ChargingSession {
 
     // ── internal helpers ─────────────────────────────────────────────────────
 
-    /// Compute the median current (µA) over the most recent [`PHASE_WINDOW`]
-    /// readings. Uses a sorted copy, so it is robust to transient spikes and
-    /// the load-induced dips visible in real data.
-    fn rolling_median_current(&self) -> f64 {
-        let window_start = self.readings.len().saturating_sub(PHASE_WINDOW);
+    /// Compute the median current (µA) over the most recent number of
+    /// `readings`. Uses a sorted copy, so it is robust to transient spikes
+    /// and the load-induced dips visible in real data.
+    fn rolling_median_current(&self, readings: usize) -> f64 {
+        let window_start = self.readings.len().saturating_sub(readings);
         let mut values: Vec<f64> = self.readings[window_start..]
             .iter()
             .map(|r| r.current_ua)
@@ -452,6 +472,20 @@ impl ChargingSession {
         if values.len().is_multiple_of(2) {
             (values[mid - 1] + values[mid]) / 2.0
         } else {
+            values[mid]
+        }
+    }
+
+    /// Compute the median current (µA) over all readings.
+    fn median_current(&self) -> f64 {
+        let mut values: Vec<f64> = self.readings.iter().map(|r| r.current_ua).collect();
+        values.sort_by(f64::total_cmp);
+        let mid = values.len() / 2;
+        if values.len().is_multiple_of(2) {
+            // average the two middle values
+            (values[mid - 1] + values[mid]) / 2.0
+        } else {
+            // the middle value
             values[mid]
         }
     }
@@ -582,7 +616,7 @@ fn predict_cc_plus_cv(
         let effective_current = if current_ua > 0.0 {
             current_ua
         } else {
-            profile.cc_current_ua
+            profile.cc_plateau_ua
         };
         if effective_current <= 0.0 {
             return None;
