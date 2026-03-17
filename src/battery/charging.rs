@@ -245,11 +245,6 @@ impl ChargingSession {
 
         self.write_csv_row();
 
-        // need at least PHASE_WINDOW readings before making any determination
-        if self.readings.len() < PHASE_WINDOW {
-            return;
-        }
-
         if let ChargingPhase::Unknown | ChargingPhase::Cc = self.phase {
             self.update_cc_phase(profile)
         }
