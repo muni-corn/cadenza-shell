@@ -6,7 +6,7 @@ use tokio::io::unix::AsyncFd;
 use super::{BATTERY_STATE, BatteryState, ChargingStatus};
 use crate::battery::{
     READ_INTERVAL_SECONDS,
-    charging::{ChargeProfile, ChargingSession, SessionReading, predict_time_to_full_cc_cv},
+    charging::{ChargeProfile, ChargingSession, SessionReading},
     discharging::DischargeProfile,
     sysfs::{SysfsReading, detect_battery_path, read_battery_sysfs},
     udev::{create_battery_monitor, is_battery_change},
@@ -239,8 +239,7 @@ fn compute_time_remaining(
                     .as_microampere_hours(reading.voltage_now)
                     as f64;
 
-                predict_time_to_full_cc_cv(
-                    session,
+                session.predict_time_to_full_cc_cv(
                     charge_profile,
                     current_ua,
                     charge_now_uah,
