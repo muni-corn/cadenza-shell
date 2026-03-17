@@ -1,4 +1,3 @@
-#![feature(trait_alias)]
 #![feature(result_option_map_or_default)]
 #![feature(never_type)]
 
