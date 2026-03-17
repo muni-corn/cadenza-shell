@@ -336,16 +336,19 @@ impl ChargingSession {
         let rolling_median_30 = self.rolling_median_current(30);
 
         log::debug!(
-            "----------charging statistics---------
-       percentage: {:.1}%
- plateau (median): {median} µA
- rolling_median_5: {rolling_median_5} µA
-rolling_median_10: {rolling_median_10} µA
-rolling_median_15: {rolling_median_15} µA
-rolling_median_20: {rolling_median_20} µA
-rolling_median_25: {rolling_median_25} µA
-rolling_median_30: {rolling_median_30} µA",
-            latest.percentage * 100.
+            "
+---------------charging statistics---------------
+           percentage: {:.1}%
+          current_now: {}
+     rolling_median_5: {rolling_median_5} µA
+    rolling_median_10: {rolling_median_10} µA
+    rolling_median_15: {rolling_median_15} µA
+    rolling_median_20: {rolling_median_20} µA
+    rolling_median_25: {rolling_median_25} µA
+    rolling_median_30: {rolling_median_30} µA
+plateau (full median): {median} µA",
+            latest.percentage * 100.,
+            latest.current_ua,
         );
 
         // we determine the cc plateau as the median current of all readings. if that
