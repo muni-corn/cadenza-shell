@@ -204,6 +204,9 @@ fn manage_session(
             // push the reading into the session for phase detection
             if let Some(sr) = SessionReading::from_sysfs(reading) {
                 session.push(sr, charge_profile);
+                if let Some(new_tau) = session.tau_secs() {
+                    charge_profile.update_tau(new_tau);
+                }
             }
         }
         _ => {

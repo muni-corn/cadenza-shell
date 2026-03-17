@@ -14,7 +14,10 @@ use super::{discharging::get_state_directory, sysfs::SysfsReading};
 
 /// Learning rate for exponential moving averages applied to [`ChargeProfile`]
 /// fields after each completed charging session.
-const PROFILE_LEARNING_RATE: f64 = 0.2;
+const SESSION_LEARNING_RATE: f64 = 0.2;
+
+/// The maximum number of readings that will count towards `tau`.
+const MAX_TAU_READINGS: u32 = 1000;
 
 /// Learned CC/CV charging parameters for this device.
 ///
@@ -39,6 +42,9 @@ pub struct ChargeProfile {
 
     /// Number of completed charging sessions that contributed to this profile.
     pub sessions_learned: u32,
+
+    /// Number of `tau` samples taken.
+    pub tau_sample_count: u32,
 }
 
 impl Default for ChargeProfile {
@@ -49,6 +55,7 @@ impl Default for ChargeProfile {
             cv_tau_secs: 0.0,
             cv_start_current_ua: 0.0,
             sessions_learned: 0,
+            tau_sample_count: 0,
         }
     }
 }
@@ -62,8 +69,8 @@ impl ChargeProfile {
     ///   was detected.
     /// - `cv_start_ua` – current at the moment of the CC→CV transition (µA).
     /// - `tau_secs` – fitted exponential decay constant for the CV phase (s).
-    pub fn update(&mut self, cc_plateau_ua: f64, switch_pct: f64, cv_start_ua: f64, tau_secs: f64) {
-        let alpha = PROFILE_LEARNING_RATE;
+    pub fn update_transition(&mut self, cc_plateau_ua: f64, switch_pct: f64, cv_start_ua: f64) {
+        let alpha = SESSION_LEARNING_RATE;
         let one_minus = 1.0 - alpha;
 
         if self.sessions_learned == 0 {
@@ -71,15 +78,24 @@ impl ChargeProfile {
             self.cc_plateau_ua = cc_plateau_ua;
             self.switch_percentage = switch_pct;
             self.cv_start_current_ua = cv_start_ua;
-            self.cv_tau_secs = tau_secs;
         } else {
             self.cc_plateau_ua = self.cc_plateau_ua * one_minus + cc_plateau_ua * alpha;
             self.switch_percentage = self.switch_percentage * one_minus + switch_pct * alpha;
             self.cv_start_current_ua = self.cv_start_current_ua * one_minus + cv_start_ua * alpha;
-            self.cv_tau_secs = self.cv_tau_secs * one_minus + tau_secs * alpha;
         }
 
         self.sessions_learned += 1;
+    }
+
+    /// Records a value for `tau`. Learns a moving average of `tau` over at most
+    /// `MAX_TAU_READINGS`.
+    pub fn update_tau(&mut self, new_tau: f64) {
+        self.tau_sample_count += 1;
+
+        // the learning rate
+        let alpha = 1.0 / (self.tau_sample_count.min(MAX_TAU_READINGS) as f64);
+
+        self.cv_tau_secs = new_tau * alpha + self.cv_tau_secs * (1.0 - alpha);
     }
 
     // ── persistence ──────────────────────────────────────────────────────────
@@ -411,12 +427,8 @@ rolling_median_30: {rolling_median_30} µA",
             return;
         };
 
-        let Some(tau) = self.tau_secs() else {
-            log::debug!("session ended but there is no `tau`; profile unchanged");
-            return;
-        };
-
         let i0 = rat.current_ua;
+        let tau = self.tau_secs().unwrap_or(0.0);
         let switch_pct = rat.percentage;
         let cc_plateau_ua = self.cc_plateau_ua;
 
@@ -426,7 +438,7 @@ rolling_median_30: {rolling_median_30} µA",
             switch_pct * 100.0,
         );
 
-        profile.update(cc_plateau_ua, switch_pct, i0, tau);
+        profile.update_transition(cc_plateau_ua, switch_pct, i0);
 
         if let Err(e) = profile.save() {
             log::error!("couldn't save charge profile: {e}");
@@ -452,7 +464,7 @@ rolling_median_30: {rolling_median_30} µA",
 
     /// Computes the constant `tau` for our exponential prediction curve, using
     /// only the latest reading and the reading recorded at the CV transition.
-    fn tau_secs(&self) -> Option<f64> {
+    pub fn tau_secs(&self) -> Option<f64> {
         let rat = &self.reading_at_transition.as_ref()?;
         let latest_reading = self.readings.last()?;
 
