@@ -173,12 +173,23 @@ pub fn read_battery_identity(battery_path: &Path) -> BatteryIdentity {
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_else(|| "battery".to_string());
 
-    BatteryIdentity {
+    let identity = BatteryIdentity {
         serial_number: read_opt("serial_number"),
         model_name: read_opt("model_name"),
         manufacturer: read_opt("manufacturer"),
         sysfs_name,
-    }
+    };
+
+    log::debug!(
+        "battery identity: sysfs='{}' manufacturer={} model={} serial={} → key='{}'",
+        identity.sysfs_name,
+        identity.manufacturer.as_deref().unwrap_or("(none)"),
+        identity.model_name.as_deref().unwrap_or("(none)"),
+        identity.serial_number.as_deref().unwrap_or("(none)"),
+        identity.device_key(),
+    );
+
+    identity
 }
 
 /// Detect the battery sysfs path by scanning `/sys/class/power_supply/` for
