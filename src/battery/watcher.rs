@@ -8,7 +8,7 @@ use crate::battery::{
     READ_INTERVAL_SECONDS,
     charging::{ChargeProfile, ChargingSession, SessionReading},
     discharging::DischargeProfile,
-    sysfs::{SysfsReading, detect_battery_path, read_battery_sysfs},
+    sysfs::{SysfsReading, detect_battery_path, read_battery_identity, read_battery_sysfs},
     udev::{create_battery_monitor, is_battery_change},
 };
 
@@ -18,6 +18,14 @@ pub async fn start_battery_service() {
         log::error!("couldn't detect battery interface");
         return;
     };
+
+    // read device identity for per-device profile keying
+    let identity = read_battery_identity(&battery_path);
+    let device_key = identity.device_key();
+    log::info!(
+        "battery device: '{}' (key: '{device_key}')",
+        identity.sysfs_name,
+    );
 
     // load or create power usage history
     let mut power_history = match DischargeProfile::read_from_disk() {
@@ -31,11 +39,10 @@ pub async fn start_battery_service() {
         }
     };
 
-    // load or create the CC/CV charge profile
-    let mut charge_profile = ChargeProfile::load();
+    // load or create the CC/CV charge profile for this device
+    let mut charge_profile = ChargeProfile::load(&device_key);
 
-    // read initial battery properties. if it fails, we will not consider the
-    // service available.
+    // read initial battery properties
     let Some(reading) = read_battery_sysfs(&battery_path) else {
         return;
     };
@@ -162,7 +169,17 @@ fn update_battery_state(
         return;
     };
 
-    manage_session(reading.status, &reading, charge_profile, active_session);
+    let charge_full_uah = reading
+        .capacity_full
+        .as_microampere_hours(reading.voltage_now) as f64;
+
+    manage_session(
+        reading.status,
+        &reading,
+        charge_full_uah,
+        charge_profile,
+        active_session,
+    );
 
     if let ChargingStatus::Discharging = reading.status {
         power_history.update(&reading);
@@ -186,10 +203,12 @@ fn update_battery_state(
 ///
 /// - Creates a new session when charging begins.
 /// - Pushes the current reading into an active session.
-/// - Ends the session (updating the profile) when charging stops.
+/// - Ends the session, learning from it, when charging stops. Distinguishes
+///   `Full` (updates I_cut) from other stop reasons.
 fn manage_session(
     status: ChargingStatus,
     reading: &SysfsReading,
+    charge_full_uah: f64,
     charge_profile: &mut ChargeProfile,
     active_session: &mut Option<ChargingSession>,
 ) {
@@ -201,16 +220,20 @@ fn manage_session(
                 ChargingSession::default()
             });
 
-            // push the reading into the session for phase detection
+            // push the reading into the session for phase detection and CV fitting
             if let Some(sr) = SessionReading::from_sysfs(reading) {
                 session.push(sr, charge_profile);
-                if let Some(new_tau) = session.tau_secs() {
-                    charge_profile.update_tau(new_tau);
-                }
+            }
+        }
+        ChargingStatus::Full => {
+            // battery reached full — finalise and learn I_cut
+            if let Some(session) = active_session.take() {
+                log::info!("charging complete (full), finalising session");
+                session.end_full(charge_profile, charge_full_uah);
             }
         }
         _ => {
-            // charging stopped — finalise and learn from the session if present
+            // charging stopped for another reason (charger removed, etc.)
             if let Some(session) = active_session.take() {
                 log::info!("charging stopped, finalising session");
                 session.end(charge_profile);
@@ -222,7 +245,7 @@ fn manage_session(
 /// Compute the predicted time remaining using the best available model.
 ///
 /// When charging, prefers the CC/CV model if the session and profile are
-/// available. Falls back to the legacy history-based model otherwise.
+/// available. Falls back to the history-based discharge model otherwise.
 fn compute_time_remaining(
     reading: &SysfsReading,
     active_session: Option<&ChargingSession>,
