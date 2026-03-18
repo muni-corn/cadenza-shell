@@ -19,8 +19,10 @@ glib = "0.21"
 gtk4 = { version = "0.10", features = ["v4_14"] }
 gtk4-layer-shell = "0.7"
 inotify = "0.11"
+levenberg-marquardt = "0.15.0"
 log = { version = "0.4", features = ["release_max_level_info"] }
 mpris = "2.0.1"
+nalgebra = "0.34.1"
 niri-ipc = "25.8.0"
 pango = "0.21"
 pulse = { version = "2.30", package = "libpulse-binding" }
