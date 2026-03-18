@@ -3,6 +3,7 @@ use std::time::Duration;
 use relm4::SharedState;
 
 mod charging;
+mod cv_fit;
 mod discharging;
 mod sysfs;
 mod udev;
