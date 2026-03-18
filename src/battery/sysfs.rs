@@ -109,6 +109,90 @@ pub fn read_battery_sysfs(battery_path: &Path) -> Option<SysfsReading> {
     })
 }
 
+/// Stable identity for a battery device, used to key per-device learned
+/// parameters across reboots.
+#[derive(Debug, Clone)]
+pub struct BatteryIdentity {
+    /// Value of the sysfs `serial_number` file, if present.
+    pub serial_number: Option<String>,
+    /// Value of the sysfs `model_name` file, if present.
+    pub model_name: Option<String>,
+    /// Value of the sysfs `manufacturer` file, if present.
+    pub manufacturer: Option<String>,
+    /// The last component of the sysfs path (e.g. `"BAT0"`).
+    pub sysfs_name: String,
+}
+
+impl BatteryIdentity {
+    /// Build a stable, filename-safe key for this device.
+    ///
+    /// Preference order:
+    /// 1. `serial_number` (most unique)
+    /// 2. `manufacturer + "_" + model_name`
+    /// 3. `sysfs_name` (least stable across battery replacements)
+    pub fn device_key(&self) -> String {
+        let sanitize = |s: &str| {
+            s.trim()
+                .chars()
+                .map(|c| {
+                    if c.is_alphanumeric() || c == '-' {
+                        c
+                    } else {
+                        '_'
+                    }
+                })
+                .collect::<String>()
+        };
+
+        if let Some(ref sn) = self.serial_number {
+            let key = sanitize(sn);
+            if !key.is_empty() {
+                return key;
+            }
+        }
+
+        match (&self.manufacturer, &self.model_name) {
+            (Some(mfr), Some(mdl)) => {
+                let key = format!("{}_{}", sanitize(mfr), sanitize(mdl));
+                if key.len() > 1 {
+                    return key;
+                }
+            }
+            (None, Some(mdl)) => {
+                let key = sanitize(mdl);
+                if !key.is_empty() {
+                    return key;
+                }
+            }
+            _ => {}
+        }
+
+        sanitize(&self.sysfs_name)
+    }
+}
+
+/// Read battery identity fields from the sysfs path.
+pub fn read_battery_identity(battery_path: &Path) -> BatteryIdentity {
+    let read_opt = |file: &str| {
+        fs::read_to_string(battery_path.join(file))
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    };
+
+    let sysfs_name = battery_path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "battery".to_string());
+
+    BatteryIdentity {
+        serial_number: read_opt("serial_number"),
+        model_name: read_opt("model_name"),
+        manufacturer: read_opt("manufacturer"),
+        sysfs_name,
+    }
+}
+
 /// Detect the battery sysfs path by scanning `/sys/class/power_supply/` for
 /// devices with type "Battery".
 pub fn detect_battery_path() -> Option<PathBuf> {
