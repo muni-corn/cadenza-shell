@@ -1,6 +1,5 @@
 #![feature(result_option_map_or_default)]
 #![feature(never_type)]
-#![allow(dead_code)]
 
 mod analog_clock;
 mod app;

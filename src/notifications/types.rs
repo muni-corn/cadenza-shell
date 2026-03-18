@@ -1,3 +1,6 @@
+// temporary until we figure things out
+#![allow(dead_code)]
+
 use serde::{Deserialize, Deserializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use zbus::zvariant::Type;

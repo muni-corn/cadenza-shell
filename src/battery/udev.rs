@@ -39,6 +39,7 @@ pub fn is_battery_change(event: &udev::Event) -> bool {
 
 /// Reads and parses the charging status from a udev event's
 /// `POWER_SUPPLY_STATUS` property.
+#[allow(dead_code)]
 pub fn read_status_from_event(event: &udev::Event) -> Option<ChargingStatus> {
     let value = event.property_value("POWER_SUPPLY_STATUS")?;
     Some(parse_charging_status(value.to_str()?))

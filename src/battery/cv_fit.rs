@@ -357,6 +357,7 @@ impl CvFitState {
     }
 
     /// Number of samples currently in the rolling buffer.
+    #[allow(dead_code)]
     pub(super) fn sample_count(&self) -> usize {
         self.samples.len()
     }

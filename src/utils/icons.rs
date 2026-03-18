@@ -1,3 +1,6 @@
+// temporary until we figure things out
+#![allow(dead_code)]
+
 use crate::icon_names::*;
 
 // icon constants for various widgets

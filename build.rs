@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 fn main() {
     relm4_icons_build::bundle_icons(
         // name of the file that will be generated at `OUT_DIR`
@@ -62,7 +64,6 @@ fn main() {
             "radiowaves-3",
             "radiowaves-4",
             "radiowaves-no",
-            "radiowaves-question",
             // network misc
             "lan",
             "lan-question",
@@ -74,7 +75,6 @@ fn main() {
             // media/mpris
             "music-note-single",
             "media-playback-pause",
-            "media-playback-start",
         ],
     );
 }

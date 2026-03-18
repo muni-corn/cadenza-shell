@@ -263,7 +263,7 @@ pub enum BluetoothDeviceOutput {
 }
 
 pub struct BluetoothDeviceWidgetWidgets {
-    main_box: gtk::Box,
+    _main_box: gtk::Box,
     device_label: gtk::Label,
     status_label: gtk::Label,
 }
@@ -353,7 +353,7 @@ impl AsyncFactoryComponent for BluetoothDeviceWidget {
         root.set_child(Some(&main_box));
 
         BluetoothDeviceWidgetWidgets {
-            main_box,
+            _main_box: main_box,
             device_label,
             status_label,
         }

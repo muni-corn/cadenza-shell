@@ -1,3 +1,6 @@
+// temporary until we figure things out
+#![allow(dead_code)]
+
 use std::{
     collections::HashMap,
     sync::atomic::{AtomicU32, Ordering},

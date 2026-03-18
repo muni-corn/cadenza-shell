@@ -63,6 +63,7 @@ pub enum SpecificNetworkInfo {
     Wired,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub enum NetworkPropertyChange {
     State(State),

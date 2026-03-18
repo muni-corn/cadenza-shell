@@ -1,3 +1,6 @@
+// temporary until we figure things out
+#![allow(dead_code)]
+
 use gtk4::prelude::*;
 use relm4::prelude::*;
 

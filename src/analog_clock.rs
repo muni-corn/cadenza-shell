@@ -1,3 +1,6 @@
+// temporary until we figure things out
+#![allow(dead_code)]
+
 use std::{f64::consts::PI, time::Duration};
 
 use chrono::Timelike;

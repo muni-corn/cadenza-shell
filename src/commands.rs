@@ -1,3 +1,6 @@
+// temporary until we figure things out
+#![allow(dead_code)]
+
 use std::collections::VecDeque;
 
 /// Trait for commands that can be executed and undone

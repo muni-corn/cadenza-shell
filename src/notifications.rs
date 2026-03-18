@@ -1,3 +1,6 @@
+// temporary until we figure things out
+#![allow(dead_code)]
+
 pub mod card;
 pub mod center;
 pub mod daemon;
