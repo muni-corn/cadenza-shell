@@ -43,18 +43,6 @@ impl SysfsReading {
         power_picowatts / 1_000_000_000_000.0
     }
 
-    /// Returns the capacity reported in this reading, in Wh.
-    pub fn capacity_wh(&self) -> f64 {
-        match self.capacity_full {
-            BatteryCapacity::MicroWattHours(uwh) => uwh as f64 / 1_000_000.0,
-            BatteryCapacity::MicroAmpereHours(uah) => {
-                // convert µV × µAh = pWh (picowatt-hours), then to watt-hours
-                let capacity_pwh = self.voltage_now * uah;
-                capacity_pwh as f64 / 1e12_f64
-            }
-        }
-    }
-
     /// Returns the remaining capacity in this reading, in Wh.
     pub fn remaining_wh(&self) -> f64 {
         match self.capacity_now {

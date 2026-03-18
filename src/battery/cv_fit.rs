@@ -341,12 +341,6 @@ impl CvFitState {
         self.last_fit_at = Some(Local::now());
     }
 
-    /// Returns the current at `t_elapsed` seconds into CV phase, using
-    /// effective (possibly blended) parameters.
-    pub(super) fn i0(&self) -> f64 {
-        self.i0
-    }
-
     /// Returns `true` if at least one valid fit has been accepted.
     pub(super) fn has_valid_fit(&self) -> bool {
         self.has_valid_fit
