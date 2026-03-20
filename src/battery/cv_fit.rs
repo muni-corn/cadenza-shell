@@ -574,10 +574,18 @@ impl CvFitState {
             tau2: blend(self.params.tau2, self.priors.tau2),
         };
         log::debug!(
-            "effective params (α={alpha:.2}, stabilizing): \
-             A={:.0} µA  tau1={:.0} s  tau2={:.0} s  \
-             (fit: A={:.0}, tau1={:.0}, tau2={:.0}  \
-              prior: A={:.0}, tau1={:.0}, tau2={:.0})",
+            "effective params (α={alpha:.2}, stabilizing):
+ A={:.0} µA
+ tau1={:.0} s
+ tau2={:.0} s
+ fit:
+     A={:.0}
+     tau1={:.0}
+     tau2={:.0}
+ prior:
+     A={:.0}
+     tau1={:.0}
+     tau2={:.0})",
             p.a,
             p.tau1,
             p.tau2,
@@ -606,8 +614,13 @@ pub(super) fn predict_cv_duration_from_integral(
     // total deliverable charge from t=0 to ∞
     let q_total = params.a * params.tau1 + (i0 - params.a) * params.tau2;
     log::debug!(
-        "cv integral prediction: Q_need={:.1} mAh  Q_max={:.1} mAh  \
-         params=[A={:.0} µA, tau1={:.0} s, tau2={:.0} s]",
+        "cv integral prediction:
+Q_need={:.1} mAh
+Q_max={:.1} mAh
+params:
+    A={:.0} µA
+    tau1={:.0} s
+    tau2={:.0} s",
         cv_charge_uas / 3600.0 / 1000.0,
         q_total / 3600.0 / 1000.0,
         params.a,
