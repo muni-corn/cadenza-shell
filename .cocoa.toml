@@ -1,0 +1,49 @@
+[commit]
+types = [
+  "build",
+  "docs",
+  "chore",
+  "revert",
+  "ci",
+  "fix",
+  "style",
+  "feat",
+  "test",
+  "perf",
+  "refactor",
+]
+
+[commit.rules]
+enabled = true
+ignore_fixup_commits = true
+ignore_amend_commits = true
+ignore_squash_commits = true
+ignore_merge_commits = true
+ignore_revert_commits = true
+
+[commit.rules.warn]
+subject_length = 50
+body_length = 250
+no_scope = true
+no_body = false
+no_type = true
+no_breaking_change_footer = true
+regex_patterns = []
+
+[commit.rules.deny]
+subject_length = 72
+body_length = 500
+no_scope = false
+no_body = false
+no_type = true
+no_breaking_change_footer = false
+regex_patterns = []
+
+[ai]
+provider = "Anthropic"
+model = "claude-haiku-4-5"
+temperature = 0.7
+max_tokens = 500
+
+[ai.secret]
+env = "ANTHROPIC_API_KEY"
