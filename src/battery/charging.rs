@@ -171,8 +171,10 @@ impl ChargeProfile {
         let one_minus = 1.0 - alpha;
 
         log::debug!(
-            "update_transition: session #{n}  cc={cc:.0} µA  switch={sw:.1}%  \
-             final_fit={fit}",
+            "update_transition (session #{n}):
+           cc = {cc:.0} µA
+       switch = {sw:.1}%
+    final_fit = {fit}",
             n = self.sessions_learned + 1,
             cc = cc_plateau_ua,
             sw = switch_pct * 100.0,
@@ -187,15 +189,17 @@ impl ChargeProfile {
         if self.sessions_learned == 0 {
             // first session: seed directly
             log::debug!(
-                "  first session: seeding cc_plateau={cc_plateau_ua:.0} µA, \
-                 switch={:.1}%",
+                "first session: seeding cc_plateau={cc_plateau_ua:.0} µA, switch={:.1}%",
                 switch_pct * 100.0,
             );
             self.cc_plateau_ua = cc_plateau_ua;
             self.switch_percentage = switch_pct;
             if let Some(p) = final_fit {
                 log::debug!(
-                    "  seeding tau priors: tau1={:.0} s, tau2={:.0} s, ratio={:.2}",
+                    "seeding tau priors:
+     tau1 = {:.0} s
+     tau2 = {:.0} s
+    ratio = {:.2}",
                     p.tau1,
                     p.tau2,
                     (p.a / cc_plateau_ua).clamp(0.1, 0.9),
@@ -210,8 +214,9 @@ impl ChargeProfile {
             self.cc_plateau_ua = self.cc_plateau_ua * one_minus + cc_plateau_ua * alpha;
             self.switch_percentage = self.switch_percentage * one_minus + switch_pct * alpha;
             log::debug!(
-                "  ema update (α={alpha:.2}): cc_plateau {prev_cc:.0}→{:.0} µA  \
-                 switch {:.1}%→{:.1}%",
+                "ema update (α={alpha:.2}):
+    cc_plateau {prev_cc:.0}→{:.0}
+    µA switch {:.1}%→{:.1}%",
                 self.cc_plateau_ua,
                 prev_sw * 100.0,
                 self.switch_percentage * 100.0,
@@ -230,10 +235,10 @@ impl ChargeProfile {
                     self.amplitude_ratio = self.amplitude_ratio * bm + ratio * bt;
                 }
                 log::debug!(
-                    "  tau prior ema (β={bt:.2}): \
-                     tau1 {prev_tau1:.0}→{:.0} s  \
-                     tau2 {prev_tau2:.0}→{:.0} s  \
-                     ratio {prev_ratio:.2}→{:.2}",
+                    "tau prior ema (β={bt:.2}):
+    tau1 {prev_tau1:.0}→{:.0} s
+    tau2 {prev_tau2:.0}→{:.0} s
+    ratio {prev_ratio:.2}→{:.2}",
                     self.tau1_prior_secs,
                     self.tau2_prior_secs,
                     self.amplitude_ratio,
@@ -245,9 +250,14 @@ impl ChargeProfile {
 
         self.sessions_learned += 1;
         log::debug!(
-            "profile after update: cc={:.0} µA  switch={:.1}%  \
-             tau1={:.0} s  tau2={:.0} s  ratio={:.2}  \
-             i_cut={:.0} µA (confidence={})  sessions={}",
+            "profile after update:
+          cc = {:.0} µA
+      switch = {:.1}%
+        tau1 = {:.0} s
+        tau2 = {:.0} s
+       ratio = {:.2}
+       i_cut = {:.0} µA (confidence = {})
+    sessions = {}",
             self.cc_plateau_ua,
             self.switch_percentage * 100.0,
             self.tau1_prior_secs,
@@ -307,14 +317,15 @@ impl ChargeProfile {
             Ok(mut p) => {
                 p.device_key = device_key.to_string();
                 log::info!(
-                    "loaded charge profile for '{}' ({} sessions)",
+                    "loaded charge profile for '{}' ({} sessions)
+    cc_plateau={:.0} µA
+    switch={:.1}%
+    tau1={:.0} s
+    tau2={:.0} s
+    ratio={:.2}
+    i_cut={:.0} µA (confidence={})",
                     device_key,
                     p.sessions_learned,
-                );
-                log::debug!(
-                    "  cc_plateau={:.0} µA  switch={:.1}%  \
-                     tau1={:.0} s  tau2={:.0} s  ratio={:.2}  \
-                     i_cut={:.0} µA (confidence={})",
                     p.cc_plateau_ua,
                     p.switch_percentage * 100.0,
                     p.tau1_prior_secs,
@@ -360,10 +371,14 @@ impl ChargeProfile {
         let json = serde_json::to_string_pretty(self)?;
         fs::write(&path, json).with_context(|| format!("writing {}", path.display()))?;
         log::debug!(
-            "saved charge profile to {path:?}: \
-             sessions={sessions}  cc={cc:.0} µA  switch={sw:.1}%  \
-             tau1={tau1:.0} s  tau2={tau2:.0} s  ratio={ratio:.2}  \
-             i_cut={i_cut:.0} µA (confidence={conf})",
+            "saved charge profile to {path:?}:
+     sessions = {sessions}
+           cc = {cc:.0} µA
+       switch = {sw:.1}%
+         tau1 = {tau1:.0} s
+         tau2 = {tau2:.0} s
+        ratio = {ratio:.2}
+        i_cut = {i_cut:.0} µA (confidence = {conf})",
             sessions = self.sessions_learned,
             cc = self.cc_plateau_ua,
             sw = self.switch_percentage * 100.0,
@@ -505,8 +520,10 @@ impl ChargingSession {
             let current_ua = latest.current_ua;
             let total_readings = self.readings.len();
             log::debug!(
-                "cv phase update #{total_readings}: t={:.0} s  I={current_ua:.0} µA  \
-                 soc={:.1}%",
+                "cv phase update #{total_readings}:
+      t = {:.0} s
+      I = {current_ua:.0} µA
+    soc = {:.1}%",
                 self.cv_fit
                     .as_ref()
                     .map(|f| f.elapsed_secs(when))
@@ -517,8 +534,10 @@ impl ChargingSession {
             let fit = self.cv_fit.get_or_insert_with(|| {
                 let rat = self.reading_at_transition.as_ref().unwrap();
                 log::debug!(
-                    "initialising cv fit state: i0={:.0} µA, tau1_prior={:.0} s, \
-                     tau2_prior={:.0} s",
+                    "initialising cv fit state:
+            i0 = {:.0} µA
+    tau1_prior = {:.0} s
+    tau2_prior = {:.0} s",
                     rat.current_ua,
                     profile.tau1_prior_secs,
                     profile.tau2_prior_secs,
@@ -558,7 +577,9 @@ impl ChargingSession {
             .map(|f| f.params());
 
         log::info!(
-            "charging session ended (not full): cc={:.0} µA, switch={:.1}%",
+            "charging session ended (not full):
+        cc = {:.0} µA
+    switch = {:.1}%",
             self.cc_plateau_ua,
             rat.percentage * 100.0,
         );
@@ -579,8 +600,10 @@ impl ChargingSession {
     /// rejection sanity checks.
     pub fn end_full(&self, profile: &mut ChargeProfile, charge_full_uah: f64) {
         log::debug!(
-            "end_full: {} total readings  phase={:?}  cv_fit_valid={}  \
-             cv_samples={}",
+            "end_full: {} total readings
+           phase = {:?}
+    cv_fit_valid = {}
+      cv_samples = {}",
             self.readings.len(),
             self.phase,
             self.cv_fit.as_ref().is_some_and(|f| f.has_valid_fit()),
@@ -601,10 +624,10 @@ impl ChargingSession {
                 rat.percentage * 100.0,
             );
             log::debug!(
-                "  final fit: {}",
+                "final fit: {}",
                 final_fit.map_or("none".to_string(), |p| {
                     format!(
-                        "A={:.0} µA, tau1={:.0} s, tau2={:.0} s",
+                        "A = {:.0} µA, tau1 = {:.0} s, tau2 = {:.0} s",
                         p.a, p.tau1, p.tau2
                     )
                 }),
@@ -656,8 +679,12 @@ impl ChargingSession {
         let charge_remaining_uah = charge_full_uah - charge_now_uah;
 
         log::debug!(
-            "predict_time_to_full: phase={:?}  I={:.0} µA  \
-             charge_now={:.1} mAh  charge_full={:.1} mAh  remaining={:.1} mAh",
+            "predict_time_to_full:
+          phase = {:?}
+              I = {:.0} µA
+     charge_now = {:.1} mAh
+    charge_full = {:.1} mAh
+      remaining = {:.1} mAh",
             self.phase,
             current_ua,
             charge_now_uah / 1000.0,
@@ -694,8 +721,7 @@ impl ChargingSession {
         let hours = charge_remaining_uah / current_ua;
         let t = Duration::from_secs_f64(hours * 3600.0);
         log::debug!(
-            "prediction tier 3 (linear fallback): {:.1} min  \
-             ({:.1} mAh / {:.0} µA)",
+            "prediction tier 3 (linear fallback): {:.1} min ({:.1} mAh / {:.0} µA)",
             t.as_secs_f64() / 60.0,
             charge_remaining_uah / 1000.0,
             current_ua,
@@ -901,7 +927,10 @@ plateau (full median): {median} µA",
             .when;
 
         log::debug!(
-            "tier-1 cv predict: fit_valid={}  buf_samples={}  i_cut={:.0} µA",
+            "tier-1 cv predict:
+  fit_valid = {}
+buf_samples = {}
+      i_cut = {:.0} µA",
             fit.has_valid_fit(),
             fit.sample_count(),
             i_cut,
@@ -944,7 +973,7 @@ plateau (full median): {median} µA",
         sorted.sort_by(f64::total_cmp);
         let i_term = sorted[sorted.len() / 2];
         log::debug!(
-            "observe_i_cut: sorted={:?}  median={i_term:.0} µA",
+            "observe_i_cut: sorted={:?}, median={i_term:.0} µA",
             sorted.iter().map(|&i| i as u64).collect::<Vec<_>>()
         );
 
@@ -1029,8 +1058,13 @@ fn predict_cc_plus_cv(
     let switch_uah = profile.switch_percentage * charge_full_uah;
 
     log::debug!(
-        "tier-2 cc+cv: phase={:?}  switch_soc={:.1}% ({:.1} mAh)  \
-         cc_plateau={:.0} µA  tau1={:.0} s  tau2={:.0} s  ratio={:.2}",
+        "tier-2 cc+cv:
+     phase = {:?}
+switch_soc = {:.1}% ({:.1} mAh)
+cc_plateau = {:.0} µA
+      tau1 = {:.0} s
+      tau2 = {:.0} s
+     ratio = {:.2}",
         session.phase,
         profile.switch_percentage * 100.0,
         switch_uah / 1000.0,
@@ -1056,7 +1090,7 @@ fn predict_cc_plus_cv(
         }
         let secs = cc_remaining / effective_current * 3600.0;
         log::debug!(
-            "tier-2: CC remaining={:.1} mAh at {:.0} µA → {:.1} min",
+            "tier-2: CC remaining = {:.1} mAh at {:.0} µA → {:.1} min",
             cc_remaining / 1000.0,
             effective_current,
             secs / 60.0,
@@ -1090,8 +1124,11 @@ fn predict_cc_plus_cv(
 
     if !params.is_valid(i0) {
         log::debug!(
-            "tier-2: prior params invalid for i0={i0:.0} µA \
-             [A={:.0}, tau1={:.0}, tau2={:.0}]; bailing",
+            "tier-2: prior params invalid for i0 = {i0:.0} µA; bailing
+    priors:
+        A = {:.0}
+        tau1 = {:.0}
+        tau2 = {:.0}",
             params.a,
             params.tau1,
             params.tau2,
@@ -1100,8 +1137,12 @@ fn predict_cc_plus_cv(
     }
 
     log::debug!(
-        "tier-2: CV charge needed={:.1} mAh  i0={i0:.0} µA  \
-         params=[A={:.0} µA, tau1={:.0} s, tau2={:.0} s]",
+        "tier-2: CV charge needed = {:.1} mAh
+    i0 = {i0:.0} µA
+    params:
+        A = {:.0} µA
+        tau1 = {:.0} s
+        tau2 = {:.0} s",
         cv_charge_uas / 3600.0 / 1000.0,
         params.a,
         params.tau1,
@@ -1111,7 +1152,10 @@ fn predict_cc_plus_cv(
     let cv_duration = predict_cv_duration_from_integral(&params, i0, cv_charge_uas)?;
     let total = Duration::from_secs_f64(cc_secs) + cv_duration;
     log::debug!(
-        "tier-2 result: cc={:.1} min  cv={:.1} min  total={:.1} min",
+        "tier-2 result:
+    cc = {:.1} min
+    cv = {:.1} min
+    total = {:.1} min",
         cc_secs / 60.0,
         cv_duration.as_secs_f64() / 60.0,
         total.as_secs_f64() / 60.0,

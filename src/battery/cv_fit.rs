@@ -229,8 +229,13 @@ impl CvFitState {
             tau2: tau2_prior,
         };
         log::debug!(
-            "cv fit state created: i0={:.0} µA  priors=[A={:.0} µA, tau1={:.0} s, tau2={:.0} s]  \
-             amplitude_ratio={:.2}",
+            "cv fit state created:
+    i0 = {:.0} µA
+    priors:
+        A = {:.0} µA
+        tau1 = {:.0} s
+        tau2 = {:.0} s
+    amplitude_ratio = {:.2}",
             i0,
             priors.a,
             priors.tau1,
@@ -280,9 +285,13 @@ impl CvFitState {
         };
 
         log::debug!(
-            "cv sample #{total}: t={t:.0} s  I={I:.0} µA  model={model:.0} µA  \
-             residual={res:+.1}%  buf={buf}/{evicted_note}  \
-             since_fit={since}",
+            "cv sample #{total}:
+            t = {t:.0} s
+            I = {I:.0} µA
+        model = {model:.0} µA
+     residual = {res:+.1}%
+          buf = {buf}/{evicted_note}
+    since_fit = {since}",
             total = self.total_samples,
             t = t_secs,
             I = current_ua,
@@ -336,9 +345,15 @@ impl CvFitState {
 
         let alpha = self.stabilization_alpha();
         log::debug!(
-            "lm refit: n={n} samples  span=[{t0:.0}..{t1:.0}] s  \
-             warm=[A={wa:.0} µA, tau1={wt1:.0} s, tau2={wt2:.0} s]  \
-             stabilization_alpha={alpha:.2}",
+            "lm refit:
+    n = {n} samples
+    span:
+        {t0:.0}..{t1:.0} s
+    warm:
+        A = {wa:.0} µA
+        tau1 = {wt1:.0} s
+        tau2 = {wt2:.0} s]
+    stabilization_alpha = {alpha:.2}",
             n = samples.len(),
             t0 = samples.first().map(|s| s.t_secs).unwrap_or(0.0),
             t1 = samples.last().map(|s| s.t_secs).unwrap_or(0.0),
@@ -358,8 +373,13 @@ impl CvFitState {
         };
 
         log::debug!(
-            "lm finished: {:?}  evals={}  cost={:.4e}  \
-             result=[A={:.0} µA, tau1={:.0} s, tau2={:.0} s]",
+            "lm finished: {:?}
+    evals = {}
+     cost = {:.4e}
+    result:
+        A = {:.0} µA
+        tau1 = {:.0} s
+        tau2 = {:.0} s",
             report.termination,
             report.number_of_evaluations,
             report.objective_function,
@@ -373,8 +393,11 @@ impl CvFitState {
             let delta_tau1 = new_params.tau1 - self.params.tau1;
             let delta_tau2 = new_params.tau2 - self.params.tau2;
             log::debug!(
-                "cv fit accepted: A={:.0} µA (Δ{:+.0}), tau1={:.0} s (Δ{:+.0}), \
-                 tau2={:.0} s (Δ{:+.0})  valid={}",
+                "cv fit accepted:
+        A = {:.0} µA (Δ{:+.0})
+     tau1 = {:.0} s (Δ{:+.0})
+         tau2 = {:.0} s (Δ{:+.0})
+        valid = {}",
                 new_params.a,
                 delta_a,
                 new_params.tau1,
@@ -387,8 +410,8 @@ impl CvFitState {
             self.has_valid_fit = true;
         } else {
             log::warn!(
-                "cv fit rejected: A={:.0} µA, tau1={:.0} s, tau2={:.0} s  \
-                 (i0={:.0} µA, keeping previous params)",
+                "cv fit rejected: A = {:.0} µA, tau1 = {:.0} s, tau2 = {:.0} s  \
+                 (i0 = {:.0} µA, keeping previous params)",
                 new_params.a,
                 new_params.tau1,
                 new_params.tau2,
@@ -436,9 +459,14 @@ impl CvFitState {
         let i_now = p.eval(t_now, self.i0);
 
         log::debug!(
-            "predict_time_remaining: t_now={t_now:.0} s  \
-             I_now={i_now:.0} µA  I_cut={i_cut:.0} µA  \
-             params=[A={:.0} µA, tau1={:.0} s, tau2={:.0} s]",
+            "predict_time_remaining:
+    t_now = {t_now:.0} s
+    I_now = {i_now:.0} µA
+    I_cut = {i_cut:.0} µA
+    params:
+        A = {:.0} µA
+        tau1 = {:.0} s
+        tau2 = {:.0} s",
             p.a,
             p.tau1,
             p.tau2,
@@ -458,7 +486,7 @@ impl CvFitState {
         if f(t_high) > 0.0 {
             log::debug!(
                 "model does not reach i_cut ({i_cut:.0} µA) within {t_high:.0} s \
-                 (I({t_high:.0}s)={:.0} µA)",
+                 (I({t_high:.0}s) = {:.0} µA)",
                 p.eval(t_high, self.i0),
             );
             return None;
@@ -482,8 +510,10 @@ impl CvFitState {
         let t_cut = (lo + hi) / 2.0;
         let remaining = (t_cut - t_now).max(0.0);
         log::debug!(
-            "bisection: t_cut={t_cut:.0} s  remaining={:.1} min  \
-             I(t_cut)={:.0} µA ≈ i_cut={i_cut:.0} µA",
+            "bisection:
+        t_cut = {t_cut:.0} s
+    remaining = {:.1} min
+     I(t_cut) = {:.0} µA ≈ i_cut = {i_cut:.0} µA",
             remaining / 60.0,
             p.eval(t_cut, self.i0),
         );
@@ -495,7 +525,10 @@ impl CvFitState {
     fn validate_fit(&self, p: &CvFitParams) -> bool {
         if !p.is_valid(self.i0) {
             log::debug!(
-                "fit invalid: A={:.0} (must be 0..{:.0}), tau1={:.0}, tau2={:.0}",
+                "fit invalid:
+       A = {:.0} (must be 0..{:.0})
+    tau1 = {:.0}
+    tau2 = {:.0}",
                 p.a,
                 self.i0,
                 p.tau1,
@@ -510,8 +543,7 @@ impl CvFitState {
             let i_last = p.eval(last.t_secs, self.i0);
             if i_last > i_first * 1.01 {
                 log::debug!(
-                    "fit invalid: model increases over sample range \
-                     (I({:.0}s)={:.0} µA → I({:.0}s)={:.0} µA)",
+                    "fit invalid: model increases over sample range (I({:.0}s) = {:.0} µA → I({:.0}s) = {:.0} µA)",
                     first.t_secs,
                     i_first,
                     last.t_secs,
@@ -529,14 +561,16 @@ impl CvFitState {
             let limit = 0.5 * self.i0;
             if discrepancy > limit {
                 log::debug!(
-                    "fit invalid: latest sample discrepancy too large \
-                     (|{i_pred:.0} − {i_actual:.0}| = {discrepancy:.0} µA > limit {limit:.0} µA)",
+                    "fit invalid: latest sample discrepancy too large (|{i_pred:.0} − {i_actual:.0}| = {discrepancy:.0} µA > limit {limit:.0} µA)",
                 );
                 return false;
             }
             log::debug!(
-                "fit consistency ok: I_model({:.0}s)={i_pred:.0} µA  \
-                 I_actual={i_actual:.0} µA  |Δ|={discrepancy:.0} µA",
+                "fit consistency ok:
+     I_model = ({:.0}s)
+     I_model = {i_pred:.0} µA
+    I_actual = {i_actual:.0} µA
+         |Δ| = {discrepancy:.0} µA",
                 last.t_secs,
             );
         }
@@ -574,18 +608,18 @@ impl CvFitState {
             tau2: blend(self.params.tau2, self.priors.tau2),
         };
         log::debug!(
-            "effective params (α={alpha:.2}, stabilizing):
- A={:.0} µA
- tau1={:.0} s
- tau2={:.0} s
- fit:
-     A={:.0}
-     tau1={:.0}
-     tau2={:.0}
- prior:
-     A={:.0}
-     tau1={:.0}
-     tau2={:.0})",
+            "effective params (α = {alpha:.2}, stabilizing):
+       A = {:.0} µA
+    tau1 = {:.0} s
+    tau2 = {:.0} s
+    fit:
+        A = {:.0}
+        tau1 = {:.0}
+        tau2 = {:.0}
+    prior:
+        A = {:.0}
+        tau1 = {:.0}
+        tau2 = {:.0})",
             p.a,
             p.tau1,
             p.tau2,
@@ -611,16 +645,16 @@ pub(super) fn predict_cv_duration_from_integral(
     i0: f64,
     cv_charge_uas: f64,
 ) -> Option<Duration> {
-    // total deliverable charge from t=0 to ∞
+    // total deliverable charge from t = 0 to ∞
     let q_total = params.a * params.tau1 + (i0 - params.a) * params.tau2;
     log::debug!(
         "cv integral prediction:
-Q_need={:.1} mAh
-Q_max={:.1} mAh
-params:
-    A={:.0} µA
-    tau1={:.0} s
-    tau2={:.0} s",
+    Q_need = {:.1} mAh
+     Q_max = {:.1} mAh
+    params:
+        A = {:.0} µA
+        tau1 = {:.0} s
+        tau2 = {:.0} s",
         cv_charge_uas / 3600.0 / 1000.0,
         q_total / 3600.0 / 1000.0,
         params.a,
@@ -629,7 +663,7 @@ params:
     );
     if cv_charge_uas >= q_total {
         log::debug!(
-            "integral prediction: Q_need ({:.1} mAh) ≥ Q_max ({:.1} mAh); giving up",
+            "integral prediction will never converge; giving up (Q_need = {:.1} mAh ≥ Q_max = {:.1} mAh)",
             cv_charge_uas / 3600.0 / 1000.0,
             q_total / 3600.0 / 1000.0,
         );
@@ -658,15 +692,16 @@ params:
             hi = mid;
         }
         if hi - lo < BISECTION_TOL_SECS {
-            break;
+            let t_result = (lo + hi) / 2.0;
+            log::debug!(
+                "integral bisection converged: T = {:.0} s ({:.1} min)",
+                t_result,
+                t_result / 60.0,
+            );
+            return Some(Duration::from_secs_f64(t_result));
         }
     }
 
-    let t_result = (lo + hi) / 2.0;
-    log::debug!(
-        "integral bisection converged: T={:.0} s ({:.1} min)",
-        t_result,
-        t_result / 60.0,
-    );
-    Some(Duration::from_secs_f64(t_result))
+    log::debug!("cv model did not converge! returning original upper bound: {t_high} s");
+    Some(Duration::from_secs_f64(t_high))
 }
