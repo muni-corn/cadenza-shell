@@ -676,8 +676,8 @@ pub(super) fn predict_cv_duration_from_integral(
             + (i0 - params.a) * params.tau2 * (1.0 - (-t / params.tau2).exp())
     };
 
-    // bisection to find T such that Q(T) = cv_charge_uas
-    let t_high = (2.0 * 3600.0_f64).max(3.0 * params.tau2);
+    // bisection to find T within at most 48 hours such that Q(T) = cv_charge_uas
+    let t_high = 48.0 * 3600.0_f64;
     if q(t_high) < cv_charge_uas {
         return None;
     }
