@@ -56,6 +56,8 @@ in
       bacon
       cargo-outdated
       cargo-tarpaulin
+
+      secretspec
     ]
     ++ buildInputs
     ++ nativeBuildInputs;
