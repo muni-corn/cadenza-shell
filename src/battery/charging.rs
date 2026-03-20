@@ -202,11 +202,11 @@ impl ChargeProfile {
     ratio = {:.2}",
                     p.tau1,
                     p.tau2,
-                    (p.a / cc_plateau_ua).clamp(0.1, 0.9),
+                    (p.a / cc_plateau_ua),
                 );
                 self.tau1_prior_secs = p.tau1;
                 self.tau2_prior_secs = p.tau2;
-                self.amplitude_ratio = (p.a / cc_plateau_ua).clamp(0.1, 0.9);
+                self.amplitude_ratio = p.a / cc_plateau_ua;
             }
         } else {
             let prev_cc = self.cc_plateau_ua;
