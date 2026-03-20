@@ -40,7 +40,7 @@ const STABILIZATION_DURATION_SECS: f64 = 120.0;
 const WEIGHT_TAIL_EMPHASIS: f64 = 1.0;
 
 /// Bisection convergence tolerance in seconds.
-const BISECTION_TOL_SECS: f64 = 1.0;
+const BISECTION_TOL_SECS: f64 = 20.0;
 
 /// Maximum bisection iterations.
 const BISECTION_MAX_ITERS: usize = 64;
@@ -89,8 +89,8 @@ struct DoubleExpProblem {
     samples: Vec<CvSample>,
     weights: Vec<f64>,
     i0: f64,
-    /// Current parameter vector `[A, tau1, tau2]`.
-    p: [f64; 3],
+    /// Current parameter vector `(A, tau1, tau2)`.
+    p: (f64, f64, f64),
 }
 
 impl DoubleExpProblem {
@@ -106,23 +106,23 @@ impl DoubleExpProblem {
             samples: samples.to_vec(),
             weights,
             i0,
-            p: [init.a, init.tau1, init.tau2],
+            p: (init.a, init.tau1, init.tau2),
         }
     }
 
     #[inline]
     fn a(&self) -> f64 {
-        self.p[0]
+        self.p.0
     }
 
     #[inline]
     fn tau1(&self) -> f64 {
-        self.p[1]
+        self.p.1
     }
 
     #[inline]
     fn tau2(&self) -> f64 {
-        self.p[2]
+        self.p.2
     }
 
     fn model_at(&self, t: f64) -> f64 {
@@ -136,11 +136,11 @@ impl LeastSquaresProblem<f64, Dyn, U3> for DoubleExpProblem {
     type ResidualStorage = Owned<f64, Dyn>;
 
     fn set_params(&mut self, x: &OVector<f64, U3>) {
-        self.p = [x[0], x[1], x[2]];
+        self.p = (x[0], x[1], x[2]);
     }
 
     fn params(&self) -> OVector<f64, U3> {
-        OVector::<f64, U3>::new(self.p[0], self.p[1], self.p[2])
+        OVector::<f64, U3>::new(self.p.0, self.p.1, self.p.2)
     }
 
     fn residuals(&self) -> Option<OVector<f64, Dyn>> {
