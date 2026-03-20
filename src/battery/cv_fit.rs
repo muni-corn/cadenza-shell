@@ -40,7 +40,7 @@ const STABILIZATION_DURATION_SECS: f64 = 120.0;
 const WEIGHT_TAIL_EMPHASIS: f64 = 1.0;
 
 /// Bisection convergence tolerance in seconds.
-const BISECTION_TOL_SECS: f64 = 20.0;
+const BISECTION_TOLERANCE_SECS: f64 = 30.0;
 
 /// Maximum bisection iterations.
 const BISECTION_MAX_ITERS: usize = 64;
@@ -502,7 +502,7 @@ impl CvFitState {
             } else {
                 hi = mid;
             }
-            if hi - lo < BISECTION_TOL_SECS {
+            if hi - lo < BISECTION_TOLERANCE_SECS {
                 break;
             }
         }
@@ -691,7 +691,7 @@ pub(super) fn predict_cv_duration_from_integral(
         } else {
             hi = mid;
         }
-        if hi - lo < BISECTION_TOL_SECS {
+        if hi - lo < BISECTION_TOLERANCE_SECS {
             let t_result = (lo + hi) / 2.0;
             log::debug!(
                 "integral bisection converged: T = {:.0} s ({:.1} min)",
