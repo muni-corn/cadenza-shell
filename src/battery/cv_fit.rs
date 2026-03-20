@@ -45,15 +45,6 @@ const BISECTION_TOL_SECS: f64 = 1.0;
 /// Maximum bisection iterations.
 const BISECTION_MAX_ITERS: usize = 64;
 
-/// Minimum allowed `tau1` (seconds).
-pub(super) const TAU1_MIN_SECS: f64 = 30.0;
-
-/// Maximum allowed `tau1` (seconds).
-pub(super) const TAU1_MAX_SECS: f64 = 3_600.0;
-
-/// Maximum allowed `tau2` (seconds).
-pub(super) const TAU2_MAX_SECS: f64 = 21_600.0;
-
 // ── data types ───────────────────────────────────────────────────────────────
 
 /// A single current sample taken during the CV phase.
@@ -84,12 +75,7 @@ impl CvFitParams {
 
     /// Returns `true` if the parameters are physically valid given `i0`.
     pub fn is_valid(&self, i0: f64) -> bool {
-        self.a > 0.0
-            && self.a < i0
-            && self.tau1 >= TAU1_MIN_SECS
-            && self.tau1 <= TAU1_MAX_SECS
-            && self.tau2 > self.tau1
-            && self.tau2 <= TAU2_MAX_SECS
+        self.a > 0.0 && self.a < i0 && self.tau2 > self.tau1
     }
 }
 
@@ -509,15 +495,11 @@ impl CvFitState {
     fn validate_fit(&self, p: &CvFitParams) -> bool {
         if !p.is_valid(self.i0) {
             log::debug!(
-                "fit invalid: A={:.0} (must be 0..{:.0}), tau1={:.0} (must be {:.0}..{:.0}), \
-                 tau2={:.0} (must be tau1..{:.0})",
+                "fit invalid: A={:.0} (must be 0..{:.0}), tau1={:.0}, tau2={:.0}",
                 p.a,
                 self.i0,
                 p.tau1,
-                TAU1_MIN_SECS,
-                TAU1_MAX_SECS,
                 p.tau2,
-                TAU2_MAX_SECS,
             );
             return false;
         }
