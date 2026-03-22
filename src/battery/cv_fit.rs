@@ -480,9 +480,8 @@ impl CvFitState {
             return Some(Duration::ZERO);
         }
 
-        // upper bound: at least 2 h or 3 × tau2
-        let t_high = (2.0 * 3600.0_f64).max(3.0 * p.tau2);
-
+        // upper bound: 48 h
+        let t_high = 48.0 * 3600.0_f64;
         if f(t_high) > 0.0 {
             log::debug!(
                 "model does not reach i_cut ({i_cut:.0} µA) within {t_high:.0} s \
