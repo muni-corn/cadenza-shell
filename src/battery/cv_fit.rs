@@ -516,7 +516,14 @@ impl CvFitState {
             remaining / 60.0,
             p.eval(t_cut, self.i0),
         );
-        Some(Duration::from_secs_f64(remaining))
+
+        match Duration::try_from_secs_f64(t_cut) {
+            Ok(d) => Some(d),
+            Err(e) => {
+                log::debug!("never mind, {e}; returning None (predict_time_remaining)");
+                None
+            }
+        }
     }
 
     // ── private helpers ──────────────────────────────────────────────────────
@@ -697,10 +704,25 @@ pub(super) fn predict_cv_duration_from_integral(
                 t_result,
                 t_result / 60.0,
             );
-            return Some(Duration::from_secs_f64(t_result));
+            match Duration::try_from_secs_f64(t_result) {
+                Ok(d) => return Some(d),
+                Err(e) => {
+                    log::debug!(
+                        "never mind, {e}; returning None (predict_cv_duration_from_integral)"
+                    );
+                    return None;
+                }
+            }
         }
     }
 
     log::debug!("cv model did not converge! returning original upper bound: {t_high} s");
-    Some(Duration::from_secs_f64(t_high))
+
+    match Duration::try_from_secs_f64(t_high) {
+        Ok(d) => Some(d),
+        Err(e) => {
+            log::debug!("never mind, {e}; returning None (predict_cv_duration_from_integral)");
+            None
+        }
+    }
 }
