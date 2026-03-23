@@ -1,4 +1,9 @@
 inputs:
+  cocoa:
+    url: github:muni-corn/cocoa
+    inputs:
+      nixpkgs:
+        follows: nixpkgs
   crate2nix:
     url: github:nix-community/crate2nix
     inputs:
@@ -15,7 +20,7 @@ inputs:
       nixpkgs:
         follows: nixpkgs
   musicaloft-shell:
-    url: github:musicaloft/musicaloft-shell/devenv
+    url: github:musicaloft/musicaloft-shell
     flake: false
   nixpkgs:
     url: github:cachix/devenv-nixpkgs/rolling
@@ -31,8 +36,7 @@ inputs:
         follows: nixpkgs
 imports:
   - musicaloft-shell
-
 secretspec:
   enable: true
-  provider: keyring
   profile: default
+  provider: keyring
