@@ -30,19 +30,10 @@ let
   ];
 
   libraryPath = lib.makeLibraryPath buildInputs;
-  toolchain = config.languages.rust.toolchainPackage;
 in
 {
   # needed for dynamic linking at runtime
   env.RUSTFLAGS = lib.mkForce "-C link-args=-Wl,-fuse-ld=mold,-rpath,${libraryPath}";
-
-  git-hooks.hooks.clippy = {
-    enable = true;
-    packageOverrides = {
-      cargo = toolchain;
-      clippy = toolchain;
-    };
-  };
 
   languages.rust = {
     enable = true;
