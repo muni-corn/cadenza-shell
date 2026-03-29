@@ -20,3 +20,6 @@ devenv.local.yaml
 # cargo-mutants
 mutants.out.old/
 mutants.out/
+
+# nix build result
+result
