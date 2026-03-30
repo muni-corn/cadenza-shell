@@ -166,12 +166,6 @@ checksum = "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6"
 
 [[package]]
 name = "bitflags"
-version = "1.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
-
-[[package]]
-name = "bitflags"
 version = "2.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
@@ -243,13 +237,12 @@ dependencies = [
  "futures-lite",
  "gdk4",
  "gio",
- "glib 0.21.5",
+ "glib",
  "glib-build-tools",
  "gtk4",
  "gtk4-layer-shell",
  "inotify",
  "levenberg-marquardt",
- "libnotify",
  "libpulse-binding",
  "log",
  "mpris",
@@ -280,9 +273,9 @@ version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b01fe135c0bd16afe262b6dea349bd5ea30e6de50708cec639aae7c5c14cc7e4"
 dependencies = [
- "bitflags 2.11.0",
+ "bitflags",
  "cairo-sys-rs",
- "glib 0.21.5",
+ "glib",
  "libc",
 ]
 
@@ -292,7 +285,7 @@ version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "06c28280c6b12055b5e39e4554271ae4e6630b27c0da9148c4cf6485fc6d245c"
 dependencies = [
- "glib-sys 0.21.5",
+ "glib-sys",
  "libc",
  "system-deps",
 ]
@@ -873,41 +866,14 @@ dependencies = [
 
 [[package]]
 name = "gdk-pixbuf"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16160d212ae91abe9f3324c3fb233929ba322dde63585d15cda3336f8c529ed1"
-dependencies = [
- "gdk-pixbuf-sys 0.5.0",
- "glib 0.4.1",
- "glib-sys 0.5.0",
- "gobject-sys 0.5.0",
- "libc",
-]
-
-[[package]]
-name = "gdk-pixbuf"
 version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "debb0d39e3cdd84626edfd54d6e4a6ba2da9a0ef2e796e691c4e9f8646fda00c"
 dependencies = [
- "gdk-pixbuf-sys 0.21.5",
+ "gdk-pixbuf-sys",
  "gio",
- "glib 0.21.5",
+ "glib",
  "libc",
-]
-
-[[package]]
-name = "gdk-pixbuf-sys"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "798f97101eea8180da363d0e80e07ec7ec6d1809306601c0100c1de5bc8b4f52"
-dependencies = [
- "bitflags 1.3.2",
- "gio-sys 0.5.0",
- "glib-sys 0.5.0",
- "gobject-sys 0.5.0",
- "libc",
- "pkg-config",
 ]
 
 [[package]]
@@ -916,9 +882,9 @@ version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd95ad50b9a3d2551e25dd4f6892aff0b772fe5372d84514e9d0583af60a0ce7"
 dependencies = [
- "gio-sys 0.21.5",
- "glib-sys 0.21.5",
- "gobject-sys 0.21.5",
+ "gio-sys",
+ "glib-sys",
+ "gobject-sys",
  "libc",
  "system-deps",
 ]
@@ -930,11 +896,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "756564212bbe4a4ce05d88ffbd2582581ac6003832d0d32822d0825cca84bfbf"
 dependencies = [
  "cairo-rs",
- "gdk-pixbuf 0.21.5",
+ "gdk-pixbuf",
  "gdk4-sys",
  "gio",
  "gl",
- "glib 0.21.5",
+ "glib",
  "libc",
  "pango",
 ]
@@ -946,10 +912,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a6d4e5b3ccf591826a4adcc83f5f57b4e59d1925cb4bf620b0d645f79498b034"
 dependencies = [
  "cairo-sys-rs",
- "gdk-pixbuf-sys 0.21.5",
- "gio-sys 0.21.5",
- "glib-sys 0.21.5",
- "gobject-sys 0.21.5",
+ "gdk-pixbuf-sys",
+ "gio-sys",
+ "glib-sys",
+ "gobject-sys",
  "libc",
  "pango-sys",
  "pkg-config",
@@ -1006,24 +972,11 @@ dependencies = [
  "futures-core",
  "futures-io",
  "futures-util",
- "gio-sys 0.21.5",
- "glib 0.21.5",
+ "gio-sys",
+ "glib",
  "libc",
  "pin-project-lite",
  "smallvec",
-]
-
-[[package]]
-name = "gio-sys"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a303bbf7a5e75ab3b627117ff10e495d1b9e97e1d68966285ac2b1f6270091bc"
-dependencies = [
- "bitflags 1.3.2",
- "glib-sys 0.5.0",
- "gobject-sys 0.5.0",
- "libc",
- "pkg-config",
 ]
 
 [[package]]
@@ -1032,8 +985,8 @@ version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0071fe88dba8e40086c8ff9bbb62622999f49628344b1d1bf490a48a29d80f22"
 dependencies = [
- "glib-sys 0.21.5",
- "gobject-sys 0.21.5",
+ "glib-sys",
+ "gobject-sys",
  "libc",
  "system-deps",
  "windows-sys 0.61.2",
@@ -1157,33 +1110,20 @@ checksum = "19fc433e8437a212d1b6f1e68c7824af3aed907da60afa994e7f542d18d12aa9"
 
 [[package]]
 name = "glib"
-version = "0.4.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b9b0452824cc63066940f01adc721804919f0b76cdba3cfab977b00b87f16d4a"
-dependencies = [
- "bitflags 1.3.2",
- "glib-sys 0.5.0",
- "gobject-sys 0.5.0",
- "lazy_static",
- "libc",
-]
-
-[[package]]
-name = "glib"
 version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "16de123c2e6c90ce3b573b7330de19be649080ec612033d397d72da265f1bd8b"
 dependencies = [
- "bitflags 2.11.0",
+ "bitflags",
  "futures-channel",
  "futures-core",
  "futures-executor",
  "futures-task",
  "futures-util",
- "gio-sys 0.21.5",
+ "gio-sys",
  "glib-macros",
- "glib-sys 0.21.5",
- "gobject-sys 0.21.5",
+ "glib-sys",
+ "gobject-sys",
  "libc",
  "memchr",
  "smallvec",
@@ -1213,17 +1153,6 @@ dependencies = [
 
 [[package]]
 name = "glib-sys"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d9693049613ff52b93013cc3d2590366d8e530366d288438724b73f6c7dc4be8"
-dependencies = [
- "bitflags 1.3.2",
- "libc",
- "pkg-config",
-]
-
-[[package]]
-name = "glib-sys"
 version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2d95e1a3a19ae464a7286e14af9a90683c64d70c02532d88d87ce95056af3e6c"
@@ -1234,23 +1163,11 @@ dependencies = [
 
 [[package]]
 name = "gobject-sys"
-version = "0.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "60d507c87a71b1143c66ed21a969be9b99a76df234b342d733e787e6c9c7d7c2"
-dependencies = [
- "bitflags 1.3.2",
- "glib-sys 0.5.0",
- "libc",
- "pkg-config",
-]
-
-[[package]]
-name = "gobject-sys"
 version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dca35da0d19a18f4575f3cb99fe1c9e029a2941af5662f326f738a21edaf294"
 dependencies = [
- "glib-sys 0.21.5",
+ "glib-sys",
  "libc",
  "system-deps",
 ]
@@ -1261,7 +1178,7 @@ version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2730030ac9db663fd8bfe1e7093742c1cafb92db9c315c9417c29032341fe2f9"
 dependencies = [
- "glib 0.21.5",
+ "glib",
  "graphene-sys",
  "libc",
 ]
@@ -1272,7 +1189,7 @@ version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "915e32091ea9ad241e4b044af62b7351c2d68aeb24f489a0d7f37a0fc484fd93"
 dependencies = [
- "glib-sys 0.21.5",
+ "glib-sys",
  "libc",
  "pkg-config",
  "system-deps",
@@ -1286,7 +1203,7 @@ checksum = "e755de9d8c5896c5beaa028b89e1969d067f1b9bf1511384ede971f5983aa153"
 dependencies = [
  "cairo-rs",
  "gdk4",
- "glib 0.21.5",
+ "glib",
  "graphene-rs",
  "gsk4-sys",
  "libc",
@@ -1301,8 +1218,8 @@ checksum = "7ce91472391146f482065f1041876d8f869057b195b95399414caa163d72f4f7"
 dependencies = [
  "cairo-sys-rs",
  "gdk4-sys",
- "glib-sys 0.21.5",
- "gobject-sys 0.21.5",
+ "glib-sys",
+ "gobject-sys",
  "graphene-sys",
  "libc",
  "pango-sys",
@@ -1318,10 +1235,10 @@ dependencies = [
  "cairo-rs",
  "field-offset",
  "futures-channel",
- "gdk-pixbuf 0.21.5",
+ "gdk-pixbuf",
  "gdk4",
  "gio",
- "glib 0.21.5",
+ "glib",
  "graphene-rs",
  "gsk4",
  "gtk4-macros",
@@ -1336,10 +1253,10 @@ version = "0.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c1d422cce9367945916b7a5083eedf67b0a5380d326af1943a0b5cef9afb6e48"
 dependencies = [
- "bitflags 2.11.0",
+ "bitflags",
  "gdk4",
- "glib 0.21.5",
- "glib-sys 0.21.5",
+ "glib",
+ "glib-sys",
  "gtk4",
  "gtk4-layer-shell-sys",
  "libc",
@@ -1352,7 +1269,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e386481f3d83ab32e4ee457d9706d4ebbafa29ea013f9ae5066070713d2efacc"
 dependencies = [
  "gdk4-sys",
- "glib-sys 0.21.5",
+ "glib-sys",
  "gtk4-sys",
  "libc",
  "system-deps",
@@ -1377,11 +1294,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "842577fe5a1ee15d166cd3afe804ce0cab6173bc789ca32e21308834f20088dd"
 dependencies = [
  "cairo-sys-rs",
- "gdk-pixbuf-sys 0.21.5",
+ "gdk-pixbuf-sys",
  "gdk4-sys",
- "gio-sys 0.21.5",
- "glib-sys 0.21.5",
- "gobject-sys 0.21.5",
+ "gio-sys",
+ "glib-sys",
+ "gobject-sys",
  "graphene-sys",
  "gsk4-sys",
  "libc",
@@ -1702,7 +1619,7 @@ version = "0.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bd5b3eaf1a28b758ac0faa5a4254e8ab2705605496f1b1f3fbbc3988ad73d199"
 dependencies = [
- "bitflags 2.11.0",
+ "bitflags",
  "futures-core",
  "inotify-sys",
  "libc",
@@ -1829,7 +1746,7 @@ checksum = "fb09e12bf8f73342b3315c839d0a7668cc0ccebd78490c49fec48bab15d5484b"
 dependencies = [
  "gdk4",
  "gio",
- "glib 0.21.5",
+ "glib",
  "gtk4",
  "libadwaita-sys",
  "libc",
@@ -1843,9 +1760,9 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d7f94227ba87eb596fecada2491f04e357d507324142f77bf76d9e6be4a3e31"
 dependencies = [
  "gdk4-sys",
- "gio-sys 0.21.5",
- "glib-sys 0.21.5",
- "gobject-sys 0.21.5",
+ "gio-sys",
+ "glib-sys",
+ "gobject-sys",
  "gtk4-sys",
  "libc",
  "pango-sys",
@@ -1874,40 +1791,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981"
 
 [[package]]
-name = "libnotify"
-version = "1.0.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "10506a4f8bc6f8f7ccc6fde3a8290378d7aed3d1a26dca606a73e2ffe140cc2d"
-dependencies = [
- "gdk-pixbuf 0.3.0",
- "gdk-pixbuf-sys 0.5.0",
- "glib 0.4.1",
- "glib-sys 0.5.0",
- "gobject-sys 0.5.0",
- "libnotify-sys",
-]
-
-[[package]]
-name = "libnotify-sys"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a0a716b9b7d24ed10f1eb431e1527fa13c9a4bf2d4fa68bb3e54da1d0747383c"
-dependencies = [
- "bitflags 1.3.2",
- "gdk-pixbuf-sys 0.5.0",
- "glib-sys 0.5.0",
- "gobject-sys 0.5.0",
- "libc",
- "pkg-config",
-]
-
-[[package]]
 name = "libpulse-binding"
 version = "2.30.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "909eb3049e16e373680fe65afe6e2a722ace06b671250cc4849557bc57d6a397"
 dependencies = [
- "bitflags 2.11.0",
+ "bitflags",
  "libc",
  "libpulse-sys",
  "num-derive",
@@ -2110,7 +1999,7 @@ version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "71e2746dc3a24dd78b3cfcb7be93368c6de9963d30f43a6a73998a9cf4b17b46"
 dependencies = [
- "bitflags 2.11.0",
+ "bitflags",
  "cfg-if",
  "cfg_aliases",
  "libc",
@@ -2245,7 +2134,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "52d1d85e2078077a065bb7fc072783d5bcd4e51b379f22d67107d0a16937eb69"
 dependencies = [
  "gio",
- "glib 0.21.5",
+ "glib",
  "libc",
  "pango-sys",
 ]
@@ -2256,8 +2145,8 @@ version = "0.21.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b4f06627d36ed5ff303d2df65211fc2e52ba5b17bf18dd80ff3d9628d6e06cfd"
 dependencies = [
- "glib-sys 0.21.5",
- "gobject-sys 0.21.5",
+ "glib-sys",
+ "gobject-sys",
  "libc",
  "system-deps",
 ]
@@ -2541,7 +2430,7 @@ version = "0.5.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed2bf2547551a7053d6fdfafda3f938979645c44812fbfcda098faae3f1a362d"
 dependencies = [
- "bitflags 2.11.0",
+ "bitflags",
 ]
 
 [[package]]
@@ -2738,7 +2627,7 @@ version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6fe4565b9518b83ef4f91bb47ce29620ca828bd32cb7e408f0062e9930ba190"
 dependencies = [
- "bitflags 2.11.0",
+ "bitflags",
  "errno",
  "libc",
  "linux-raw-sys",
@@ -3356,7 +3245,7 @@ version = "0.6.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d4e6559d53cc268e5031cd8429d05415bc4cb4aefc4aa5d6cc35fbf5b924a1f8"
 dependencies = [
- "bitflags 2.11.0",
+ "bitflags",
  "bytes",
  "futures-util",
  "http",
@@ -3668,7 +3557,7 @@ version = "0.244.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "47b807c72e1bac69382b3a6fb3dbe8ea4c0ed87ff5629b8685ae6b9a611028fe"
 dependencies = [
- "bitflags 2.11.0",
+ "bitflags",
  "hashbrown 0.15.5",
  "indexmap",
  "semver",
@@ -4101,7 +3990,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9d66ea20e9553b30172b5e831994e35fbde2d165325bec84fc43dbf6f4eb9cb2"
 dependencies = [
  "anyhow",
- "bitflags 2.11.0",
+ "bitflags",
  "indexmap",
  "log",
  "serde",

@@ -20,7 +20,6 @@ gtk4 = { version = "0.10", features = ["v4_14"] }
 gtk4-layer-shell = "0.7"
 inotify = "0.11"
 levenberg-marquardt = "0.15.0"
-libnotify = "1.0.3"
 log = { version = "0.4", features = ["release_max_level_info"] }
 mpris = "2.0.1"
 nalgebra = "0.34.1"
