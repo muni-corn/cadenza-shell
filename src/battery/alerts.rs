@@ -68,12 +68,12 @@ enum AlertLevel {
 /// Send a freedesktop notification and play a sound for a battery alert.
 async fn fire_battery_alert(level: AlertLevel) {
     let (summary, body, sound_event) = match level {
-        AlertLevel::Normal => (
+        AlertLevel::Critical => (
             "Battery level is critically low",
             "Connect a charger now to avoid losing unsaved work.",
             SOUND_BATTERY_CRITICAL,
         ),
-        AlertLevel::Critical => (
+        AlertLevel::Normal => (
             "Battery level is low",
             "Connect a charger to continue using your device.",
             SOUND_BATTERY_LOW,
