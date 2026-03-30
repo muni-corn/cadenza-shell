@@ -67,28 +67,23 @@ enum AlertLevel {
 
 /// Send a freedesktop notification and play a sound for a battery alert.
 async fn fire_battery_alert(level: AlertLevel) {
-    let (summary, body, sound_event) = match level {
+    let (summary, body, sound_event, urgency) = match level {
         AlertLevel::Critical => (
             "Battery level is critically low",
             "Connect a charger now to avoid losing unsaved work.",
             SOUND_BATTERY_CRITICAL,
+            2,
         ),
         AlertLevel::Normal => (
             "Battery level is low",
             "Connect a charger to continue using your device.",
             SOUND_BATTERY_LOW,
+            1,
         ),
     };
 
     // play sound first so any D-Bus latency doesn't delay the audio cue
     sound::play(sound_event);
-
-    // urgency values per the freedesktop notification spec:
-    // 0 = low, 1 = normal, 2 = critical
-    let urgency: u8 = match level {
-        AlertLevel::Normal => 1,
-        AlertLevel::Critical => 2,
-    };
 
     send_notification(summary, body, urgency).await;
 }
