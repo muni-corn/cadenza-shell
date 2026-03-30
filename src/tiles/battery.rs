@@ -10,6 +10,9 @@ use crate::{
     widgets::tile::{Tile, TileInit, TileMsg},
 };
 
+const TIME_REMAINING_LOW_THRESHOLD: Duration = Duration::from_mins(30);
+const TIME_REMAINING_CRITICAL_THRESHOLD: Duration = Duration::from_mins(15);
+
 #[derive(Debug, Default)]
 pub struct BatteryTile {
     available: bool,
@@ -142,15 +145,13 @@ impl BatteryTile {
     }
 
     fn is_low(&self) -> bool {
-        let time_remaining_secs = self.time_remaining.as_secs();
-
-        (self.current_percentage <= 0.2 || time_remaining_secs <= 3600) && !self.charging
+        (self.current_percentage <= 0.2 || self.time_remaining < TIME_REMAINING_LOW_THRESHOLD)
+            && !self.charging
     }
 
     fn is_critical(&self) -> bool {
-        let time_remaining_secs = self.time_remaining.as_secs();
-
-        (self.current_percentage <= 0.1 || time_remaining_secs <= 1800) && !self.charging
+        (self.current_percentage <= 0.1 || self.time_remaining < TIME_REMAINING_CRITICAL_THRESHOLD)
+            && !self.charging
     }
 
     fn get_readable_time(&self) -> String {
