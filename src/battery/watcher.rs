@@ -6,6 +6,7 @@ use tokio::io::unix::AsyncFd;
 use super::{BATTERY_STATE, BatteryState, ChargingStatus};
 use crate::battery::{
     READ_INTERVAL_SECONDS,
+    alerts::AlertState,
     charging::{ChargeProfile, ChargingSession, SessionReading},
     discharging::DischargeProfile,
     sysfs::{SysfsReading, detect_battery_path, read_battery_identity, read_battery_sysfs},
@@ -86,12 +87,15 @@ pub async fn start_battery_service() {
         }
     };
 
+    let mut alert_state = AlertState::new();
+
     watch_battery(
         &battery_path,
         async_fd,
         &mut power_history,
         &mut charge_profile,
         &mut active_session,
+        &mut alert_state,
     )
     .await;
 }
@@ -102,6 +106,7 @@ async fn watch_battery(
     power_history: &mut DischargeProfile,
     charge_profile: &mut ChargeProfile,
     active_session: &mut Option<ChargingSession>,
+    alert_state: &mut AlertState,
 ) -> Option<!> {
     let mut poll_interval =
         tokio::time::interval(Duration::from_secs(READ_INTERVAL_SECONDS.into()));
@@ -132,7 +137,8 @@ async fn watch_battery(
                             power_history,
                             charge_profile,
                             active_session,
-                        );
+                            alert_state,
+                        ).await;
                     } else {
                         log::debug!("event was not a battery event");
                     }
@@ -151,18 +157,21 @@ async fn watch_battery(
                     power_history,
                     charge_profile,
                     active_session,
-                );
+                    alert_state,
+                ).await;
             }
         }
     }
 }
 
-/// Read the latest battery stats from sysfs and update [`BATTERY_STATE`].
-fn update_battery_state(
+/// Read the latest battery stats from sysfs, update [`BATTERY_STATE`], and
+/// fire any low-battery alerts that have not yet been triggered this session.
+async fn update_battery_state(
     battery_path: &Path,
     power_history: &mut DischargeProfile,
     charge_profile: &mut ChargeProfile,
     active_session: &mut Option<ChargingSession>,
+    alert_state: &mut AlertState,
 ) {
     let Some(reading) = read_battery_sysfs(battery_path) else {
         log::warn!("couldn't read battery sysfs");
@@ -192,11 +201,21 @@ fn update_battery_state(
         power_history,
     );
 
+    let percentage = reading.percentage().unwrap_or_default() as f32;
+    let status = reading.status;
+
     *BATTERY_STATE.write() = Some(BatteryState {
-        percentage: reading.percentage().unwrap_or_default() as f32,
-        status: reading.status,
+        percentage,
+        status,
         time_remaining,
     });
+
+    // check alerts only while discharging; reset flags when we leave that state
+    if status == ChargingStatus::Discharging {
+        alert_state.check(percentage).await;
+    } else {
+        alert_state.reset();
+    }
 }
 
 /// Manage the [`ChargingSession`] state machine based on the current status.

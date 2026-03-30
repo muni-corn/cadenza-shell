@@ -16,6 +16,7 @@ mod notifications;
 mod pulseaudio;
 mod settings;
 mod sleep_monitor;
+mod sound;
 mod style;
 mod tiles;
 mod utils;
