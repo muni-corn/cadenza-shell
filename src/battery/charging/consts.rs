@@ -22,3 +22,13 @@ pub(crate) const DEFAULT_AMPLITUDE_RATIO: f64 = 0.7;
 /// Window sizes (in reading count) used for rolling-median current
 /// calculations.
 pub(crate) const ROLLING_WINDOWS: [usize; 6] = [5, 10, 15, 20, 25, 30];
+
+// session constants
+// =================
+
+/// How many consecutive readings with ordered rolling medians are required
+/// before declaring the CC/CV transition.
+pub(super) const CV_CONFIRM_READINGS: usize = 5;
+
+/// Minimum number of pre-Full readings required to trust an I_cut observation.
+pub(super) const MIN_I_CUT_SAMPLES: usize = 3;

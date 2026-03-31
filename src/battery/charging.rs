@@ -18,7 +18,7 @@ use std::{fs, time::Duration};
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Local};
-use consts::ROLLING_WINDOWS;
+use consts::{CV_CONFIRM_READINGS, MIN_I_CUT_SAMPLES, ROLLING_WINDOWS};
 use cv_fit::{CvFitParams, CvFitState, predict_cv_duration_from_integral};
 use profile::ChargeProfile;
 
@@ -77,19 +77,6 @@ impl SessionReading {
         })
     }
 }
-
-// ── ChargingSession constants
-// ─────────────────────────────────────────────────
-
-/// How many consecutive readings with ordered rolling medians are required
-/// before declaring the CC/CV transition.
-const CV_CONFIRM_READINGS: usize = 5;
-
-/// Minimum number of pre-Full readings required to trust an I_cut observation.
-const MIN_I_CUT_SAMPLES: usize = 3;
-
-// ── ChargingSession
-// ───────────────────────────────────────────────────────────
 
 /// Transient state for the charging session that is currently in progress.
 ///
