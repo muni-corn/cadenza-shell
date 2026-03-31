@@ -58,7 +58,7 @@ pub(super) struct CvSample {
 
 /// Double-exponential fit parameters.
 #[derive(Debug, Clone, Copy)]
-pub(super) struct CvFitParams {
+pub(in crate::battery) struct CvFitParams {
     /// Fast-decay amplitude (µA). Must satisfy `0 < a < i0`.
     pub a: f64,
     /// Fast time constant (s). Must satisfy `tau1_min ≤ tau1 < tau2`.

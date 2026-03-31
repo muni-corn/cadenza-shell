@@ -22,15 +22,13 @@ use consts::{
     DEFAULT_AMPLITUDE_RATIO, DEFAULT_TAU1_SECS, DEFAULT_TAU2_SECS, I_CUT_DEFAULT_C_RATE,
     I_CUT_LEARNING_RATE, ROLLING_WINDOWS, SESSION_LEARNING_RATE, TAU_PRIOR_LEARNING_RATE,
 };
+use cv_fit::{CvFitParams, CvFitState, predict_cv_duration_from_integral};
 use serde::{Deserialize, Serialize};
 
-use super::{
-    cv_fit::{CvFitParams, CvFitState, predict_cv_duration_from_integral},
-    discharging::get_state_directory,
-    sysfs::SysfsReading,
-};
+use super::{discharging::get_state_directory, sysfs::SysfsReading};
 
 mod consts;
+mod cv_fit;
 
 // ── ChargeProfile
 // ─────────────────────────────────────────────────────────────
@@ -1143,7 +1141,7 @@ mod tests {
 
     #[test]
     fn cv_fit_state_predicts_within_reasonable_bounds() {
-        use super::super::cv_fit::CvFitState;
+        use super::cv_fit::CvFitState;
 
         let base = Local::now();
         let i0 = 3_000_000.0_f64; // 3 A

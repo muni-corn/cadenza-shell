@@ -4,7 +4,6 @@ use relm4::SharedState;
 
 mod alerts;
 mod charging;
-mod cv_fit;
 mod discharging;
 mod sysfs;
 mod udev;
