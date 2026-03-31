@@ -4,15 +4,18 @@ use anyhow::{Context, Result};
 use chrono::{DateTime, Local};
 
 use super::{
-    super::sysfs::SysfsReading, are_medians_strictly_ordered, consts::ROLLING_WINDOWS, median_of,
+    super::sysfs::SysfsReading, are_medians_strictly_ordered, consts::ROLLING_WINDOWS,
     predict_cc_plus_cv, profile::ChargeProfile,
 };
-use crate::battery::{
-    charging::{
-        ChargingPhase, CvFitState,
-        consts::{CV_CONFIRM_READINGS, MIN_I_CUT_SAMPLES},
+use crate::{
+    battery::{
+        charging::{
+            ChargingPhase, CvFitState,
+            consts::{CV_CONFIRM_READINGS, MIN_I_CUT_SAMPLES},
+        },
+        discharging::get_state_directory,
     },
-    discharging::get_state_directory,
+    utils::median_of,
 };
 
 /// Transient state for the charging session that is currently in progress.
