@@ -7,7 +7,10 @@ use super::{BATTERY_STATE, BatteryState, ChargingStatus};
 use crate::battery::{
     READ_INTERVAL_SECONDS,
     alerts::AlertState,
-    charging::{ChargingSession, SessionReading, profile::ChargeProfile},
+    charging::{
+        profile::ChargeProfile,
+        session::{ChargingSession, SessionReading},
+    },
     discharging::DischargeProfile,
     sysfs::{SysfsReading, detect_battery_path, read_battery_identity, read_battery_sysfs},
     udev::{create_battery_monitor, is_battery_change},
