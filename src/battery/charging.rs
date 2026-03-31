@@ -49,6 +49,10 @@ const DEFAULT_TAU2_SECS: f64 = 1_800.0;
 /// Default amplitude ratio prior (A / I0).
 const DEFAULT_AMPLITUDE_RATIO: f64 = 0.7;
 
+/// Window sizes (in reading count) used for rolling-median current
+/// calculations.
+const ROLLING_WINDOWS: [usize; 6] = [5, 10, 15, 20, 25, 30];
+
 // ── ChargeProfile
 // ─────────────────────────────────────────────────────────────
 
@@ -699,12 +703,7 @@ impl ChargingSession {
         let percentage = latest.percentage * 100.0;
         let current_now = latest.current_ua;
         let session_median = self.median_current();
-        let r5 = self.rolling_median_current(5);
-        let r10 = self.rolling_median_current(10);
-        let r15 = self.rolling_median_current(15);
-        let r20 = self.rolling_median_current(20);
-        let r25 = self.rolling_median_current(25);
-        let r30 = self.rolling_median_current(30);
+        let [r5, r10, r15, r20, r25, r30] = self.rolling_medians();
 
         let (fit_a, fit_tau1, fit_tau2, fit_valid) = if let Some(f) = &self.cv_fit {
             let p = f.params();
@@ -747,24 +746,19 @@ impl ChargingSession {
             return;
         };
         let median = self.median_current();
-        let rolling_median_5 = self.rolling_median_current(5);
-        let rolling_median_10 = self.rolling_median_current(10);
-        let rolling_median_15 = self.rolling_median_current(15);
-        let rolling_median_20 = self.rolling_median_current(20);
-        let rolling_median_25 = self.rolling_median_current(25);
-        let rolling_median_30 = self.rolling_median_current(30);
+        let [r5, r10, r15, r20, r25, r30] = self.rolling_medians();
 
         log::debug!(
             "
 ---------------charging statistics---------------
            percentage: {:.1}%
           current_now: {} µA
-     rolling_median_5: {rolling_median_5} µA
-    rolling_median_10: {rolling_median_10} µA
-    rolling_median_15: {rolling_median_15} µA
-    rolling_median_20: {rolling_median_20} µA
-    rolling_median_25: {rolling_median_25} µA
-    rolling_median_30: {rolling_median_30} µA
+     rolling_median_5: {r5} µA
+    rolling_median_10: {r10} µA
+    rolling_median_15: {r15} µA
+    rolling_median_20: {r20} µA
+    rolling_median_25: {r25} µA
+    rolling_median_30: {r30} µA
 plateau (full median): {median} µA",
             latest.percentage * 100.,
             latest.current_ua,
@@ -788,23 +782,20 @@ plateau (full median): {median} µA",
 
         log::debug!("in cc/cv switch range; checking now");
 
-        // all rolling medians must be strictly ordered for the transition to be
-        // confirmed: instant < rolling_5 < ... < plateau
-        let medians = [
-            latest.current_ua,
-            rolling_median_5,
-            rolling_median_10,
-            rolling_median_15,
-            rolling_median_20,
-            rolling_median_25,
-            rolling_median_30,
+        let rolling = [r5, r10, r15, r20, r25, r30];
+        let instant_current = latest.current_ua;
+        let check_medians = [
+            instant_current,
+            rolling[0],
+            rolling[1],
+            rolling[2],
+            rolling[3],
+            rolling[4],
+            rolling[5],
             self.cc_plateau_ua,
         ];
-        if medians
-            .iter()
-            .zip(medians.iter().skip(1))
-            .all(|(a, b)| a < b)
-        {
+
+        if are_medians_strictly_ordered(&check_medians) {
             log::debug!("rolling medians are in order; counting");
             self.cv_confirm_count += 1;
         } else {
@@ -936,6 +927,11 @@ buf_samples = {}
         Some(i_term)
     }
 
+    /// Compute rolling medians for each window in [`ROLLING_WINDOWS`].
+    fn rolling_medians(&self) -> [f64; 6] {
+        std::array::from_fn(|i| self.rolling_median_current(ROLLING_WINDOWS[i]))
+    }
+
     /// Compute the median current (µA) over the most recent `readings` count.
     fn rolling_median_current(&self, readings: usize) -> f64 {
         let window_start = self.readings.len().saturating_sub(readings);
@@ -968,6 +964,14 @@ fn median_of(iter: impl Iterator<Item = f64>) -> f64 {
     } else {
         values[mid]
     }
+}
+
+/// Returns `true` if each element in `medians` is strictly less than the next.
+fn are_medians_strictly_ordered(medians: &[f64]) -> bool {
+    medians
+        .iter()
+        .zip(medians.iter().skip(1))
+        .all(|(a, b)| a < b)
 }
 
 // ── tier 2 prediction
