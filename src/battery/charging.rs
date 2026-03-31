@@ -769,10 +769,7 @@ plateau (full median): {median} µA",
             latest.current_ua,
         );
 
-        // keep cc plateau updated while still in CC
-        if median != self.cc_plateau_ua {
-            self.cc_plateau_ua = median;
-        }
+        self.cc_plateau_ua = median;
 
         if self.phase == ChargingPhase::Unknown && self.cc_plateau_ua > 0.0 {
             self.phase = ChargingPhase::Cc;
