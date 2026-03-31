@@ -455,47 +455,7 @@ impl ChargingSession {
 
         // drive the online CV fitter once we are in CV
         if self.phase == ChargingPhase::Cv {
-            let latest = self.readings.last().unwrap(); // just pushed above
-            let when = latest.when;
-            let current_ua = latest.current_ua;
-            let total_readings = self.readings.len();
-            log::debug!(
-                "cv phase update #{total_readings}:
-      t = {:.0} s
-      I = {current_ua:.0} µA
-    soc = {:.1}%",
-                self.cv_fit
-                    .as_ref()
-                    .map(|f| f.elapsed_secs(when))
-                    .unwrap_or(0.0),
-                latest.percentage * 100.0,
-            );
-
-            let fit = self.cv_fit.get_or_insert_with(|| {
-                let rat = self.reading_at_transition.as_ref().unwrap();
-                log::debug!(
-                    "initialising cv fit state:
-            i0 = {:.0} µA
-    tau1_prior = {:.0} s
-    tau2_prior = {:.0} s",
-                    rat.current_ua,
-                    profile.tau1_prior_secs,
-                    profile.tau2_prior_secs,
-                );
-                CvFitState::new(
-                    rat.current_ua,
-                    rat.when,
-                    profile.tau1_prior_secs,
-                    profile.tau2_prior_secs,
-                    profile.amplitude_ratio,
-                )
-            });
-
-            fit.push_sample(when, current_ua);
-
-            if fit.should_refit() {
-                fit.refit();
-            }
+            self.drive_cv_fit(profile);
         }
     }
 
@@ -738,6 +698,51 @@ impl ChargingSession {
         }
         if let Err(e) = writer.flush() {
             log::error!("couldn't flush charging session csv: {e}");
+        }
+    }
+
+    /// Drive the online CV fitter with the latest reading.
+    fn drive_cv_fit(&mut self, profile: &ChargeProfile) {
+        let latest = self.readings.last().unwrap(); // called only after push
+        let when = latest.when;
+        let current_ua = latest.current_ua;
+        let total_readings = self.readings.len();
+        log::debug!(
+            "cv phase update #{total_readings}:
+      t = {:.0} s
+      I = {current_ua:.0} µA
+    soc = {:.1}%",
+            self.cv_fit
+                .as_ref()
+                .map(|f| f.elapsed_secs(when))
+                .unwrap_or(0.0),
+            latest.percentage * 100.0,
+        );
+
+        let fit = self.cv_fit.get_or_insert_with(|| {
+            let rat = self.reading_at_transition.as_ref().unwrap();
+            log::debug!(
+                "initialising cv fit state:
+            i0 = {:.0} µA
+    tau1_prior = {:.0} s
+    tau2_prior = {:.0} s",
+                rat.current_ua,
+                profile.tau1_prior_secs,
+                profile.tau2_prior_secs,
+            );
+            CvFitState::new(
+                rat.current_ua,
+                rat.when,
+                profile.tau1_prior_secs,
+                profile.tau2_prior_secs,
+                profile.amplitude_ratio,
+            )
+        });
+
+        fit.push_sample(when, current_ua);
+
+        if fit.should_refit() {
+            fit.refit();
         }
     }
 
