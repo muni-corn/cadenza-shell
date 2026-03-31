@@ -467,13 +467,7 @@ impl CvFitState {
             p.eval(t_cut, self.i0),
         );
 
-        match Duration::try_from_secs_f64(t_cut) {
-            Ok(d) => Some(d),
-            Err(e) => {
-                log::debug!("never mind, {e}; returning None (predict_time_remaining)");
-                None
-            }
-        }
+        try_duration(remaining, "predict_time_remaining")
     }
 
     // ── private helpers ──────────────────────────────────────────────────────
@@ -564,6 +558,17 @@ impl CvFitState {
     }
 }
 
+// ── helpers
+// ───────────────────────────────────────────────────────────────────
+
+/// Convert a non-negative number of seconds to a [`Duration`], logging and
+/// returning `None` on failure.
+fn try_duration(secs: f64, context: &str) -> Option<Duration> {
+    Duration::try_from_secs_f64(secs)
+        .map_err(|e| log::debug!("{context}: {e}; returning None"))
+        .ok()
+}
+
 // ── charge-integral bisection (for tier 2 profile-based prediction) ──────────
 
 /// Predict CV phase duration by finding when the charge integral under the
@@ -619,25 +624,11 @@ pub(super) fn predict_cv_duration_from_integral(
                 t_result,
                 t_result / 60.0,
             );
-            match Duration::try_from_secs_f64(t_result) {
-                Ok(d) => return Some(d),
-                Err(e) => {
-                    log::debug!(
-                        "never mind, {e}; returning None (predict_cv_duration_from_integral)"
-                    );
-                    return None;
-                }
-            }
+            return try_duration(t_result, "predict_cv_duration_from_integral");
         }
     }
 
     log::debug!("cv model did not converge! returning original upper bound: {t_high} s");
 
-    match Duration::try_from_secs_f64(t_high) {
-        Ok(d) => Some(d),
-        Err(e) => {
-            log::debug!("never mind, {e}; returning None (predict_cv_duration_from_integral)");
-            None
-        }
-    }
+    try_duration(t_high, "predict_cv_duration_from_integral (fallback)")
 }
