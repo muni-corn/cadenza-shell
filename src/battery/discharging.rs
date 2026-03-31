@@ -507,6 +507,13 @@ mod tests {
 
     /// Drive `profile` with `n` observations of `power_watts` sampled at 15-
     /// minute intervals starting from `base`, and return the trained profile.
+    ///
+    /// Note: this helper intentionally reimplements the EMA update inline
+    /// (using `1/(i+1)` for alpha) rather than calling
+    /// [`DischargeProfile::update`], which requires a
+    /// `ChargingStatus::Discharging` reading and applies the
+    /// `READINGS_PER_LIFETIME` cap. The divergence is acceptable here since the
+    /// tests target the Fourier and prediction logic, not the EMA schedule.
     fn train_constant(
         mut profile: DischargeProfile,
         base: DateTime<Local>,
