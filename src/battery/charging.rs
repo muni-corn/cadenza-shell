@@ -784,8 +784,13 @@ plateau (full median): {median} µA",
 
         log::debug!("in cc/cv switch range; checking now");
 
-        let rolling = [r5, r10, r15, r20, r25, r30];
-        let instant_current = latest.current_ua;
+        self.update_cv_confirm(latest.current_ua, [r5, r10, r15, r20, r25, r30]);
+        self.try_commit_cv_transition();
+    }
+
+    /// Update the CV confirmation counter based on whether the rolling medians
+    /// are strictly ordered (instant < r5 < ... < r30 < plateau).
+    fn update_cv_confirm(&mut self, instant_current: f64, rolling: [f64; 6]) {
         let check_medians = [
             instant_current,
             rolling[0],
@@ -804,24 +809,29 @@ plateau (full median): {median} µA",
             log::debug!("rolling medians are *not* in order; resetting");
             self.cv_confirm_count = 0;
         }
+    }
 
-        if self.cv_confirm_count >= CV_CONFIRM_READINGS {
-            log::debug!(
-                "rolling medians have been ordered for {} readings; cv phase detected!",
-                self.cv_confirm_count
-            );
+    /// Commit the CC→CV transition if the confirmation threshold has been met.
+    fn try_commit_cv_transition(&mut self) {
+        if self.cv_confirm_count < CV_CONFIRM_READINGS {
+            return;
+        }
 
-            let transition_idx = self.readings.len() - self.cv_confirm_count;
-            self.phase = ChargingPhase::Cv;
-            self.reading_at_transition = self.readings.get(transition_idx).cloned();
-            if let Some(rat) = &self.reading_at_transition {
-                log::info!(
-                    "CC→CV transition detected at index {transition_idx} \
+        log::debug!(
+            "rolling medians have been ordered for {} readings; cv phase detected!",
+            self.cv_confirm_count
+        );
+
+        let transition_idx = self.readings.len() - self.cv_confirm_count;
+        self.phase = ChargingPhase::Cv;
+        self.reading_at_transition = self.readings.get(transition_idx).cloned();
+        if let Some(rat) = &self.reading_at_transition {
+            log::info!(
+                "CC→CV transition detected at index {transition_idx} \
                      (soc={:.1}%, current={:.0} µA)",
-                    rat.percentage * 100.0,
-                    rat.current_ua,
-                );
-            }
+                rat.percentage * 100.0,
+                rat.current_ua,
+            );
         }
     }
 
