@@ -392,11 +392,17 @@ impl DischargingStatistics {
                 self.deviation_ema * (1.0 - STATISTICS_ALPHA) + diff * STATISTICS_ALPHA;
         }
 
+        self.log_statistics(new_time_to_empty_timestamp);
+    }
+
+    /// Log a debug summary of the current discharging statistics.
+    fn log_statistics(&self, current_estimate_ts: i64) {
         let standard_deviation = self.variance_ema.sqrt();
+        let value = current_estimate_ts as f64;
 
         log::debug!("-----discharging statistics--------------------");
 
-        if let Some(new_utc) = DateTime::from_timestamp(new_time_to_empty_timestamp, 0) {
+        if let Some(new_utc) = DateTime::from_timestamp(current_estimate_ts, 0) {
             log::debug!(
                 "{:>17}: {}",
                 "tte estimate now",
@@ -423,7 +429,7 @@ impl DischargingStatistics {
             );
         }
 
-        let pessimistic_ts = new_time_to_empty_timestamp as f64 - standard_deviation;
+        let pessimistic_ts = value - standard_deviation;
         if let Some(pessimistic_utc) = DateTime::from_timestamp(pessimistic_ts as i64, 0) {
             log::debug!(
                 "{:>17}: {}",
@@ -432,7 +438,7 @@ impl DischargingStatistics {
             );
         }
 
-        let optimistic_ts = new_time_to_empty_timestamp as f64 + standard_deviation;
+        let optimistic_ts = value + standard_deviation;
         if let Some(optimistic_utc) = DateTime::from_timestamp(optimistic_ts as i64, 0) {
             log::debug!(
                 "{:>17}: {}",
