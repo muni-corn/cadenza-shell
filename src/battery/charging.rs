@@ -171,19 +171,11 @@ impl ChargeProfile {
         let one_minus = 1.0 - alpha;
 
         log::debug!(
-            "update_transition (session #{n}):
-           cc = {cc:.0} µA
-       switch = {sw:.1}%
-    final_fit = {fit}",
-            n = self.sessions_learned + 1,
-            cc = cc_plateau_ua,
-            sw = switch_pct * 100.0,
-            fit = final_fit.map_or("none".to_string(), |p| {
-                format!(
-                    "[A={:.0} µA, tau1={:.0} s, tau2={:.0} s]",
-                    p.a, p.tau1, p.tau2
-                )
-            }),
+            "update_transition (session #{}): cc={cc_plateau_ua:.0} µA, \
+             switch={:.1}%, final_fit={}",
+            self.sessions_learned + 1,
+            switch_pct * 100.0,
+            final_fit.map_or("none".to_string(), |p| format!("{p:#?}")),
         );
 
         if self.sessions_learned == 0 {
@@ -196,13 +188,8 @@ impl ChargeProfile {
             self.switch_percentage = switch_pct;
             if let Some(p) = final_fit {
                 log::debug!(
-                    "seeding tau priors:
-     tau1 = {:.0} s
-     tau2 = {:.0} s
-    ratio = {:.2}",
-                    p.tau1,
-                    p.tau2,
-                    (p.a / cc_plateau_ua),
+                    "seeding tau priors: [{p:?}], ratio={:.2}",
+                    p.a / cc_plateau_ua,
                 );
                 self.tau1_prior_secs = p.tau1;
                 self.tau2_prior_secs = p.tau2;
@@ -249,24 +236,7 @@ impl ChargeProfile {
         }
 
         self.sessions_learned += 1;
-        log::debug!(
-            "profile after update:
-          cc = {:.0} µA
-      switch = {:.1}%
-        tau1 = {:.0} s
-        tau2 = {:.0} s
-       ratio = {:.2}
-       i_cut = {:.0} µA (confidence = {})
-    sessions = {}",
-            self.cc_plateau_ua,
-            self.switch_percentage * 100.0,
-            self.tau1_prior_secs,
-            self.tau2_prior_secs,
-            self.amplitude_ratio,
-            self.i_cut_ua,
-            self.i_cut_confidence,
-            self.sessions_learned,
-        );
+        log::debug!("profile after update: {self:?}");
     }
 
     /// Update the learned termination current from an observed termination
@@ -316,24 +286,7 @@ impl ChargeProfile {
         match Self::try_load(device_key) {
             Ok(mut p) => {
                 p.device_key = device_key.to_string();
-                log::info!(
-                    "loaded charge profile for '{}' ({} sessions)
-    cc_plateau={:.0} µA
-    switch={:.1}%
-    tau1={:.0} s
-    tau2={:.0} s
-    ratio={:.2}
-    i_cut={:.0} µA (confidence={})",
-                    device_key,
-                    p.sessions_learned,
-                    p.cc_plateau_ua,
-                    p.switch_percentage * 100.0,
-                    p.tau1_prior_secs,
-                    p.tau2_prior_secs,
-                    p.amplitude_ratio,
-                    p.i_cut_ua,
-                    p.i_cut_confidence,
-                );
+                log::info!("loaded charge profile for '{device_key}': {p:?}");
                 p
             }
             Err(e) => {
@@ -370,24 +323,7 @@ impl ChargeProfile {
         let path = Self::get_path(&self.device_key)?;
         let json = serde_json::to_string_pretty(self)?;
         fs::write(&path, json).with_context(|| format!("writing {}", path.display()))?;
-        log::debug!(
-            "saved charge profile to {path:?}:
-     sessions = {sessions}
-           cc = {cc:.0} µA
-       switch = {sw:.1}%
-         tau1 = {tau1:.0} s
-         tau2 = {tau2:.0} s
-        ratio = {ratio:.2}
-        i_cut = {i_cut:.0} µA (confidence = {conf})",
-            sessions = self.sessions_learned,
-            cc = self.cc_plateau_ua,
-            sw = self.switch_percentage * 100.0,
-            tau1 = self.tau1_prior_secs,
-            tau2 = self.tau2_prior_secs,
-            ratio = self.amplitude_ratio,
-            i_cut = self.i_cut_ua,
-            conf = self.i_cut_confidence,
-        );
+        log::debug!("saved charge profile to {path:?}: {self:?}");
         Ok(())
     }
 }
@@ -625,12 +561,7 @@ impl ChargingSession {
             );
             log::debug!(
                 "final fit: {}",
-                final_fit.map_or("none".to_string(), |p| {
-                    format!(
-                        "A = {:.0} µA, tau1 = {:.0} s, tau2 = {:.0} s",
-                        p.a, p.tau1, p.tau2
-                    )
-                }),
+                final_fit.map_or("none".to_string(), |p| format!("{p:?}")),
             );
 
             profile.update_transition(self.cc_plateau_ua, rat.percentage, final_fit);
@@ -679,12 +610,8 @@ impl ChargingSession {
         let charge_remaining_uah = charge_full_uah - charge_now_uah;
 
         log::debug!(
-            "predict_time_to_full:
-          phase = {:?}
-              I = {:.0} µA
-     charge_now = {:.1} mAh
-    charge_full = {:.1} mAh
-      remaining = {:.1} mAh",
+            "predict_time_to_full: phase={:?} I={:.0} µA \
+             now={:.1} mAh full={:.1} mAh remaining={:.1} mAh",
             self.phase,
             current_ua,
             charge_now_uah / 1000.0,
