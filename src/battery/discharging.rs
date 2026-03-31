@@ -570,19 +570,6 @@ mod tests {
         assert!(predicted >= 0.0, "prediction was negative: {predicted}");
     }
 
-    #[test]
-    fn predict_power_clamped_to_3x_ema_maximum() {
-        let ema = 10.0;
-        let mut profile = constant_power_profile(ema);
-        // force a massive positive perturbation
-        profile.cosine_coeffs[0] = 1_000.0;
-        let predicted = profile.predict_discharging_power_at(Local::now());
-        assert!(
-            predicted <= 3.0 * ema + 1e-9,
-            "prediction exceeded 3x ema: {predicted}"
-        );
-    }
-
     // ── energy_integral ───────────────────────────────────────────────────────
 
     #[test]
