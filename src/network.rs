@@ -442,5 +442,5 @@ pub fn get_icon(info: &NetworkInfo) -> &str {
 }
 
 pub fn get_strength_icon(strength: u8) -> &'static str {
-    percentage_to_icon_from_list(strength as f64 / 100., NETWORK_WIFI_ICON_NAMES)
+    percentage_to_icon_from_list(strength as f64 / 100.0, NETWORK_WIFI_ICON_NAMES)
 }

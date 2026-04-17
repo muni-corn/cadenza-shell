@@ -235,14 +235,14 @@ mod tests {
         use super::cv_fit::CvFitState;
 
         let base = Local::now();
-        let i0 = 3_000_000.0_f64; // 3 A
+        let i0 = 3_000_000f64; // 3 A
 
         let mut fit = CvFitState::new(i0, base, 300.0, 1800.0, 0.7);
 
         // feed synthetic double-exp samples: A=2.1M, tau1=400, tau2=2000
         let a = 0.7 * i0;
-        let tau1 = 400.0_f64;
-        let tau2 = 2_000.0_f64;
+        let tau1 = 400f64;
+        let tau2 = 2_000f64;
         for i in 1..=30 {
             let t = i as f64 * 20.0; // 20 s intervals
             let current = a * (-t / tau1).exp() + (i0 - a) * (-t / tau2).exp();

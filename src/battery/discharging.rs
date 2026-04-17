@@ -29,10 +29,10 @@ const PERIOD_SECS: f64 = 7.0 * 24.0 * 3600.0;
 const MAX_TTE: Duration = Duration::from_secs(48 * 3_600);
 
 /// How much of a day we expect users to be awake.
-const WAKING_HOURS_PERCENTAGE: f64 = 16. / 24.;
+const WAKING_HOURS_PERCENTAGE: f64 = 16.0 / 24.0;
 
 /// How many periods we want to keep readings for.
-const READING_LIFETIME_PERIODS: f64 = 4.;
+const READING_LIFETIME_PERIODS: f64 = 4.0;
 
 /// The amount of readings in the maximum learning period.
 const READINGS_PER_LIFETIME: u32 =
@@ -111,7 +111,7 @@ impl DischargeProfile {
     fn update_discharging(&mut self, power_now: f64) {
         let now = Local::now();
         let effective_sample_count = self.sample_count.min(READINGS_PER_LIFETIME);
-        let alpha = 1. / (effective_sample_count as f64 + 1.);
+        let alpha = 1.0 / (effective_sample_count as f64 + 1.0);
 
         // seed the EMA on first observation; otherwise apply moving average.
         // sample count is updated after this function is called.
@@ -153,7 +153,8 @@ impl DischargeProfile {
             .map(|(i, (a, b))| (i + 1, a, b))
         {
             log::debug!(
-                "most useless harmonic: #{smallest_coefficient_ordinal} (a = {smallest_a}, b = {smallest_b})"
+                "most useless harmonic: #{smallest_coefficient_ordinal} (a = {smallest_a}, b = \
+                 {smallest_b})"
             );
         }
     }
@@ -231,7 +232,7 @@ impl DischargeProfile {
 
         // bisection bounds: lo is always under-estimate, hi is always over-estimate.
         // start with the tightest bracket we can establish cheaply.
-        let mut lo = 0.0_f64;
+        let mut lo = 0f64;
         let mut hi = max_secs;
 
         // hybrid Newton / bisection: find Δt such that
@@ -468,7 +469,7 @@ impl DischargingStatistics {
             self.variance_ema / SECONDS_PER_HOUR as f64
         );
 
-        log::debug!("{:>17}: {:>6.1} min", "σ", standard_deviation / 60.);
+        log::debug!("{:>17}: {:>6.1} min", "σ", standard_deviation / 60.0);
 
         log::debug!(
             "{:>17}: {:>+6.1} min",
@@ -481,7 +482,7 @@ impl DischargingStatistics {
             log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
             log::debug!(
                 "current estimate is {:+.1} min ({:.1}σ) from ema estimate",
-                bias_now / 60.,
+                bias_now / 60.0,
                 bias_now.abs() / standard_deviation
             );
         }
@@ -525,7 +526,7 @@ mod tests {
             // bypass the ChargingStatus check and call the inner fn directly
             let t = week_offset_secs(when);
             let power_now = power_watts;
-            let alpha = 1. / (i as f64 + 1.);
+            let alpha = 1.0 / (i as f64 + 1.0);
 
             if profile.ema_power == 0.0 {
                 profile.ema_power = power_now;

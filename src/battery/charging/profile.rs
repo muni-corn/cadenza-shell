@@ -136,8 +136,8 @@ impl ChargeProfile {
         let one_minus = 1.0 - alpha;
 
         log::debug!(
-            "update_transition (session #{}): cc={cc_plateau_ua:.0} µA, \
-             switch={:.1}%, final_fit={}",
+            "update_transition (session #{}): cc={cc_plateau_ua:.0} µA, switch={:.1}%, \
+             final_fit={}",
             self.sessions_learned + 1,
             switch_pct * 100.0,
             final_fit.map_or("none".to_string(), |p| format!("{p:#?}")),

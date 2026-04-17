@@ -16,7 +16,7 @@ pub use watcher::start_battery_service;
 pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
 
 /// For a moving average over 10 readings.
-const STATISTICS_ALPHA: f64 = 1. / 10.;
+const STATISTICS_ALPHA: f64 = 1.0 / 10.0;
 
 /// How often to save profiles to disk.
 const SAVE_INTERVAL: TimeDelta = TimeDelta::seconds(30);

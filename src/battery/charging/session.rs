@@ -201,8 +201,8 @@ impl ChargingSession {
         let charge_remaining_uah = charge_full_uah - charge_now_uah;
 
         log::debug!(
-            "predict_time_to_full: phase={:?} I={:.0} µA \
-             now={:.1} mAh full={:.1} mAh remaining={:.1} mAh",
+            "predict_time_to_full: phase={:?} I={:.0} µA now={:.1} mAh full={:.1} mAh \
+             remaining={:.1} mAh",
             self.phase,
             current_ua,
             charge_now_uah / 1000.0,
@@ -396,7 +396,7 @@ impl ChargingSession {
     rolling_median_25: {r25} µA
     rolling_median_30: {r30} µA
 plateau (full median): {median} µA",
-            latest.percentage * 100.,
+            latest.percentage * 100.0,
             latest.current_ua,
         );
 
@@ -460,8 +460,8 @@ plateau (full median): {median} µA",
         self.reading_at_transition = self.readings.get(transition_idx).cloned();
         if let Some(rat) = &self.reading_at_transition {
             log::info!(
-                "CC→CV transition detected at index {transition_idx} \
-                     (soc={:.1}%, current={:.0} µA)",
+                "CC→CV transition detected at index {transition_idx} (soc={:.1}%, current={:.0} \
+                 µA)",
                 rat.percentage * 100.0,
                 rat.current_ua,
             );
@@ -554,8 +554,8 @@ buf_samples = {}
             let ratio = i_term / profile.i_cut_ua;
             if !(0.1..=10.0).contains(&ratio) {
                 log::warn!(
-                    "i_cut observation rejected: {i_term:.0} µA is implausible \
-                     given learned {:.0} µA",
+                    "i_cut observation rejected: {i_term:.0} µA is implausible given learned \
+                     {:.0} µA",
                     profile.i_cut_ua,
                 );
                 return None;
