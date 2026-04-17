@@ -55,8 +55,7 @@ impl SimpleComponent for BrightnessTile {
             // update the progress tile with new data
             self.progress_tile
                 .emit(ProgressTileMsg::SetIcon(Some(self.get_icon().to_string())));
-            self.progress_tile
-                .emit(ProgressTileMsg::SetProgress(to_logarithmic(p)));
+            self.progress_tile.emit(ProgressTileMsg::SetProgress(p));
 
             root.set_visible(true);
         } else {
@@ -76,21 +75,7 @@ impl BrightnessTile {
         BRIGHTNESS_STATE
             .read()
             .as_ref()
-            .map(|p| {
-                let log_brightness = to_logarithmic(*p);
-                percentage_to_icon_from_list(log_brightness, BRIGHTNESS_ICON_NAMES)
-            })
+            .map(|p| percentage_to_icon_from_list(*p, BRIGHTNESS_ICON_NAMES))
             .unwrap_or_default()
-    }
-}
-
-fn to_logarithmic(brightness: f64) -> f64 {
-    // use logarithmic scale for perceived brightness
-    // convert linear brightness to logarithmic perception
-    if brightness <= 0.0 {
-        0.0
-    } else {
-        // logarithmic mapping: log10(brightness * 9.0 + 1.0) gives us 0-1 range
-        (brightness * 9.0 + 1.0).log10()
     }
 }
