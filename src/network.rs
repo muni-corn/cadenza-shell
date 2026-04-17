@@ -112,7 +112,28 @@ pub async fn run_network_service() {
 
     while let Some(event) = event_rx.recv().await {
         match event {
-            NetworkPropertyChange::State(state) => NETWORK_STATE.write().connection_state = state,
+            NetworkPropertyChange::State(state) => {
+                NETWORK_STATE.write().connection_state = state;
+
+                // if we just transitioned to a connected state but specific_info
+                // is still None (e.g. the wake refetch ran before NM finished
+                // reconnecting and no PrimaryConnection change will fire since
+                // we reconnected to the same network), do a full refetch now to
+                // populate the missing device details
+                let needs_refetch = matches!(
+                    state,
+                    State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal
+                ) && NETWORK_STATE.read().specific_info.is_none();
+
+                if needs_refetch {
+                    log::debug!("connected state with no device info, refetching network state");
+                    if let Err(e) =
+                        handle_primary_change(&conn, &event_tx, &mut strength_task).await
+                    {
+                        log::warn!("couldn't refetch network info after state change: {e}");
+                    }
+                }
+            }
             NetworkPropertyChange::Connectivity(connectivity) => {
                 NETWORK_STATE.write().connectivity = connectivity
             }
