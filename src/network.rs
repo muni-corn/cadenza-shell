@@ -120,12 +120,9 @@ pub async fn run_network_service() {
                 // reconnecting and no PrimaryConnection change will fire since
                 // we reconnected to the same network), do a full refetch now to
                 // populate the missing device details
-                let needs_refetch = matches!(
-                    state,
-                    State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal
-                ) && NETWORK_STATE.read().specific_info.is_none();
-
-                if needs_refetch {
+                if let State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal = state
+                    && NETWORK_STATE.read().specific_info.is_none()
+                {
                     log::debug!("connected state with no device info, refetching network state");
                     if let Err(e) =
                         handle_primary_change(&conn, &event_tx, &mut strength_task).await
