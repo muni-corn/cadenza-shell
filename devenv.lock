@@ -325,11 +325,11 @@
     "devenv_2": {
       "locked": {
         "dir": "src/modules",
-        "lastModified": 1776354588,
-        "narHash": "sha256-NOsJcVAG63emvdlQSpSGQjvHHxcGDfBHd/cgtpduerw=",
+        "lastModified": 1776510886,
+        "narHash": "sha256-+gLu8j/IVoIZ4hPiNOnqpaBwFzPWGT8RR/ktw9AXdK0=",
         "owner": "cachix",
         "repo": "devenv",
-        "rev": "d7aba90c41ee261d215cbe09cf92393cc0ff2606",
+        "rev": "50cd4206ac42b3deed090e7d93433e2138a86cae",
         "type": "github"
       },
       "original": {
@@ -1100,11 +1100,11 @@
     "musicaloft-shell_2": {
       "flake": false,
       "locked": {
-        "lastModified": 1776415809,
-        "narHash": "sha256-PuJ3XDX7/P7wBfwhoR82urZmqytbwPWK64s5BQzZOK8=",
+        "lastModified": 1776415896,
+        "narHash": "sha256-+UNsBrVsTkaXlv9QNVs3b/t1goOOb3VpxKkxhotMyrA=",
         "owner": "musicaloft",
         "repo": "musicaloft-shell",
-        "rev": "c39c887d9ce5de8fc1128ac98d32f8300bf41300",
+        "rev": "b2f48c9e32c88ba38fcd8397f8eb399347728988",
         "type": "github"
       },
       "original": {
@@ -1546,11 +1546,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1776395632,
-        "narHash": "sha256-Mi1uF5f2FsdBIvy+v7MtsqxD3Xjhd0ARJdwoqqqPtJo=",
+        "lastModified": 1776481912,
+        "narHash": "sha256-Xq7p+Ex3YHFAd+fFFLOYw2Wv67582X7SAmrEDtIDZQ4=",
         "owner": "oxalica",
         "repo": "rust-overlay",
-        "rev": "8087ff1f47fff983a1fba70fa88b759f2fd8ae97",
+        "rev": "e611106c527e8ab0adbb641183cda284411d575c",
         "type": "github"
       },
       "original": {
