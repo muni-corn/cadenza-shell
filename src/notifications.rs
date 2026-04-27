@@ -15,7 +15,7 @@ use std::{
 use anyhow::Result;
 use relm4::{ComponentSender, SharedState, Worker};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, broadcast};
+use tokio::sync::{RwLock, broadcast, mpsc};
 use zbus::{
     Connection,
     object_server::InterfaceRef,
@@ -69,6 +69,50 @@ pub(crate) fn event_tx() -> &'static broadcast::Sender<NotificationEvent> {
 /// receiver.
 pub fn subscribe_events() -> broadcast::Receiver<NotificationEvent> {
     event_tx().subscribe()
+}
+
+/// Commands that consumers can send to the notification service.
+pub(crate) enum NotificationCommand {
+    Dismiss(u32),
+    ClearAll,
+    InvokeAction { id: u32, action_key: String },
+}
+
+static COMMAND_TX: OnceLock<mpsc::UnboundedSender<NotificationCommand>> = OnceLock::new();
+
+fn command_tx() -> &'static mpsc::UnboundedSender<NotificationCommand> {
+    COMMAND_TX
+        .get()
+        .expect("notification service not yet started")
+}
+
+/// Dismiss a notification by ID.
+///
+/// Removes the notification from state and emits a `NotificationClosed` event.
+/// Has no effect if the service has not been started.
+pub fn dismiss(id: u32) {
+    if let Some(tx) = COMMAND_TX.get() {
+        let _ = tx.send(NotificationCommand::Dismiss(id));
+    }
+}
+
+/// Clear all notifications.
+///
+/// Removes all notifications from state and emits an `AllCleared` event.
+/// Has no effect if the service has not been started.
+pub fn clear_all() {
+    if let Some(tx) = COMMAND_TX.get() {
+        let _ = tx.send(NotificationCommand::ClearAll);
+    }
+}
+
+/// Invoke a notification action, emitting the D-Bus `ActionInvoked` signal.
+///
+/// Has no effect if the service has not been started.
+pub fn invoke_action(id: u32, action_key: String) {
+    if let Some(tx) = COMMAND_TX.get() {
+        let _ = tx.send(NotificationCommand::InvokeAction { id, action_key });
+    }
 }
 
 #[derive(Debug, Clone)]
