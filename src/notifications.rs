@@ -199,7 +199,7 @@ impl Worker for NotificationService {
         let interface_clone = Arc::clone(&interface);
 
         relm4::spawn(async move {
-            match initialize_notifications_daemon(sender_clone.clone()).await {
+            match initialize_notifications_daemon().await {
                 Ok(connection) => {
                     log::info!("notifications daemon initialized successfully");
                     *interface_clone.write().await = Some(
@@ -267,14 +267,12 @@ impl Worker for NotificationService {
     }
 }
 
-async fn initialize_notifications_daemon(
-    sender: ComponentSender<NotificationService>,
-) -> Result<Connection> {
+async fn initialize_notifications_daemon() -> Result<Connection> {
     Ok(zbus::connection::Builder::session()?
         .name("org.freedesktop.Notifications")?
         .serve_at(
             "/org/freedesktop/Notifications",
-            NotificationsDaemon::new(sender),
+            NotificationsDaemon::new(event_tx().clone()),
         )?
         .build()
         .await?)

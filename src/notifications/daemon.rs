@@ -1,18 +1,13 @@
-// temporary until we figure things out
-#![allow(dead_code)]
-
 use std::{
-    collections::HashMap,
     sync::atomic::{AtomicU32, Ordering},
     time::SystemTime,
 };
 
-use relm4::ComponentSender;
-use tokio::sync::Mutex;
+use tokio::sync::broadcast;
 use zbus::{interface, object_server::SignalEmitter};
 
 use crate::notifications::{
-    NotificationHints, NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
+    NOTIFICATIONS_STATE, NotificationEvent, NotificationHints,
     types::{Notification, NotificationUrgency},
 };
 
@@ -21,8 +16,7 @@ static NOTIFICATION_ID: AtomicU32 = AtomicU32::new(1);
 /// Implements https://specifications.freedesktop.org/notification-spec/latest/protocol.html.
 #[derive(Debug)]
 pub struct NotificationsDaemon {
-    notifications: Mutex<HashMap<u32, Notification>>,
-    sender: ComponentSender<NotificationService>,
+    event_tx: broadcast::Sender<NotificationEvent>,
 }
 
 #[interface(name = "org.freedesktop.Notifications")]
@@ -77,39 +71,24 @@ impl NotificationsDaemon {
 
         log::debug!("new notification received: {:?}", &notification);
 
-        // store notification in worker
-        self.sender.input(NotificationServiceMsg::StoreNotification(
-            notification.clone(),
-        ));
+        // write to the global state
+        NOTIFICATIONS_STATE
+            .write()
+            .notifications
+            .insert(id, notification.clone());
 
-        // notify worker about new notification
-        if let Err(e) = self
-            .sender
-            .output(NotificationWorkerOutput::NotificationReceived(
-                notification.clone(),
-            ))
-        {
-            log::error!("failed to send notification to worker: {:?}", e);
-        }
+        // broadcast the event to all subscribers
+        let _ = self
+            .event_tx
+            .send(NotificationEvent::Received(notification.clone()));
 
-        // store notification
-        {
-            let mut notifications = self.notifications.lock().await;
-
-            notifications.insert(id, notification.clone());
-        }
-
-        // handle timeout (note: we can't emit signals after the method ends, so we just
-        // track it internally)
+        // handle timeout — auto-close non-persistent notifications
         if expire_timeout > 0 {
-            let sender_clone = self.sender.clone();
+            let event_tx = self.event_tx.clone();
             relm4::spawn(async move {
                 tokio::time::sleep(tokio::time::Duration::from_millis(expire_timeout as u64)).await;
-                if let Err(e) = sender_clone
-                    .output(NotificationWorkerOutput::NotificationClosed { id, reason: 1 })
-                {
-                    log::error!("failed to send notification closed to worker: {:?}", e);
-                }
+                NOTIFICATIONS_STATE.write().notifications.remove(&id);
+                let _ = event_tx.send(NotificationEvent::Closed { id, reason: 1 });
             });
         }
 
@@ -121,24 +100,16 @@ impl NotificationsDaemon {
         id: u32,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) {
-        // remove from storage
-        {
-            let mut notifications = self.notifications.lock().await;
-            notifications.remove(&id);
-        }
+        NOTIFICATIONS_STATE.write().notifications.remove(&id);
 
-        // emit signal
+        // emit D-Bus signal (reason 2 = closed by the notification server)
         if let Err(e) = emitter.notification_closed(id, 2).await {
             log::error!("failed to emit notification_closed signal: {}", e);
         }
 
-        // send to worker
-        if let Err(e) = self
-            .sender
-            .output(NotificationWorkerOutput::NotificationClosed { id, reason: 2 })
-        {
-            log::error!("failed to send notification closed to worker: {:?}", e);
-        }
+        let _ = self
+            .event_tx
+            .send(NotificationEvent::Closed { id, reason: 2 });
     }
 
     async fn get_capabilities(&self) -> Vec<String> {
@@ -182,19 +153,8 @@ impl NotificationsDaemon {
 }
 
 impl NotificationsDaemon {
-    pub fn new(sender: ComponentSender<NotificationService>) -> Self {
-        Self {
-            notifications: Mutex::new(HashMap::new()),
-            sender,
-        }
-    }
-
-    pub async fn get_notifications(&self) -> HashMap<u32, Notification> {
-        self.notifications.lock().await.clone()
-    }
-
-    pub async fn clear_all(&self) {
-        let mut notifications = self.notifications.lock().await;
-        notifications.clear();
+    /// Creates a new daemon that broadcasts events onto `event_tx`.
+    pub fn new(event_tx: broadcast::Sender<NotificationEvent>) -> Self {
+        Self { event_tx }
     }
 }
