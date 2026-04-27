@@ -12,6 +12,7 @@ use crate::{
     mpris::run_mpris_service,
     network::run_network_service,
     niri,
+    notifications::run_notifications_service,
     pulseaudio::run_pulseaudio_loop,
     sleep_monitor::run_sleep_monitor,
     weather::start_weather_polling,
@@ -66,6 +67,14 @@ impl AsyncComponent for CadenzaShellModel {
 
         // start sleep monitor (must be first so other services can subscribe)
         sender.command(|_, shutdown| shutdown.register(run_sleep_monitor()).drop_on_shutdown());
+
+        // start notifications service (registers the D-Bus daemon; must be
+        // started before any UI component subscribes or issues commands)
+        sender.command(|_, shutdown| {
+            shutdown
+                .register(run_notifications_service())
+                .drop_on_shutdown()
+        });
 
         // start battery watching
         sender.command(|_, shutdown| {
