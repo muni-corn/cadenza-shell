@@ -7,12 +7,15 @@ pub mod daemon;
 pub mod fresh;
 pub mod types;
 
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::HashMap,
+    sync::{Arc, OnceLock},
+};
 
 use anyhow::Result;
 use relm4::{ComponentSender, SharedState, Worker};
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use tokio::sync::{RwLock, broadcast};
 use zbus::{
     Connection,
     object_server::InterfaceRef,
@@ -49,6 +52,23 @@ pub enum NotificationEvent {
     Closed { id: u32, reason: u32 },
     ActionInvoked { id: u32, action_key: String },
     AllCleared,
+}
+
+// capacity of 64 events; lagging receivers miss old events but never block
+// the producer, matching the pattern used in sleep_monitor
+static EVENT_TX: OnceLock<broadcast::Sender<NotificationEvent>> = OnceLock::new();
+
+pub(crate) fn event_tx() -> &'static broadcast::Sender<NotificationEvent> {
+    EVENT_TX.get_or_init(|| broadcast::channel(64).0)
+}
+
+/// Subscribe to notification events.
+///
+/// Returns a receiver that yields a [`NotificationEvent`] for each change.
+/// Multiple consumers can call this independently to each get their own
+/// receiver.
+pub fn subscribe_events() -> broadcast::Receiver<NotificationEvent> {
+    event_tx().subscribe()
 }
 
 #[derive(Debug, Clone)]
