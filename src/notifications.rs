@@ -10,7 +10,7 @@ pub mod types;
 use std::{collections::HashMap, sync::Arc};
 
 use anyhow::Result;
-use relm4::{ComponentSender, Worker};
+use relm4::{ComponentSender, SharedState, Worker};
 use serde::{Deserialize, Serialize};
 use tokio::sync::RwLock;
 use zbus::{
@@ -26,6 +26,30 @@ use crate::notifications::{
     daemon::{NotificationsDaemon, NotificationsDaemonSignals},
     types::{Notification, NotificationUrgency},
 };
+
+/// Global snapshot of all current notifications.
+///
+/// Consumers subscribe via `NOTIFICATIONS_STATE.subscribe(sender, mapper)` for
+/// reactive updates, or read the current value with
+/// `NOTIFICATIONS_STATE.read()`.
+pub static NOTIFICATIONS_STATE: SharedState<NotificationsState> = SharedState::new();
+
+/// Snapshot of the current notification state.
+#[derive(Debug, Clone, Default)]
+pub struct NotificationsState {
+    pub notifications: HashMap<u32, Notification>,
+}
+
+/// A discrete notification event broadcast to all subscribers.
+///
+/// Use [`subscribe_events`] to obtain a receiver for this stream.
+#[derive(Debug, Clone)]
+pub enum NotificationEvent {
+    Received(Notification),
+    Closed { id: u32, reason: u32 },
+    ActionInvoked { id: u32, action_key: String },
+    AllCleared,
+}
 
 #[derive(Debug, Clone)]
 pub enum NotificationServiceMsg {
