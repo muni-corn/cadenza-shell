@@ -34,6 +34,7 @@ pub(crate) enum CadenzaShellMsg {
     MonitorAdded(gdk4::Monitor),
     MonitorRemoved(String), // monitor connector name
     HandleTrayItemOutput(TrayItemOutput),
+    ToggleNotificationCenter,
 }
 
 #[derive(Debug)]
@@ -217,7 +218,7 @@ impl AsyncComponent for CadenzaShellModel {
                                 })
                                 .forward(sender.input_sender(), |output| match output {
                                     BarOutput::ToggleNotificationCenter => {
-                                        todo!()
+                                        CadenzaShellMsg::ToggleNotificationCenter
                                     }
                                     BarOutput::TrayItemOutput(tray_item_output) => {
                                         CadenzaShellMsg::HandleTrayItemOutput(tray_item_output)
@@ -244,6 +245,12 @@ impl AsyncComponent for CadenzaShellModel {
                     }
                 }
             },
+            CadenzaShellMsg::ToggleNotificationCenter => {
+                // broadcast to all bars so each monitor's center toggles
+                for bar in self.bars.values() {
+                    bar.emit(BarMsg::ToggleNotificationCenter);
+                }
+            }
         }
     }
 

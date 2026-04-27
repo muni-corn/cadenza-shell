@@ -32,7 +32,7 @@ pub struct Bar {
     center: Controller<CenterGroup>,
     right: Controller<RightGroup>,
 
-    _notification_center: Controller<NotificationCenter>,
+    notification_center: Controller<NotificationCenter>,
 }
 
 #[derive(Debug)]
@@ -44,6 +44,7 @@ pub struct BarInit {
 #[derive(Debug)]
 pub enum BarMsg {
     TrayEvent(TrayEvent),
+    ToggleNotificationCenter,
 }
 
 #[derive(Debug)]
@@ -104,7 +105,7 @@ impl SimpleAsyncComponent for Bar {
                     }
                 }),
 
-            _notification_center: notification_center,
+            notification_center,
 
             monitor,
         };
@@ -140,6 +141,10 @@ impl SimpleAsyncComponent for Bar {
         match msg {
             // propagate tray update to the right group
             BarMsg::TrayEvent(event) => self.right.emit(RightGroupMsg::TrayEvent(event)),
+            BarMsg::ToggleNotificationCenter => {
+                use crate::notifications::center::NotificationCenterMsg;
+                self.notification_center.emit(NotificationCenterMsg::Toggle);
+            }
         }
     }
 
