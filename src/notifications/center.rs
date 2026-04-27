@@ -1,7 +1,4 @@
-// temporary until we figure things out
-#![allow(dead_code)]
-
-use std::collections::HashMap;
+use std::cmp::Reverse;
 
 use gdk4::Monitor;
 use gtk4::prelude::*;
@@ -9,7 +6,7 @@ use gtk4_layer_shell::{Edge, LayerShell};
 use relm4::{factory::FactoryVecDeque, prelude::*};
 
 use crate::notifications::{
-    NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
+    NOTIFICATIONS_STATE, NotificationsState,
     card::{NotificationCard, NotificationCardOutput},
     types::Notification,
 };
@@ -17,8 +14,6 @@ use crate::notifications::{
 #[derive(Debug)]
 pub struct NotificationCenter {
     monitor: Monitor,
-    notification_worker: relm4::WorkerController<NotificationService>,
-    notifications: HashMap<u32, Notification>,
     visible: bool,
 }
 
@@ -26,7 +21,7 @@ pub struct NotificationCenter {
 pub enum NotificationCenterMsg {
     Toggle,
     DismissAll,
-    ServiceUpdate(NotificationWorkerOutput),
+    StateUpdate(NotificationsState),
     DismissNotification(u32),
     NotificationAction(u32, String),
 }
@@ -56,10 +51,10 @@ impl SimpleComponent for NotificationCenter {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // Initialize notification worker
-        let notification_worker = NotificationService::builder()
-            .detach_worker(())
-            .forward(sender.input_sender(), NotificationCenterMsg::ServiceUpdate);
+        // subscribe to the global notifications state
+        NOTIFICATIONS_STATE.subscribe(sender.input_sender(), |s| {
+            NotificationCenterMsg::StateUpdate(s.clone())
+        });
 
         let cards = FactoryVecDeque::builder()
             .launch(gtk4::Box::default())
@@ -72,7 +67,7 @@ impl SimpleComponent for NotificationCenter {
                 }
             });
 
-        // Set up layer shell properties
+        // set up layer shell properties
         root.init_layer_shell();
         root.set_monitor(Some(&monitor));
         root.set_namespace(Some("notification-center"));
@@ -84,15 +79,8 @@ impl SimpleComponent for NotificationCenter {
 
         let model = NotificationCenter {
             monitor,
-            notification_worker,
-            notifications: HashMap::new(),
             visible: false,
         };
-
-        // Request initial notifications
-        model
-            .notification_worker
-            .emit(NotificationServiceMsg::GetNotifications);
 
         ComponentParts {
             model,
@@ -104,69 +92,34 @@ impl SimpleComponent for NotificationCenter {
         match msg {
             NotificationCenterMsg::Toggle => {
                 self.visible = !self.visible;
-
-                // refresh notifications when opening
-                if self.visible {
-                    self.notification_worker
-                        .emit(NotificationServiceMsg::GetNotifications);
-                }
             }
             NotificationCenterMsg::DismissAll => {
-                self.notification_worker
-                    .emit(NotificationServiceMsg::ClearAll);
+                crate::notifications::clear_all();
             }
-            NotificationCenterMsg::ServiceUpdate(output) => {
-                match output {
-                    NotificationWorkerOutput::Notifications(notifications) => {
-                        self.notifications = notifications;
-                    }
-                    NotificationWorkerOutput::NotificationReceived(notification) => {
-                        self.notifications.insert(notification.id, notification);
-                    }
-                    NotificationWorkerOutput::NotificationClosed { id, .. } => {
-                        self.notifications.remove(&id);
-                    }
-                    NotificationWorkerOutput::AllCleared => {
-                        self.notifications.clear();
-                    }
-                    NotificationWorkerOutput::ActionInvoked { .. } => {
-                        // Handle action invoked if needed
-                    }
-                    NotificationWorkerOutput::Error(e) => {
-                        log::error!("notification service error: {}", e);
-                    }
-                }
+            NotificationCenterMsg::StateUpdate(_) => {
+                // view is rebuilt from the global in update_view
             }
             NotificationCenterMsg::DismissNotification(id) => {
-                self.notification_worker
-                    .emit(NotificationServiceMsg::CloseNotification(id));
+                crate::notifications::dismiss(id);
             }
             NotificationCenterMsg::NotificationAction(id, action) => {
-                self.notification_worker
-                    .emit(NotificationServiceMsg::ActionInvoked(id, action));
+                crate::notifications::invoke_action(id, action);
             }
         }
-
-        log::debug!("notification center updated: {:?}", self);
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        // Update window visibility
         widgets.root.set_visible(self.visible);
 
-        // Update the FactoryVecDeque with current notifications
         if self.visible {
-            // Sort notifications by timestamp (newest first)
-            let mut notifications: Vec<&Notification> = self.notifications.values().collect();
-            notifications.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
+            let state = NOTIFICATIONS_STATE.read();
+            let mut notifications: Vec<&Notification> = state.notifications.values().collect();
+            notifications.sort_by_key(|n| Reverse(n.timestamp));
 
-            // Clear and repopulate the FactoryVecDeque
-            {
-                let mut guard = widgets.cards.guard();
-                guard.clear();
-                for notification in notifications {
-                    guard.push_back(notification.clone());
-                }
+            let mut guard = widgets.cards.guard();
+            guard.clear();
+            for notification in notifications {
+                guard.push_back(notification.clone());
             }
         }
     }
