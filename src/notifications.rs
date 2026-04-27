@@ -1,24 +1,17 @@
-// temporary until we figure things out
-#![allow(dead_code)]
-
 pub mod card;
 pub mod center;
 pub mod daemon;
 pub mod fresh;
 pub mod types;
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, OnceLock},
-};
+use std::{collections::HashMap, sync::OnceLock};
 
 use anyhow::Result;
-use relm4::{ComponentSender, SharedState, Worker};
+use relm4::SharedState;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, broadcast, mpsc};
+use tokio::sync::{broadcast, mpsc};
 use zbus::{
     Connection,
-    object_server::InterfaceRef,
     zvariant::{
         OwnedValue, Type,
         as_value::{self, optional},
@@ -49,8 +42,20 @@ pub struct NotificationsState {
 #[derive(Debug, Clone)]
 pub enum NotificationEvent {
     Received(Notification),
-    Closed { id: u32, reason: u32 },
-    ActionInvoked { id: u32, action_key: String },
+    Closed {
+        id: u32,
+        // reason codes defined by the freedesktop spec; retained even if
+        // consumers currently pattern-match with `..`
+        #[allow(dead_code)]
+        reason: u32,
+    },
+    ActionInvoked {
+        // retained for future consumers; currently matched with `..`
+        #[allow(dead_code)]
+        id: u32,
+        #[allow(dead_code)]
+        action_key: String,
+    },
     AllCleared,
 }
 
@@ -79,12 +84,6 @@ pub(crate) enum NotificationCommand {
 }
 
 static COMMAND_TX: OnceLock<mpsc::UnboundedSender<NotificationCommand>> = OnceLock::new();
-
-fn command_tx() -> &'static mpsc::UnboundedSender<NotificationCommand> {
-    COMMAND_TX
-        .get()
-        .expect("notification service not yet started")
-}
 
 /// Dismiss a notification by ID.
 ///
@@ -115,25 +114,7 @@ pub fn invoke_action(id: u32, action_key: String) {
     }
 }
 
-#[derive(Debug, Clone)]
-pub enum NotificationServiceMsg {
-    GetNotifications,
-    ClearAll,
-    CloseNotification(u32),
-    StoreNotification(Notification),
-    ActionInvoked(u32, String),
-}
-
-#[derive(Debug, Clone)]
-pub enum NotificationWorkerOutput {
-    NotificationReceived(Notification),
-    NotificationClosed { id: u32, reason: u32 },
-    ActionInvoked { id: u32, action_key: String },
-    Notifications(HashMap<u32, Notification>),
-    AllCleared,
-    Error(String),
-}
-
+/// D-Bus hints passed with each `Notify` call.
 #[derive(Deserialize, Serialize, Type, Default)]
 #[zvariant(signature = "dict")]
 #[serde(default, rename_all = "kebab-case")]
@@ -167,115 +148,6 @@ pub struct NotificationHints {
 
     #[serde(flatten)]
     others: HashMap<String, OwnedValue>,
-}
-
-pub struct NotificationService {
-    connection: Arc<RwLock<Option<Connection>>>,
-    interface: Arc<RwLock<Option<InterfaceRef<NotificationsDaemon>>>>,
-    notifications: HashMap<u32, Notification>,
-}
-
-impl std::fmt::Debug for NotificationService {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("NotificationService")
-            .field("connection", &self.connection)
-            .field("notifications", &self.notifications)
-            .finish()
-    }
-}
-
-impl Worker for NotificationService {
-    type Init = ();
-    type Input = NotificationServiceMsg;
-    type Output = NotificationWorkerOutput;
-
-    fn init(_init: Self::Init, sender: ComponentSender<Self>) -> Self {
-        let sender_clone = sender.clone();
-
-        let connection = Arc::new(RwLock::new(None));
-        let connection_clone = Arc::clone(&connection);
-
-        let interface = Arc::new(RwLock::new(None));
-        let interface_clone = Arc::clone(&interface);
-
-        relm4::spawn(async move {
-            match initialize_notifications_daemon().await {
-                Ok(connection) => {
-                    log::info!("notifications daemon initialized successfully");
-                    *interface_clone.write().await = Some(
-                        connection
-                            .object_server()
-                            .interface::<_, NotificationsDaemon>("/org/freedesktop/Notifications")
-                            .await
-                            .unwrap(),
-                    );
-                    *connection_clone.write().await = Some(connection);
-                }
-                Err(e) => {
-                    log::error!("failed to initialize notifications daemon: {}", e);
-                    sender_clone
-                        .output(NotificationWorkerOutput::Error(e.to_string()))
-                        .unwrap_or_else(|_| log::error!("failed to send error output"));
-                }
-            }
-        });
-
-        Self {
-            connection,
-            interface,
-            notifications: HashMap::new(),
-        }
-    }
-
-    fn update(&mut self, message: Self::Input, sender: ComponentSender<Self>) {
-        match message {
-            NotificationServiceMsg::GetNotifications => {
-                sender
-                    .output(NotificationWorkerOutput::Notifications(
-                        self.notifications.clone(),
-                    ))
-                    .unwrap_or_else(|_| log::error!("failed to send output"));
-            }
-            NotificationServiceMsg::ClearAll => {
-                self.notifications.clear();
-                sender
-                    .output(NotificationWorkerOutput::AllCleared)
-                    .unwrap_or_else(|_| log::error!("failed to send output"));
-            }
-            NotificationServiceMsg::CloseNotification(id) => {
-                self.notifications.remove(&id);
-            }
-            NotificationServiceMsg::StoreNotification(notification) => {
-                self.notifications.insert(notification.id, notification);
-            }
-            NotificationServiceMsg::ActionInvoked(id, action) => {
-                let interface_clone = Arc::clone(&self.interface);
-                relm4::spawn(async move {
-                    interface_clone
-                        .read()
-                        .await
-                        .as_ref()
-                        .unwrap()
-                        .action_invoked(id, action)
-                        .await
-                        .unwrap_or_else(|e| {
-                            log::error!("couldn't send action_invoked signal: {}", e)
-                        });
-                });
-            }
-        }
-    }
-}
-
-async fn initialize_notifications_daemon() -> Result<Connection> {
-    Ok(zbus::connection::Builder::session()?
-        .name("org.freedesktop.Notifications")?
-        .serve_at(
-            "/org/freedesktop/Notifications",
-            NotificationsDaemon::new(event_tx().clone()),
-        )?
-        .build()
-        .await?)
 }
 
 /// Runs the notification service.
@@ -357,4 +229,15 @@ pub async fn run_notifications_service() {
             }
         }
     }
+}
+
+async fn initialize_notifications_daemon() -> Result<Connection> {
+    Ok(zbus::connection::Builder::session()?
+        .name("org.freedesktop.Notifications")?
+        .serve_at(
+            "/org/freedesktop/Notifications",
+            NotificationsDaemon::new(event_tx().clone()),
+        )?
+        .build()
+        .await?)
 }

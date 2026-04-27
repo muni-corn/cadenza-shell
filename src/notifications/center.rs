@@ -6,22 +6,26 @@ use gtk4_layer_shell::{Edge, LayerShell};
 use relm4::{factory::FactoryVecDeque, prelude::*};
 
 use crate::notifications::{
-    NOTIFICATIONS_STATE, NotificationsState,
+    NOTIFICATIONS_STATE,
     card::{NotificationCard, NotificationCardOutput},
     types::Notification,
 };
 
 #[derive(Debug)]
 pub struct NotificationCenter {
-    monitor: Monitor,
+    // stored to keep the monitor object alive for the layer-shell window
+    _monitor: Monitor,
     visible: bool,
 }
 
 #[derive(Debug)]
 pub enum NotificationCenterMsg {
     Toggle,
+    // wired to a future "clear all" button in the notification center ui
+    #[allow(dead_code)]
     DismissAll,
-    StateUpdate(NotificationsState),
+    // payload is unused; update_view reads directly from the global
+    StateUpdate,
     DismissNotification(u32),
     NotificationAction(u32, String),
 }
@@ -51,9 +55,10 @@ impl SimpleComponent for NotificationCenter {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // subscribe to the global notifications state
-        NOTIFICATIONS_STATE.subscribe(sender.input_sender(), |s| {
-            NotificationCenterMsg::StateUpdate(s.clone())
+        // subscribe to the global notifications state; payload ignored — update_view
+        // reads directly from the global on each notification
+        NOTIFICATIONS_STATE.subscribe(sender.input_sender(), |_| {
+            NotificationCenterMsg::StateUpdate
         });
 
         let cards = FactoryVecDeque::builder()
@@ -78,7 +83,7 @@ impl SimpleComponent for NotificationCenter {
         root.set_width_request(432);
 
         let model = NotificationCenter {
-            monitor,
+            _monitor: monitor,
             visible: false,
         };
 
@@ -96,7 +101,7 @@ impl SimpleComponent for NotificationCenter {
             NotificationCenterMsg::DismissAll => {
                 crate::notifications::clear_all();
             }
-            NotificationCenterMsg::StateUpdate(_) => {
+            NotificationCenterMsg::StateUpdate => {
                 // view is rebuilt from the global in update_view
             }
             NotificationCenterMsg::DismissNotification(id) => {

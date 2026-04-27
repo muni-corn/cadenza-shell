@@ -1,6 +1,3 @@
-// temporary until we figure things out
-#![allow(dead_code)]
-
 use serde::{Deserialize, Deserializer};
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use zbus::zvariant::Type;
@@ -28,6 +25,8 @@ pub struct Notification {
     pub summary: String,
     pub body: String,
     pub urgency: NotificationUrgency,
+    // part of the freedesktop spec; retained for completeness even if not currently used
+    #[allow(dead_code)]
     pub timeout: i32,
     pub timestamp: i64,
 
