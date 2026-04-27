@@ -1,14 +1,12 @@
-use std::collections::HashMap;
-
 use gtk4::prelude::*;
-use relm4::{WorkerController, prelude::*};
+use relm4::prelude::*;
 
 use crate::{
     icon_names::BELL,
     notifications::{
-        NotificationService, NotificationServiceMsg, NotificationWorkerOutput,
+        NOTIFICATIONS_STATE, NotificationEvent, NotificationsState,
         fresh::{FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput},
-        types::Notification,
+        subscribe_events,
     },
     tiles::Attention,
     widgets::tile::{Tile, TileInit, TileMsg, TileOutput},
@@ -16,18 +14,15 @@ use crate::{
 
 #[derive(Debug)]
 pub struct NotificationsTile {
-    notification_worker: WorkerController<NotificationService>,
-    notification_count: u32,
-    active_notifications: HashMap<u32, Notification>,
+    notification_count: usize,
     fresh_panel: Controller<FreshNotifications>,
 }
 
 #[derive(Debug)]
 pub enum NotificationsTileMsg {
     TileClicked,
-    ServiceUpdate(NotificationWorkerOutput),
-    NotificationDismissed(u32),
-    ActionTriggered(u32, String),
+    StateUpdate(NotificationsState),
+    Event(NotificationEvent),
     Nothing,
 }
 
@@ -54,6 +49,36 @@ impl SimpleComponent for NotificationsTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // subscribe to snapshot state for the count badge
+        NOTIFICATIONS_STATE.subscribe(sender.input_sender(), |s| {
+            NotificationsTileMsg::StateUpdate(s.clone())
+        });
+
+        // subscribe to per-event stream for driving fresh popups
+        let event_rx = subscribe_events();
+        let event_sender = sender.input_sender().clone();
+        relm4::spawn(async move {
+            let mut rx = event_rx;
+            loop {
+                match rx.recv().await {
+                    Ok(event) => {
+                        event_sender
+                            .send(NotificationsTileMsg::Event(event))
+                            .unwrap_or_else(|_| {
+                                log::error!("couldn't forward notification event to tile")
+                            });
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        log::warn!("notifications tile missed {n} events (lagged receiver)");
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                        log::warn!("notifications event channel closed; tile event loop stopping");
+                        break;
+                    }
+                }
+            }
+        });
+
         // create popups for first monitor only
         let display = gdk4::Display::default().expect("could not get default display");
         let monitor = display
@@ -62,6 +87,22 @@ impl SimpleComponent for NotificationsTile {
             .next()
             .expect("no monitor available for notifications")
             .expect("couldn't get available monitor for notifications");
+
+        let fresh_panel =
+            FreshNotifications::builder()
+                .launch(monitor)
+                .forward(sender.input_sender(), |msg| match msg {
+                    FreshNotificationsOutput::NotificationDismissed(id) => {
+                        crate::notifications::dismiss(id);
+                        NotificationsTileMsg::Nothing
+                    }
+                    FreshNotificationsOutput::NotificationActionTriggered(id, action) => {
+                        crate::notifications::invoke_action(id, action);
+                        NotificationsTileMsg::Nothing
+                    }
+                });
+
+        let notification_count = NOTIFICATIONS_STATE.read().notifications.len();
 
         let widgets = NotificationsTileWidgets {
             root,
@@ -76,27 +117,12 @@ impl SimpleComponent for NotificationsTile {
                 }),
         };
 
-        let model = NotificationsTile {
-            // initialize notification worker
-            notification_worker: NotificationService::builder()
-                .detach_worker(())
-                .forward(sender.input_sender(), NotificationsTileMsg::ServiceUpdate),
-            notification_count: 0,
-            active_notifications: HashMap::new(),
-            fresh_panel: FreshNotifications::builder().launch(monitor).forward(
-                sender.input_sender(),
-                |msg| match msg {
-                    FreshNotificationsOutput::NotificationDismissed(id) => {
-                        NotificationsTileMsg::NotificationDismissed(id)
-                    }
-                    FreshNotificationsOutput::NotificationActionTriggered(id, action) => {
-                        NotificationsTileMsg::ActionTriggered(id, action)
-                    }
-                },
-            ),
-        };
-
         widgets.root.append(widgets.tile.widget());
+
+        let model = NotificationsTile {
+            notification_count,
+            fresh_panel,
+        };
 
         ComponentParts { model, widgets }
     }
@@ -111,63 +137,31 @@ impl SimpleComponent for NotificationsTile {
                         log::error!("couldn't send output to open notification center")
                     });
             }
-            NotificationsTileMsg::ServiceUpdate(output) => {
-                match output {
-                    NotificationWorkerOutput::Notifications(notifications) => {
-                        let count = notifications.len() as u32;
-                        self.active_notifications = notifications;
-
-                        if count != self.notification_count {
-                            self.notification_count = count;
-                        }
-                    }
-                    NotificationWorkerOutput::NotificationReceived(notification) => {
-                        log::debug!("new notification received: {}", notification.id);
-
-                        // store the notification
-                        self.active_notifications
-                            .insert(notification.id, notification.clone());
-
-                        // show in fresh notifications panel
-                        self.fresh_panel
-                            .emit(FreshNotificationsMsg::NewNotification(notification.clone()));
-
-                        // refresh notifications count
-                        self.notification_worker
-                            .emit(NotificationServiceMsg::GetNotifications);
-                    }
-                    NotificationWorkerOutput::NotificationClosed { id, reason: _ } => {
-                        log::debug!("notification {} closed", id);
-
-                        // remove from active notifications
-                        self.active_notifications.remove(&id);
-
-                        // remove from panel
-                        self.fresh_panel
-                            .emit(FreshNotificationsMsg::RemoveNotification(id));
-
-                        // refresh notifications count
-                        self.notification_worker
-                            .emit(NotificationServiceMsg::GetNotifications);
-                    }
-                    NotificationWorkerOutput::Error(e) => {
-                        log::error!("notification worker error: {}", e);
-                    }
-                    _ => {}
-                }
+            NotificationsTileMsg::StateUpdate(state) => {
+                self.notification_count = state.notifications.len();
             }
-            NotificationsTileMsg::NotificationDismissed(id) => self
-                .notification_worker
-                .emit(NotificationServiceMsg::CloseNotification(id)),
-            NotificationsTileMsg::ActionTriggered(id, action) => self
-                .notification_worker
-                .emit(NotificationServiceMsg::ActionInvoked(id, action)),
-            NotificationsTileMsg::Nothing => (),
+            NotificationsTileMsg::Event(event) => match event {
+                NotificationEvent::Received(notification) => {
+                    log::debug!("new notification received: {}", notification.id);
+                    self.fresh_panel
+                        .emit(FreshNotificationsMsg::NewNotification(notification));
+                }
+                NotificationEvent::Closed { id, .. } => {
+                    log::debug!("notification {} closed", id);
+                    self.fresh_panel
+                        .emit(FreshNotificationsMsg::RemoveNotification(id));
+                }
+                NotificationEvent::AllCleared => {
+                    // fresh panel will drain as each close event arrives via
+                    // the state update; no extra action needed here
+                }
+                NotificationEvent::ActionInvoked { .. } => {}
+            },
+            NotificationsTileMsg::Nothing => {}
         }
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        // update tile appearance based on notification count
         let primary_text = if self.notification_count > 0 {
             Some(self.notification_count.to_string())
         } else {
