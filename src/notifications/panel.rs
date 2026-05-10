@@ -1,6 +1,8 @@
 use std::cmp::Reverse;
 
+use chrono::Local;
 use gdk4::Monitor;
+use glib::ControlFlow;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::{factory::FactoryVecDeque, prelude::*};
@@ -39,6 +41,19 @@ pub struct ActionPanelWidgets {
     cards: FactoryVecDeque<NotificationCard>,
     panel: gtk4::Box,
     clock: Controller<AnalogClock>,
+    time_label: gtk4::Label,
+    date_label: gtk4::Label,
+}
+
+/// Formats the current time as a 12-hour clock string (e.g. "2:34 PM").
+fn format_time() -> String {
+    Local::now().format("%-I:%M %P").to_string()
+}
+
+/// Formats the current date as a full readable string (e.g. "Sunday, May 10,
+/// 2026").
+fn format_date() -> String {
+    Local::now().format("%A, %B %-d, %Y").to_string()
 }
 
 impl SimpleComponent for ActionPanel {
@@ -69,22 +84,6 @@ impl SimpleComponent for ActionPanel {
             visible: false,
         };
 
-        let cards = FactoryVecDeque::builder()
-            .launch(gtk4::Box::default())
-            .forward(sender.input_sender(), |output| match output {
-                NotificationCardOutput::Dismiss(id) => ActionPanelMsg::DismissNotification(id),
-                NotificationCardOutput::Action(id, action) => {
-                    ActionPanelMsg::NotificationAction(id, action)
-                }
-            });
-
-        let panel = gtk4::Box::builder()
-            .css_classes(["notification-center"])
-            .hexpand(true)
-            .vexpand(true)
-            .visible(true)
-            .build();
-
         // set up layer shell properties
         window.init_layer_shell();
         window.set_monitor(Some(&model.monitor));
@@ -98,14 +97,65 @@ impl SimpleComponent for ActionPanel {
 
         let widgets = ActionPanelWidgets {
             window,
-            cards,
-            panel,
+            cards: FactoryVecDeque::builder()
+                .launch(gtk4::Box::default())
+                .forward(sender.input_sender(), |output| match output {
+                    NotificationCardOutput::Dismiss(id) => ActionPanelMsg::DismissNotification(id),
+                    NotificationCardOutput::Action(id, action) => {
+                        ActionPanelMsg::NotificationAction(id, action)
+                    }
+                }),
+            panel: gtk4::Box::builder()
+                .css_classes(["notification-center"])
+                .orientation(gtk4::Orientation::Vertical)
+                .hexpand(true)
+                .vexpand(true)
+                .visible(true)
+                .build(),
             clock: AnalogClock::builder().launch(32.0).detach(),
+            time_label: gtk4::Label::builder()
+                .label(format_time())
+                .css_classes(["big-clock"])
+                .halign(gtk4::Align::Start)
+                .build(),
+            date_label: gtk4::Label::builder()
+                .label(format_date())
+                .css_classes(["date-label"])
+                .halign(gtk4::Align::Start)
+                .build(),
         };
 
-        widgets.panel.append(widgets.clock.widget());
+        // horizontal row holding both the analog clock and the digital clock/date
+        let clock_row = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Horizontal)
+            .spacing(16)
+            .margin_bottom(12)
+            .build();
+
+        // vertical stack for the digital time and date, anchored to the start (top)
+        let clock_text_box = gtk4::Box::builder()
+            .orientation(gtk4::Orientation::Vertical)
+            .valign(gtk4::Align::Center)
+            .build();
+
+        clock_text_box.append(&widgets.time_label);
+        clock_text_box.append(&widgets.date_label);
+
+        clock_row.append(widgets.clock.widget());
+        clock_row.append(&clock_text_box);
+
+        widgets.panel.append(&clock_row);
         widgets.panel.append(widgets.cards.widget());
         widgets.window.set_child(Some(&widgets.panel));
+
+        // update the digital clock and date labels every second
+        let time_label_clone = widgets.time_label.clone();
+        let date_label_clone = widgets.date_label.clone();
+        glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+            time_label_clone.set_label(&format_time());
+            date_label_clone.set_label(&format_date());
+            ControlFlow::Continue
+        });
 
         ComponentParts { model, widgets }
     }
