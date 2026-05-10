@@ -2,7 +2,7 @@ use std::cmp::Reverse;
 
 use gdk4::Monitor;
 use gtk4::prelude::*;
-use gtk4_layer_shell::{Edge, LayerShell};
+use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::{factory::FactoryVecDeque, prelude::*};
 
 use crate::notifications::{
@@ -14,7 +14,7 @@ use crate::notifications::{
 #[derive(Debug)]
 pub struct NotificationCenter {
     // stored to keep the monitor object alive for the layer-shell window
-    _monitor: Monitor,
+    monitor: Monitor,
     visible: bool,
 }
 
@@ -32,8 +32,9 @@ pub enum NotificationCenterMsg {
 
 #[derive(Debug)]
 pub struct NotificationCenterWidgets {
-    root: gtk4::Window,
+    window: gtk4::Window,
     cards: FactoryVecDeque<NotificationCard>,
+    panel: gtk4::Box,
 }
 
 impl SimpleComponent for NotificationCenter {
@@ -45,14 +46,14 @@ impl SimpleComponent for NotificationCenter {
 
     fn init_root() -> Self::Root {
         gtk4::Window::builder()
-            .title("notification-center")
+            .title("cadenza action panel")
             .visible(false)
             .build()
     }
 
     fn init(
         monitor: Self::Init,
-        root: Self::Root,
+        window: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         // subscribe to the global notifications state; payload ignored — update_view
@@ -60,6 +61,11 @@ impl SimpleComponent for NotificationCenter {
         NOTIFICATIONS_STATE.subscribe(sender.input_sender(), |_| {
             NotificationCenterMsg::StateUpdate
         });
+
+        let model = NotificationCenter {
+            monitor,
+            visible: false,
+        };
 
         let cards = FactoryVecDeque::builder()
             .launch(gtk4::Box::default())
@@ -72,25 +78,34 @@ impl SimpleComponent for NotificationCenter {
                 }
             });
 
-        // set up layer shell properties
-        root.init_layer_shell();
-        root.set_monitor(Some(&monitor));
-        root.set_namespace(Some("notification-center"));
-        root.set_anchor(Edge::Top, true);
-        root.set_anchor(Edge::Right, true);
-        root.set_anchor(Edge::Bottom, true);
-        root.set_margin_all(8);
-        root.set_width_request(432);
+        let panel = gtk4::Box::builder()
+            .css_classes(["notification-center"])
+            .hexpand(true)
+            .vexpand(true)
+            .visible(true)
+            .build();
+        panel.append(cards.widget());
 
-        let model = NotificationCenter {
-            _monitor: monitor,
-            visible: false,
+        // set up layer shell properties
+        window.init_layer_shell();
+        window.set_monitor(Some(&model.monitor));
+        window.set_namespace(Some("notification-center"));
+        window.set_layer(Layer::Top);
+        window.set_anchor(Edge::Top, true);
+        window.set_anchor(Edge::Right, true);
+        window.set_anchor(Edge::Bottom, true);
+        window.set_margin_all(8);
+        window.set_width_request(432);
+
+        let widgets = NotificationCenterWidgets {
+            window,
+            cards,
+            panel,
         };
 
-        ComponentParts {
-            model,
-            widgets: NotificationCenterWidgets { root, cards },
-        }
+        widgets.window.set_child(Some(&widgets.panel));
+
+        ComponentParts { model, widgets }
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
@@ -114,7 +129,7 @@ impl SimpleComponent for NotificationCenter {
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        widgets.root.set_visible(self.visible);
+        widgets.window.set_visible(self.visible);
 
         if self.visible {
             let state = NOTIFICATIONS_STATE.read();
