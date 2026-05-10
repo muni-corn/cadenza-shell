@@ -51,7 +51,7 @@ async fn main() -> glib::ExitCode {
     }
 
     RelmApp::new("com.musicaloft.cadenza-shell")
-        .visible_on_activate(cfg!(debug_assertions))
+        .visible_on_activate(false)
         .run_async::<CadenzaShellModel>(());
 
     gtk4::glib::ExitCode::FAILURE
