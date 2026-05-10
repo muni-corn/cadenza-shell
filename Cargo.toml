@@ -26,7 +26,7 @@ nalgebra = "0.34.1"
 niri-ipc = "25.8.0"
 pango = "0.21"
 pulse = { version = "2.30", package = "libpulse-binding" }
-relm4 = { version = "0.10.1", features = ["libadwaita", "adw"] }
+relm4 = { version = "0.10.1" }
 relm4-components = "0.10"
 relm4-icons = "0.10"
 reqwest = { version = "0.12", default-features = false, features = [
