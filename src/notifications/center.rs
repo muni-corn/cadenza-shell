@@ -5,10 +5,13 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::{factory::FactoryVecDeque, prelude::*};
 
-use crate::notifications::{
-    NOTIFICATIONS_STATE,
-    card::{NotificationCard, NotificationCardOutput},
-    types::Notification,
+use crate::{
+    analog_clock::AnalogClock,
+    notifications::{
+        NOTIFICATIONS_STATE,
+        card::{NotificationCard, NotificationCardOutput},
+        types::Notification,
+    },
 };
 
 #[derive(Debug)]
@@ -35,6 +38,7 @@ pub struct NotificationCenterWidgets {
     window: gtk4::Window,
     cards: FactoryVecDeque<NotificationCard>,
     panel: gtk4::Box,
+    clock: Controller<AnalogClock>,
 }
 
 impl SimpleComponent for NotificationCenter {
@@ -84,7 +88,6 @@ impl SimpleComponent for NotificationCenter {
             .vexpand(true)
             .visible(true)
             .build();
-        panel.append(cards.widget());
 
         // set up layer shell properties
         window.init_layer_shell();
@@ -101,8 +104,11 @@ impl SimpleComponent for NotificationCenter {
             window,
             cards,
             panel,
+            clock: AnalogClock::builder().launch(32.0).detach(),
         };
 
+        widgets.panel.append(widgets.clock.widget());
+        widgets.panel.append(widgets.cards.widget());
         widgets.window.set_child(Some(&widgets.panel));
 
         ComponentParts { model, widgets }
