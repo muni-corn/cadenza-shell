@@ -1,7 +1,7 @@
 pub mod card;
-pub mod center;
 pub mod daemon;
 pub mod fresh;
+pub mod panel;
 pub mod types;
 
 use std::{collections::HashMap, sync::OnceLock};

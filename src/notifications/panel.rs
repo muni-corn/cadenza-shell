@@ -15,14 +15,14 @@ use crate::{
 };
 
 #[derive(Debug)]
-pub struct NotificationCenter {
+pub struct ActionPanel {
     // stored to keep the monitor object alive for the layer-shell window
     monitor: Monitor,
     visible: bool,
 }
 
 #[derive(Debug)]
-pub enum NotificationCenterMsg {
+pub enum ActionPanelMsg {
     Toggle,
     // wired to a future "clear all" button in the notification center ui
     #[allow(dead_code)]
@@ -34,19 +34,19 @@ pub enum NotificationCenterMsg {
 }
 
 #[derive(Debug)]
-pub struct NotificationCenterWidgets {
+pub struct ActionPanelWidgets {
     window: gtk4::Window,
     cards: FactoryVecDeque<NotificationCard>,
     panel: gtk4::Box,
     clock: Controller<AnalogClock>,
 }
 
-impl SimpleComponent for NotificationCenter {
+impl SimpleComponent for ActionPanel {
     type Init = Monitor;
-    type Input = NotificationCenterMsg;
+    type Input = ActionPanelMsg;
     type Output = ();
     type Root = gtk4::Window;
-    type Widgets = NotificationCenterWidgets;
+    type Widgets = ActionPanelWidgets;
 
     fn init_root() -> Self::Root {
         gtk4::Window::builder()
@@ -62,11 +62,9 @@ impl SimpleComponent for NotificationCenter {
     ) -> ComponentParts<Self> {
         // subscribe to the global notifications state; payload ignored — update_view
         // reads directly from the global on each notification
-        NOTIFICATIONS_STATE.subscribe(sender.input_sender(), |_| {
-            NotificationCenterMsg::StateUpdate
-        });
+        NOTIFICATIONS_STATE.subscribe(sender.input_sender(), |_| ActionPanelMsg::StateUpdate);
 
-        let model = NotificationCenter {
+        let model = ActionPanel {
             monitor,
             visible: false,
         };
@@ -74,11 +72,9 @@ impl SimpleComponent for NotificationCenter {
         let cards = FactoryVecDeque::builder()
             .launch(gtk4::Box::default())
             .forward(sender.input_sender(), |output| match output {
-                NotificationCardOutput::Dismiss(id) => {
-                    NotificationCenterMsg::DismissNotification(id)
-                }
+                NotificationCardOutput::Dismiss(id) => ActionPanelMsg::DismissNotification(id),
                 NotificationCardOutput::Action(id, action) => {
-                    NotificationCenterMsg::NotificationAction(id, action)
+                    ActionPanelMsg::NotificationAction(id, action)
                 }
             });
 
@@ -100,7 +96,7 @@ impl SimpleComponent for NotificationCenter {
         window.set_margin_all(8);
         window.set_width_request(432);
 
-        let widgets = NotificationCenterWidgets {
+        let widgets = ActionPanelWidgets {
             window,
             cards,
             panel,
@@ -116,19 +112,19 @@ impl SimpleComponent for NotificationCenter {
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            NotificationCenterMsg::Toggle => {
+            ActionPanelMsg::Toggle => {
                 self.visible = !self.visible;
             }
-            NotificationCenterMsg::DismissAll => {
+            ActionPanelMsg::DismissAll => {
                 crate::notifications::clear_all();
             }
-            NotificationCenterMsg::StateUpdate => {
+            ActionPanelMsg::StateUpdate => {
                 // view is rebuilt from the global in update_view
             }
-            NotificationCenterMsg::DismissNotification(id) => {
+            ActionPanelMsg::DismissNotification(id) => {
                 crate::notifications::dismiss(id);
             }
-            NotificationCenterMsg::NotificationAction(id, action) => {
+            ActionPanelMsg::NotificationAction(id, action) => {
                 crate::notifications::invoke_action(id, action);
             }
         }

@@ -11,7 +11,7 @@ use relm4::prelude::*;
 use system_tray::data::BaseMap;
 
 use crate::{
-    notifications::center::NotificationCenter,
+    notifications::panel::ActionPanel,
     settings,
     widgets::{
         bar::{
@@ -32,7 +32,7 @@ pub struct Bar {
     center: Controller<CenterGroup>,
     right: Controller<RightGroup>,
 
-    notification_center: Controller<NotificationCenter>,
+    notification_center: Controller<ActionPanel>,
 }
 
 #[derive(Debug)]
@@ -79,9 +79,7 @@ impl SimpleAsyncComponent for Bar {
         let config = settings::get_config();
 
         // create notification center for this bar/monitor
-        let notification_center = NotificationCenter::builder()
-            .launch(monitor.clone())
-            .detach();
+        let notification_center = ActionPanel::builder().launch(monitor.clone()).detach();
 
         let model = Bar {
             left: LeftGroup::builder()
@@ -142,8 +140,8 @@ impl SimpleAsyncComponent for Bar {
             // propagate tray update to the right group
             BarMsg::TrayEvent(event) => self.right.emit(RightGroupMsg::TrayEvent(event)),
             BarMsg::ToggleNotificationCenter => {
-                use crate::notifications::center::NotificationCenterMsg;
-                self.notification_center.emit(NotificationCenterMsg::Toggle);
+                use crate::notifications::panel::ActionPanelMsg;
+                self.notification_center.emit(ActionPanelMsg::Toggle);
             }
         }
     }
