@@ -1,4 +1,4 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
 
 use gdk4::Display;
 use gtk4::prelude::*;
@@ -157,29 +157,83 @@ impl AsyncComponent for CadenzaShellModel {
         // set up monitor detection
         let monitors = display.monitors();
 
-        // create bars for existing monitors
+        // build initial connector list, mirroring the GListModel order so we
+        // can recover connector names for removed items later (items_changed
+        // fires after the model has already mutated, so we cannot call
+        // monitors.item(i) for removed indices)
+        let tracked: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(
+            monitors
+                .iter::<gdk4::Monitor>()
+                .filter_map(|m| m.ok())
+                .filter_map(|m| m.connector().map(|c| c.to_string()))
+                .collect(),
+        ));
+
+        log::debug!("initial monitors: {:?}", tracked.borrow().as_slice());
+
+        // create bars for existing monitors (skip any without a connector)
         for monitor in monitors.iter::<gdk4::Monitor>() {
             let monitor = monitor.unwrap();
-            sender.input(CadenzaShellMsg::MonitorAdded(monitor));
+            if monitor.connector().is_some() {
+                sender.input(CadenzaShellMsg::MonitorAdded(monitor));
+            }
         }
 
         // monitor for display changes (hotplug support)
         let sender_clone = sender.clone();
         monitors.connect_items_changed(move |monitors, position, removed, added| {
-            // handle removed monitors
-            for i in position..position + removed {
-                if let Some(monitor) = monitors.item(i).and_downcast::<gdk4::Monitor>()
-                    && let Some(connector) = monitor.connector()
-                {
-                    sender_clone.input(CadenzaShellMsg::MonitorRemoved(connector.to_string()));
-                }
+            log::debug!(
+                "items_changed: position={}, removed={}, added={}",
+                position,
+                removed,
+                added
+            );
+
+            // read removed connector names from our tracked list before mutating
+            // it; after the signal fires the model has already changed, so
+            // monitors.item(i) for removed indices would return the wrong item
+            let removed_connectors: Vec<String> = {
+                let tracked = tracked.borrow();
+                let start = position as usize;
+                let end = (position + removed) as usize;
+                tracked.get(start..end).unwrap_or(&[]).to_vec()
+            };
+
+            // collect newly added monitor objects (at position..position+added)
+            let added_monitors: Vec<gdk4::Monitor> = (position..position + added)
+                .filter_map(|i| monitors.item(i).and_downcast::<gdk4::Monitor>())
+                .collect();
+
+            // build the new connector names for items being added
+            let added_connectors: Vec<String> = added_monitors
+                .iter()
+                .filter_map(|m| m.connector().map(|c| c.to_string()))
+                .collect();
+
+            // update the tracked list: splice out the removed range and insert
+            // the new connectors in their place, mirroring the model mutation
+            {
+                let mut tracked = tracked.borrow_mut();
+                tracked.splice(
+                    (position as usize)..(position as usize + removed as usize),
+                    added_connectors.clone(),
+                );
             }
 
-            // handle added monitors
-            for i in position..position + added {
-                if let Some(monitor) = monitors.item(i).and_downcast::<gdk4::Monitor>() {
-                    sender_clone.input(CadenzaShellMsg::MonitorAdded(monitor));
-                }
+            log::debug!(
+                "hotplug — removing {:?}, adding {:?}",
+                removed_connectors,
+                added_connectors
+            );
+
+            // emit removal messages for every connector that just left
+            for connector in removed_connectors {
+                sender_clone.input(CadenzaShellMsg::MonitorRemoved(connector));
+            }
+
+            // emit addition messages for every monitor that just joined
+            for monitor in added_monitors {
+                sender_clone.input(CadenzaShellMsg::MonitorAdded(monitor));
             }
         });
 
