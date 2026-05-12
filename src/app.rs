@@ -248,38 +248,48 @@ impl AsyncComponent for CadenzaShellModel {
     ) {
         match msg {
             CadenzaShellMsg::MonitorAdded(monitor) => {
-                let connector = monitor.connector();
-                if let Some(connector) = connector {
-                    let connector_str = connector.to_string();
+                let Some(connector) = monitor.connector() else {
+                    log::warn!("ignoring monitor with no connector name");
+                    return;
+                };
 
-                    // get the current system tray items
-                    let tray_items = if let Some(ref c) = self.tray_client {
-                        Some(c.lock().await.items())
-                    } else {
-                        None
-                    };
+                let connector_str = connector.to_string();
 
-                    self.bars
-                        .entry(connector_str.clone())
-                        .or_insert_with(move || {
-                            log::info!("creating bar for monitor: {}", connector_str);
-
-                            // create a new bar component for this monitor
-                            Bar::builder()
-                                .launch(BarInit {
-                                    monitor,
-                                    tray_items,
-                                })
-                                .forward(sender.input_sender(), |output| match output {
-                                    BarOutput::ToggleNotificationCenter => {
-                                        CadenzaShellMsg::ToggleNotificationCenter
-                                    }
-                                    BarOutput::TrayItemOutput(tray_item_output) => {
-                                        CadenzaShellMsg::HandleTrayItemOutput(tray_item_output)
-                                    }
-                                })
-                        });
+                // replace any existing (now-stale) bar for this connector so the
+                // new Monitor object is used; this handles disconnect→reconnect
+                // cycles where the compositor reuses the same connector name
+                if self.bars.contains_key(&connector_str) {
+                    log::warn!(
+                        "bar already exists for connector '{}' — replacing with fresh monitor",
+                        connector_str
+                    );
+                    self.bars.remove(&connector_str);
                 }
+
+                // get the current system tray items
+                let tray_items = if let Some(ref c) = self.tray_client {
+                    Some(c.lock().await.items())
+                } else {
+                    None
+                };
+
+                log::info!("creating bar for monitor: {}", connector_str);
+
+                let bar = Bar::builder()
+                    .launch(BarInit {
+                        monitor,
+                        tray_items,
+                    })
+                    .forward(sender.input_sender(), |output| match output {
+                        BarOutput::ToggleNotificationCenter => {
+                            CadenzaShellMsg::ToggleNotificationCenter
+                        }
+                        BarOutput::TrayItemOutput(tray_item_output) => {
+                            CadenzaShellMsg::HandleTrayItemOutput(tray_item_output)
+                        }
+                    });
+
+                self.bars.insert(connector_str, bar);
             }
             CadenzaShellMsg::MonitorRemoved(connector) => {
                 log::info!("removing bar for monitor: {}", connector);
