@@ -1,6 +1,5 @@
 {
   config,
-  lib,
   pkgs,
   ...
 }:
@@ -28,8 +27,6 @@ let
     wrapGAppsHook4
     makeWrapper
   ];
-
-  libraryPath = lib.makeLibraryPath buildInputs;
 in
 {
   # needed for dynamic linking at runtime
@@ -38,8 +35,7 @@ in
   languages.rust = {
     enable = true;
     channel = "nightly";
-    wild.enable = true;
-    rustflags = "-C link-args=-Wl,-fuse-ld=wild,-rpath,${libraryPath}";
+    mold.enable = true;
   };
 
   packages =
@@ -53,8 +49,6 @@ in
     ]
     ++ buildInputs
     ++ nativeBuildInputs;
-
-  scripts.tarp.exec = ''cargo tarpaulin --engine llvm "$@"'';
 
   outputs.default =
     let
