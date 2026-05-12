@@ -159,7 +159,9 @@ impl BatteryTile {
     fn get_readable_time(&self) -> String {
         use chrono::Local;
 
-        if self.status.is_charging() && self.current_percentage >= 0.995 {
+        if self.status == ChargingStatus::NotCharging {
+            "Not charging".to_string()
+        } else if self.status.is_charging() && self.current_percentage >= 0.995 {
             "Plugged in".to_string()
         } else {
             enum RemainingDurationCategory {
