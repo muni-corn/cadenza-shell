@@ -279,13 +279,13 @@ revealer {
   font-weight: normal;
 }
 
+// niri workspace indicators
 .workspace {
   min-width: 8px;
   border-radius: 4px;
   background-color: rgba(255, 255, 255, 0.3);
   transition: all 0.25s cubic-bezier(0.5, 0, 0, 1);
 
-  // niri workspace indicators
   &.active {
     min-width: 20px;
     background-color: rgba(255, 255, 255, 0.8);
