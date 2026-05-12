@@ -87,7 +87,7 @@ impl FactoryComponent for NotificationCard {
 
                     // Close button
                     gtk4::Button {
-                        add_css_class: "closeButton",
+                        add_css_class: "close-button",
                         connect_clicked[sender] => move |_| {
                             sender.input(NotificationCardMsg::Dismiss);
                         },
