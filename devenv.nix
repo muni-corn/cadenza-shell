@@ -33,15 +33,13 @@ let
 in
 {
   # needed for dynamic linking at runtime
-  env = {
-    RUSTFLAGS = lib.mkForce "-C link-args=-Wl,-fuse-ld=mold,-rpath,${libraryPath}";
-    RUST_LOG = "warn,cadenza_shell=debug";
-  };
+  env.RUST_LOG = "warn,cadenza_shell=debug";
 
   languages.rust = {
     enable = true;
     channel = "nightly";
-    mold.enable = true;
+    wild.enable = true;
+    rustflags = "-C link-args=-Wl,-fuse-ld=wild,-rpath,${libraryPath}";
   };
 
   packages =
