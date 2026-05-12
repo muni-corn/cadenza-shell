@@ -64,3 +64,9 @@ pub enum ChargingStatus {
     #[default]
     Unknown,
 }
+
+impl ChargingStatus {
+    pub fn is_charging(&self) -> bool {
+        matches!(self, Self::Charging | Self::Full)
+    }
+}

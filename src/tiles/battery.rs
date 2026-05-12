@@ -18,7 +18,7 @@ pub struct BatteryTile {
     available: bool,
 
     current_percentage: f32,
-    charging: bool,
+    status: ChargingStatus,
     discharging_time_remaining: Duration,
 }
 
@@ -55,7 +55,7 @@ impl SimpleComponent for BatteryTile {
             available: true,
 
             current_percentage: s.percentage,
-            charging: s.status == ChargingStatus::Charging,
+            status: s.status,
             discharging_time_remaining: s.discharging_time_remaining,
         });
 
@@ -88,7 +88,7 @@ impl SimpleComponent for BatteryTile {
         }) = o
         {
             self.current_percentage = percentage;
-            self.charging = status == ChargingStatus::Charging;
+            self.status = status;
             self.discharging_time_remaining = discharging_time_remaining;
             self.available = true;
         } else {
@@ -126,7 +126,7 @@ impl SimpleComponent for BatteryTile {
 
 impl BatteryTile {
     fn get_icon(&self) -> &str {
-        if self.charging {
+        if self.status.is_charging() {
             percentage_to_icon_from_list(
                 self.current_percentage.into(),
                 BATTERY_CHARGING_ICON_NAMES,
@@ -137,7 +137,7 @@ impl BatteryTile {
     }
 
     fn get_text(&self) -> String {
-        if self.charging && self.current_percentage > 0.99 {
+        if self.status.is_charging() && self.current_percentage > 0.99 {
             "Full".to_string()
         } else {
             format!("{}%", (self.current_percentage * 100.0) as u32)
@@ -147,19 +147,19 @@ impl BatteryTile {
     fn is_low(&self) -> bool {
         (self.current_percentage <= 0.2
             || self.discharging_time_remaining < TIME_REMAINING_LOW_THRESHOLD)
-            && !self.charging
+            && !self.status.is_charging()
     }
 
     fn is_critical(&self) -> bool {
         (self.current_percentage <= 0.1
             || self.discharging_time_remaining < TIME_REMAINING_CRITICAL_THRESHOLD)
-            && !self.charging
+            && !self.status.is_charging()
     }
 
     fn get_readable_time(&self) -> String {
         use chrono::Local;
 
-        if self.charging && self.current_percentage > 0.99 {
+        if self.status.is_charging() && self.current_percentage > 0.99 {
             "Plugged in".to_string()
         } else {
             let time_remaining = self.discharging_time_remaining.as_secs();
@@ -170,19 +170,19 @@ impl BatteryTile {
             let is_someday = self.discharging_time_remaining > Duration::from_hours(48);
 
             if is_soon {
-                if self.charging {
+                if self.status.is_charging() {
                     format!("Good for {} min", time_remaining / 60)
                 } else {
                     format!("{} min left", time_remaining / 60)
                 }
             } else if is_tomorrow {
-                if self.charging {
+                if self.status.is_charging() {
                     "Good for tomorrow".to_string()
                 } else {
                     "Until tomorrow".to_string()
                 }
             } else if is_someday {
-                if self.charging {
+                if self.status.is_charging() {
                     "".to_string()
                 } else {
                     "Until someday".to_string()
@@ -195,7 +195,7 @@ impl BatteryTile {
                 // format as "h:mm am/pm"
                 let formatted = completion_time.format("%-I:%M %P").to_string();
 
-                if self.charging {
+                if self.status.is_charging() {
                     format!("Good for {}", formatted)
                 } else {
                     format!("Until {}", formatted)
