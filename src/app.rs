@@ -32,7 +32,13 @@ pub(crate) struct CadenzaShellModel {
 #[derive(Debug)]
 pub(crate) enum CadenzaShellMsg {
     MonitorAdded(gdk4::Monitor),
-    MonitorRemoved(String), // monitor connector name
+    MonitorRemoved(String),
+    /// Emitted by a Bar when its associated monitor becomes invalid (i.e. the
+    /// display is unplugged). Carries the connector name so the bar can be
+    /// removed from the map and dropped. This is defense-in-depth on top of
+    /// the items_changed signal, which may fire later or not at all depending
+    /// on the compositor.
+    MonitorInvalidated(String),
     HandleTrayItemOutput(TrayItemOutput),
     ToggleNotificationCenter,
 }
@@ -287,12 +293,22 @@ impl AsyncComponent for CadenzaShellModel {
                         BarOutput::TrayItemOutput(tray_item_output) => {
                             CadenzaShellMsg::HandleTrayItemOutput(tray_item_output)
                         }
+                        BarOutput::MonitorInvalidated(connector) => {
+                            CadenzaShellMsg::MonitorInvalidated(connector)
+                        }
                     });
 
                 self.bars.insert(connector_str, bar);
             }
             CadenzaShellMsg::MonitorRemoved(connector) => {
                 log::info!("removing bar for monitor: {}", connector);
+                self.bars.remove(&connector);
+            }
+            CadenzaShellMsg::MonitorInvalidated(connector) => {
+                log::info!(
+                    "monitor invalidated, removing bar for connector: {}",
+                    connector
+                );
                 self.bars.remove(&connector);
             }
             CadenzaShellMsg::HandleTrayItemOutput(tray_item_output) => match tray_item_output {

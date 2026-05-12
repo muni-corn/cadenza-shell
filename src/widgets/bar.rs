@@ -51,6 +51,9 @@ pub enum BarMsg {
 pub enum BarOutput {
     ToggleNotificationCenter,
     TrayItemOutput(TrayItemOutput),
+    /// Emitted when the bar's monitor becomes invalid so the app can remove
+    /// and drop the bar. Carries the connector name used as the map key.
+    MonitorInvalidated(String),
 }
 
 impl SimpleAsyncComponent for Bar {
@@ -131,6 +134,29 @@ impl SimpleAsyncComponent for Bar {
         window.set_anchor(Edge::Left, true);
         window.set_anchor(Edge::Right, true);
         window.set_child(Some(&bar));
+
+        // listen for the monitor becoming invalid (e.g. display unplugged); GDK
+        // emits this signal before the compositor destroys the layer-shell
+        // surface, giving us the chance to drop the bar cleanly and avoid the
+        // surface migrating to another output
+        let output_sender = sender.output_sender().clone();
+        let connector = model
+            .monitor
+            .connector()
+            .map(|c| c.to_string())
+            .unwrap_or_default();
+        model.monitor.connect_invalidate(move |_| {
+            log::info!(
+                "monitor invalidated, notifying app to remove bar for: {}",
+                connector
+            );
+            if output_sender
+                .send(BarOutput::MonitorInvalidated(connector.clone()))
+                .is_err()
+            {
+                log::error!("failed to send MonitorInvalidated: receiver already dropped");
+            }
+        });
 
         AsyncComponentParts { model, widgets: () }
     }
