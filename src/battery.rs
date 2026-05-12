@@ -3,7 +3,6 @@ use std::time::Duration;
 use relm4::SharedState;
 
 mod alerts;
-mod charging;
 mod discharging;
 mod sysfs;
 mod udev;
@@ -41,14 +40,6 @@ pub enum BatteryCapacity {
 }
 
 impl BatteryCapacity {
-    pub fn as_microampere_hours(&self, voltage: u64) -> u64 {
-        match *self {
-            BatteryCapacity::MicroAmpereHours(uah) => uah,
-            BatteryCapacity::MicroWattHours(uwh) if voltage > 0 => uwh * 1_000_000 / voltage,
-            _ => u64::MAX,
-        }
-    }
-
     pub fn div(self, rhs: Self) -> Option<f64> {
         match (self, rhs) {
             (Self::MicroAmpereHours(l), Self::MicroAmpereHours(r))

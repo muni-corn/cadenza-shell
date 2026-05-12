@@ -7,12 +7,8 @@ use super::{BATTERY_STATE, BatteryState, ChargingStatus};
 use crate::battery::{
     READ_INTERVAL_SECONDS,
     alerts::AlertState,
-    charging::{
-        profile::ChargeProfile,
-        session::{ChargingSession, SessionReading},
-    },
     discharging::DischargeProfile,
-    sysfs::{SysfsReading, detect_battery_path, read_battery_identity, read_battery_sysfs},
+    sysfs::{detect_battery_path, read_battery_identity, read_battery_sysfs},
     udev::{create_battery_monitor, is_battery_change},
 };
 
@@ -43,34 +39,19 @@ pub async fn start_battery_service() {
         }
     };
 
-    // load or create the CC/CV charge profile for this device
-    let mut charge_profile = ChargeProfile::load(&device_key);
-
     // read initial battery properties
     let Some(reading) = read_battery_sysfs(&battery_path) else {
         return;
     };
 
-    // start a charging session if we are already plugged in on boot
-    let mut active_session: Option<ChargingSession> = if reading.status == ChargingStatus::Charging
-    {
-        Some(ChargingSession::default())
-    } else {
-        None
-    };
-
     // get initial time estimate
-    let time_remaining = compute_time_remaining(
-        &reading,
-        active_session.as_ref(),
-        &charge_profile,
-        &mut power_history,
-    );
+    let discharging_time_remaining =
+        power_history.predict_time_to_empty(Local::now(), reading.remaining_wh());
 
     *BATTERY_STATE.write() = Some(BatteryState {
         percentage: reading.percentage().unwrap_or_default() as f32,
         status: reading.status,
-        discharging_time_remaining: time_remaining,
+        discharging_time_remaining,
     });
 
     // set up udev monitor for immediate status change events
@@ -96,8 +77,6 @@ pub async fn start_battery_service() {
         &battery_path,
         async_fd,
         &mut power_history,
-        &mut charge_profile,
-        &mut active_session,
         &mut alert_state,
     )
     .await;
@@ -107,8 +86,6 @@ async fn watch_battery(
     battery_path: &Path,
     async_fd: AsyncFd<udev::MonitorSocket>,
     power_history: &mut DischargeProfile,
-    charge_profile: &mut ChargeProfile,
-    active_session: &mut Option<ChargingSession>,
     alert_state: &mut AlertState,
 ) -> Option<!> {
     let mut poll_interval =
@@ -138,8 +115,6 @@ async fn watch_battery(
                         update_battery_state(
                             battery_path,
                             power_history,
-                            charge_profile,
-                            active_session,
                             alert_state,
                         ).await;
                     } else {
@@ -158,8 +133,6 @@ async fn watch_battery(
                 update_battery_state(
                     battery_path,
                     power_history,
-                    charge_profile,
-                    active_session,
                     alert_state,
                 ).await;
             }
@@ -172,8 +145,6 @@ async fn watch_battery(
 async fn update_battery_state(
     battery_path: &Path,
     power_history: &mut DischargeProfile,
-    charge_profile: &mut ChargeProfile,
-    active_session: &mut Option<ChargingSession>,
     alert_state: &mut AlertState,
 ) {
     let Some(reading) = read_battery_sysfs(battery_path) else {
@@ -181,28 +152,12 @@ async fn update_battery_state(
         return;
     };
 
-    let charge_full_uah = reading
-        .capacity_full
-        .as_microampere_hours(reading.voltage_now) as f64;
-
-    manage_session(
-        reading.status,
-        &reading,
-        charge_full_uah,
-        charge_profile,
-        active_session,
-    );
-
     if let ChargingStatus::Discharging = reading.status {
         power_history.update(&reading);
     }
 
-    let discharging_time_remaining = compute_time_remaining(
-        &reading,
-        active_session.as_ref(),
-        charge_profile,
-        power_history,
-    );
+    let discharging_time_remaining =
+        power_history.predict_time_to_empty(Local::now(), reading.remaining_wh());
 
     let percentage = reading.percentage().unwrap_or_default() as f32;
     let status = reading.status;
@@ -218,89 +173,5 @@ async fn update_battery_state(
         alert_state.check(percentage).await;
     } else {
         alert_state.reset();
-    }
-}
-
-/// Manage the [`ChargingSession`] state machine based on the current status.
-///
-/// - Creates a new session when charging begins.
-/// - Pushes the current reading into an active session.
-/// - Ends the session, learning from it, when charging stops. Distinguishes
-///   `Full` (updates I_cut) from other stop reasons.
-fn manage_session(
-    status: ChargingStatus,
-    reading: &SysfsReading,
-    charge_full_uah: f64,
-    charge_profile: &mut ChargeProfile,
-    active_session: &mut Option<ChargingSession>,
-) {
-    match status {
-        ChargingStatus::Charging => {
-            // ensure a session is active
-            let session = active_session.get_or_insert_with(|| {
-                log::info!("charging started, beginning new session");
-                ChargingSession::default()
-            });
-
-            // push the reading into the session for phase detection and CV fitting
-            if let Some(sr) = SessionReading::from_sysfs(reading) {
-                session.push(sr, charge_profile);
-            }
-        }
-        ChargingStatus::Full => {
-            // battery reached full — finalise and learn I_cut
-            if let Some(session) = active_session.take() {
-                log::info!("charging complete (full), finalising session");
-                session.end_full(charge_profile, charge_full_uah);
-            }
-        }
-        _ => {
-            // charging stopped for another reason (charger removed, etc.)
-            if let Some(session) = active_session.take() {
-                log::info!("charging stopped, finalising session");
-                session.end(charge_profile);
-            }
-        }
-    }
-}
-
-/// Compute the predicted time remaining using the best available model.
-///
-/// When charging, prefers the CC/CV model if the session and profile are
-/// available. Falls back to the history-based discharge model otherwise.
-fn compute_time_remaining(
-    reading: &SysfsReading,
-    active_session: Option<&ChargingSession>,
-    charge_profile: &ChargeProfile,
-    power_history: &mut DischargeProfile,
-) -> Duration {
-    match reading.status {
-        ChargingStatus::Charging => {
-            if let Some(session) = active_session {
-                let current_ua = reading.current_now.unsigned_abs() as f64;
-                let charge_now_uah = reading
-                    .capacity_now
-                    .as_microampere_hours(reading.voltage_now)
-                    as f64;
-                let charge_full_uah = reading
-                    .capacity_full
-                    .as_microampere_hours(reading.voltage_now)
-                    as f64;
-
-                session.predict_time_to_full_cc_cv(
-                    charge_profile,
-                    current_ua,
-                    charge_now_uah,
-                    charge_full_uah,
-                )
-            } else {
-                log::warn!("there is no active charging session to predict time remaining");
-                Duration::MAX
-            }
-        }
-        ChargingStatus::Discharging => {
-            power_history.predict_time_to_empty(Local::now(), reading.remaining_wh())
-        }
-        _ => Duration::MAX,
     }
 }

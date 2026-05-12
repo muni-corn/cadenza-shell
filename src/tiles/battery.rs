@@ -19,7 +19,7 @@ pub struct BatteryTile {
 
     current_percentage: f32,
     charging: bool,
-    time_remaining: Duration,
+    discharging_time_remaining: Duration,
 }
 
 #[derive(Debug)]
@@ -56,7 +56,7 @@ impl SimpleComponent for BatteryTile {
 
             current_percentage: s.percentage,
             charging: s.status == ChargingStatus::Charging,
-            time_remaining: s.discharging_time_remaining,
+            discharging_time_remaining: s.discharging_time_remaining,
         });
 
         // hide the entire tile if battery isn't available
@@ -84,12 +84,12 @@ impl SimpleComponent for BatteryTile {
         if let Some(BatteryState {
             percentage,
             status,
-            discharging_time_remaining: time_remaining,
+            discharging_time_remaining,
         }) = o
         {
             self.current_percentage = percentage;
             self.charging = status == ChargingStatus::Charging;
-            self.time_remaining = time_remaining;
+            self.discharging_time_remaining = discharging_time_remaining;
             self.available = true;
         } else {
             self.available = false;
@@ -145,12 +145,14 @@ impl BatteryTile {
     }
 
     fn is_low(&self) -> bool {
-        (self.current_percentage <= 0.2 || self.time_remaining < TIME_REMAINING_LOW_THRESHOLD)
+        (self.current_percentage <= 0.2
+            || self.discharging_time_remaining < TIME_REMAINING_LOW_THRESHOLD)
             && !self.charging
     }
 
     fn is_critical(&self) -> bool {
-        (self.current_percentage <= 0.1 || self.time_remaining < TIME_REMAINING_CRITICAL_THRESHOLD)
+        (self.current_percentage <= 0.1
+            || self.discharging_time_remaining < TIME_REMAINING_CRITICAL_THRESHOLD)
             && !self.charging
     }
 
@@ -160,22 +162,28 @@ impl BatteryTile {
         if self.charging && self.current_percentage > 0.99 {
             "Plugged in".to_string()
         } else {
-            let time_remaining = self.time_remaining.as_secs();
-            let is_tomorrow = self.time_remaining >= Duration::from_hours(24)
-                && self.time_remaining < Duration::from_hours(48);
-            let is_someday = self.time_remaining > Duration::from_hours(48);
+            let time_remaining = self.discharging_time_remaining.as_secs();
 
-            if time_remaining < 30 * 60 {
-                format!("{} min left", time_remaining / 60)
+            let is_soon = time_remaining < 30 * 60;
+            let is_tomorrow = self.discharging_time_remaining >= Duration::from_hours(24)
+                && self.discharging_time_remaining < Duration::from_hours(48);
+            let is_someday = self.discharging_time_remaining > Duration::from_hours(48);
+
+            if is_soon {
+                if self.charging {
+                    format!("Good for {} min", time_remaining / 60)
+                } else {
+                    format!("{} min left", time_remaining / 60)
+                }
             } else if is_tomorrow {
                 if self.charging {
-                    "Full tomorrow".to_string()
+                    "Good for tomorrow".to_string()
                 } else {
                     "Until tomorrow".to_string()
                 }
             } else if is_someday {
                 if self.charging {
-                    "Full someday".to_string()
+                    "".to_string()
                 } else {
                     "Until someday".to_string()
                 }
@@ -188,7 +196,7 @@ impl BatteryTile {
                 let formatted = completion_time.format("%-I:%M %P").to_string();
 
                 if self.charging {
-                    format!("Full at {}", formatted)
+                    format!("Good for {}", formatted)
                 } else {
                     format!("Until {}", formatted)
                 }
