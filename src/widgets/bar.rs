@@ -26,6 +26,10 @@ use crate::{
 #[derive(Debug)]
 pub struct Bar {
     monitor: Monitor,
+    /// The root layer-shell window. Stored in the model (rather than Widgets)
+    /// so we can explicitly close it in shutdown(), which prevents the
+    /// compositor from migrating the layer surface to another output.
+    window: gtk::Window,
 
     // save Controllers so they aren't dropped
     left: Controller<LeftGroup>,
@@ -108,6 +112,7 @@ impl SimpleAsyncComponent for Bar {
 
             notification_center,
 
+            window: window.clone(),
             monitor,
         };
 
@@ -173,4 +178,16 @@ impl SimpleAsyncComponent for Bar {
     }
 
     fn update_view(&self, _widgets: &mut Self::Widgets, _sender: AsyncComponentSender<Self>) {}
+
+    fn shutdown(&mut self, _widgets: &mut Self::Widgets, _output: relm4::Sender<Self::Output>) {
+        // explicitly close the layer-shell window so the compositor destroys the
+        // surface immediately; without this, GTK may finalize the GtkWindow while
+        // the layer surface is still alive, which causes wlr-layer-shell
+        // compositors (including Niri) to move the surface to another output
+        log::debug!(
+            "shutting down bar for monitor: {:?}",
+            self.monitor.connector()
+        );
+        self.window.close();
+    }
 }
