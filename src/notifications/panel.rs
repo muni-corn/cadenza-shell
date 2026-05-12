@@ -106,7 +106,7 @@ impl SimpleComponent for ActionPanel {
                     }
                 }),
             panel: gtk4::Box::builder()
-                .css_classes(["notification-center"])
+                .css_classes(["notification-center", "background"])
                 .orientation(gtk4::Orientation::Vertical)
                 .hexpand(true)
                 .vexpand(true)

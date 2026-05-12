@@ -50,6 +50,7 @@ impl FactoryComponent for NotificationCard {
             add_css_class: self.get_urgency_class(),
 
             gtk4::Box {
+                add_css_class: "background",
                 set_orientation: gtk4::Orientation::Vertical,
 
                 // Header with app info and close button
