@@ -16,7 +16,7 @@ pub async fn start_brightness_watcher() {
     // send initial update
     *BRIGHTNESS_STATE.write() = Some(current_brightness);
 
-    let brightness_path = format!("/sys/class/backlight/{}/brightness", &interface);
+    let brightness_path = format!("/sys/class/backlight/{}/brightness", interface);
     let interface_clone = interface.clone();
 
     let mut inotify = match Inotify::init() {

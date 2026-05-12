@@ -69,7 +69,7 @@ impl NotificationsDaemon {
             actions,
         };
 
-        log::debug!("new notification received: {:?}", &notification);
+        log::debug!("new notification received: {:?}", notification);
 
         // write to the global state
         NOTIFICATIONS_STATE
