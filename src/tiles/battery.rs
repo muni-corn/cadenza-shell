@@ -159,46 +159,61 @@ impl BatteryTile {
     fn get_readable_time(&self) -> String {
         use chrono::Local;
 
-        if self.status.is_charging() && self.current_percentage > 0.99 {
+        if self.status.is_charging() && self.current_percentage >= 0.995 {
             "Plugged in".to_string()
         } else {
-            let time_remaining = self.discharging_time_remaining.as_secs();
+            enum RemainingDurationCategory {
+                Soon,
+                Today,
+                Tomorrow,
+                Someday,
+            }
 
-            let is_soon = time_remaining < 30 * 60;
-            let is_tomorrow = self.discharging_time_remaining >= Duration::from_hours(24)
-                && self.discharging_time_remaining < Duration::from_hours(48);
-            let is_someday = self.discharging_time_remaining > Duration::from_hours(48);
-
-            if is_soon {
-                if self.status.is_charging() {
-                    format!("Good for {} min", time_remaining / 60)
-                } else {
-                    format!("{} min left", time_remaining / 60)
-                }
-            } else if is_tomorrow {
-                if self.status.is_charging() {
-                    "Good for tomorrow".to_string()
-                } else {
-                    "Until tomorrow".to_string()
-                }
-            } else if is_someday {
-                if self.status.is_charging() {
-                    "".to_string()
-                } else {
-                    "Until someday".to_string()
-                }
+            let time_remaining = self.discharging_time_remaining;
+            let time_category = if self.discharging_time_remaining < Duration::from_mins(30) {
+                RemainingDurationCategory::Soon
+            } else if self.discharging_time_remaining < Duration::from_hours(24) {
+                RemainingDurationCategory::Today
+            } else if self.discharging_time_remaining < Duration::from_hours(48) {
+                RemainingDurationCategory::Tomorrow
             } else {
-                // calculate actual completion time
-                let now = Local::now();
-                let completion_time = now + chrono::Duration::seconds(time_remaining as i64);
+                RemainingDurationCategory::Someday
+            };
 
-                // format as "h:mm am/pm"
-                let formatted = completion_time.format("%-I:%M %P").to_string();
+            match time_category {
+                RemainingDurationCategory::Soon => {
+                    if self.status.is_charging() {
+                        format!("Good for {} min", time_remaining.as_secs() / 60)
+                    } else {
+                        format!("{} min left", time_remaining.as_secs() / 60)
+                    }
+                }
+                RemainingDurationCategory::Today => {
+                    // calculate actual completion time
+                    let completion_time = Local::now() + time_remaining;
 
-                if self.status.is_charging() {
-                    format!("Good for {}", formatted)
-                } else {
-                    format!("Until {}", formatted)
+                    // format as "h:mm am/pm"
+                    let formatted = completion_time.format("%-I:%M %P").to_string();
+
+                    if self.status.is_charging() {
+                        format!("Good for {}", formatted)
+                    } else {
+                        format!("Until {}", formatted)
+                    }
+                }
+                RemainingDurationCategory::Tomorrow => {
+                    if self.status.is_charging() {
+                        "Good for tomorrow".to_string()
+                    } else {
+                        "Until tomorrow".to_string()
+                    }
+                }
+                RemainingDurationCategory::Someday => {
+                    if self.status.is_charging() {
+                        "Good for a while".to_string()
+                    } else {
+                        "Until someday".to_string()
+                    }
                 }
             }
         }
