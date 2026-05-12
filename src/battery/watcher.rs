@@ -70,7 +70,7 @@ pub async fn start_battery_service() {
     *BATTERY_STATE.write() = Some(BatteryState {
         percentage: reading.percentage().unwrap_or_default() as f32,
         status: reading.status,
-        time_remaining,
+        discharging_time_remaining: time_remaining,
     });
 
     // set up udev monitor for immediate status change events
@@ -197,7 +197,7 @@ async fn update_battery_state(
         power_history.update(&reading);
     }
 
-    let time_remaining = compute_time_remaining(
+    let discharging_time_remaining = compute_time_remaining(
         &reading,
         active_session.as_ref(),
         charge_profile,
@@ -210,7 +210,7 @@ async fn update_battery_state(
     *BATTERY_STATE.write() = Some(BatteryState {
         percentage,
         status,
-        time_remaining,
+        discharging_time_remaining,
     });
 
     // check alerts only while discharging; reset flags when we leave that state

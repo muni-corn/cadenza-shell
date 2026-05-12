@@ -28,7 +28,7 @@ const READ_INTERVAL_SECONDS: u32 = 10;
 pub struct BatteryState {
     pub percentage: f32,
     pub status: ChargingStatus,
-    pub time_remaining: Duration,
+    pub discharging_time_remaining: Duration,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize)]

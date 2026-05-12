@@ -56,7 +56,7 @@ impl SimpleComponent for BatteryTile {
 
             current_percentage: s.percentage,
             charging: s.status == ChargingStatus::Charging,
-            time_remaining: s.time_remaining,
+            time_remaining: s.discharging_time_remaining,
         });
 
         // hide the entire tile if battery isn't available
@@ -84,7 +84,7 @@ impl SimpleComponent for BatteryTile {
         if let Some(BatteryState {
             percentage,
             status,
-            time_remaining,
+            discharging_time_remaining: time_remaining,
         }) = o
         {
             self.current_percentage = percentage;
