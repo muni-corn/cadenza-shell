@@ -96,10 +96,16 @@ impl SimpleComponent for FreshNotifications {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             FreshNotificationsMsg::NewNotification(notification) => {
-                // add to the beginning (top) of the list
                 let notification_id = notification.id;
                 let urgency = notification.urgency;
 
+                tracing::debug!(
+                    notification.id = notification_id,
+                    ?urgency,
+                    "queued fresh popup"
+                );
+
+                // add to the beginning (top) of the list
                 self.cards.guard().push_front(notification);
 
                 // set up auto-dismiss for non-critical notifications
@@ -108,17 +114,27 @@ impl SimpleComponent for FreshNotifications {
                     let timeout_id = glib::timeout_add_local_once(
                         std::time::Duration::from_secs(10),
                         move || {
+                            tracing::debug!(
+                                notification.id = notification_id,
+                                "auto-dismiss timeout queued for popup"
+                            );
                             dismiss_sender
                                 .input(FreshNotificationsMsg::AutoDismiss(notification_id));
                         },
                     );
                     self.auto_dismiss_timeouts
                         .insert(notification_id, timeout_id);
+                } else {
+                    tracing::debug!(
+                        notification.id = notification_id,
+                        "critical notification; skipping auto-dismiss"
+                    );
                 }
             }
             FreshNotificationsMsg::RemoveNotification(id) => {
                 // remove auto-dismiss timeout if it exists
                 if let Some(timeout_id) = self.auto_dismiss_timeouts.remove(&id) {
+                    tracing::debug!(notification.id = id, "cancelled auto-dismiss timeout");
                     timeout_id.remove();
                 }
 
@@ -130,11 +146,25 @@ impl SimpleComponent for FreshNotifications {
                     .find(|(_, item)| item.notification_id() == id)
                     .map(|(index, _)| index);
 
-                if let Some(index) = index_to_remove {
-                    guard.remove(index);
+                match index_to_remove {
+                    Some(index) => {
+                        tracing::debug!(notification.id = id, index, "removing fresh popup card");
+                        guard.remove(index);
+                    }
+                    None => {
+                        // this can happen when a removal races a previous removal or
+                        // when a notification was never shown as a popup
+                        tracing::warn!(
+                            notification.id = id,
+                            "removal requested for a notification not in fresh cards (state \
+                             desync?)"
+                        );
+                    }
                 }
             }
             FreshNotificationsMsg::AutoDismiss(id) => {
+                tracing::debug!(notification.id = id, "auto-dismiss timer fired");
+
                 // remove the timeout tracking since it fired
                 self.auto_dismiss_timeouts.remove(&id);
 
@@ -143,6 +173,11 @@ impl SimpleComponent for FreshNotifications {
                 sender.input(FreshNotificationsMsg::DismissNotification(id));
             }
             FreshNotificationsMsg::DismissNotification(id) => {
+                tracing::debug!(
+                    notification.id = id,
+                    "dismiss notification forwarded to output"
+                );
+
                 // remove from our display
                 sender.input(FreshNotificationsMsg::RemoveNotification(id));
 
@@ -150,16 +185,24 @@ impl SimpleComponent for FreshNotifications {
                 sender
                     .output(FreshNotificationsOutput::NotificationDismissed(id))
                     .unwrap_or_else(|_| {
-                        tracing::error!("couldn't output action trigger event from popup")
+                        tracing::error!(
+                            notification.id = id,
+                            "couldn't output dismiss event from popup"
+                        )
                     });
             }
             FreshNotificationsMsg::NotificationAction(id, action) => {
+                tracing::debug!(notification.id = id, %action, "notification action triggered from popup");
+
                 sender
                     .output(FreshNotificationsOutput::NotificationActionTriggered(
                         id, action,
                     ))
                     .unwrap_or_else(|_| {
-                        tracing::error!("couldn't output action trigger event from popup")
+                        tracing::error!(
+                            notification.id = id,
+                            "couldn't output action trigger event from popup"
+                        )
                     });
             }
         }
