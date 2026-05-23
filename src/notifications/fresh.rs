@@ -150,7 +150,7 @@ impl SimpleComponent for FreshNotifications {
                 sender
                     .output(FreshNotificationsOutput::NotificationDismissed(id))
                     .unwrap_or_else(|_| {
-                        log::error!("couldn't output action trigger event from popup")
+                        tracing::error!("couldn't output action trigger event from popup")
                     });
             }
             FreshNotificationsMsg::NotificationAction(id, action) => {
@@ -159,7 +159,7 @@ impl SimpleComponent for FreshNotifications {
                         id, action,
                     ))
                     .unwrap_or_else(|_| {
-                        log::error!("couldn't output action trigger event from popup")
+                        tracing::error!("couldn't output action trigger event from popup")
                     });
             }
         }

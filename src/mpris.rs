@@ -45,7 +45,10 @@ pub async fn run_mpris_service() {
                                 }
                                 Err(e) => {
                                     // error getting event - player may have disconnected
-                                    log::error!("error receiving event for mpris player: {}", e);
+                                    tracing::error!(
+                                        "error receiving event for mpris player: {}",
+                                        e
+                                    );
                                     break;
                                 }
                             }
@@ -54,7 +57,7 @@ pub async fn run_mpris_service() {
                     Err(e) => {
                         // failed to get events - player may not support it or be
                         // disconnected; wait a bit before trying to find another player
-                        log::error!("error starting event stream for mpris player: {}", e);
+                        tracing::error!("error starting event stream for mpris player: {}", e);
                         std::thread::sleep(std::time::Duration::from_secs(2));
                     }
                 }

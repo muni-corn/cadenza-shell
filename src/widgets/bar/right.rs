@@ -92,7 +92,7 @@ impl SimpleComponent for RightGroup {
                     .forward(sender.output_sender(), RightGroupOutput::TrayItemOutput),
             ),
             Err(e) => {
-                log::error!("couldn't lock tray items mutex: {}", e);
+                tracing::error!("couldn't lock tray items mutex: {}", e);
                 None
             }
         });

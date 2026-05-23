@@ -68,7 +68,7 @@ impl AsyncComponent for CadenzaShellModel {
     ) -> AsyncComponentParts<Self> {
         let tray_client = TrayClient::new()
             .await
-            .inspect_err(|e| log::error!("couldn't setup tray client: {}", e))
+            .inspect_err(|e| tracing::error!("couldn't setup tray client: {}", e))
             .ok()
             .map(|c| Arc::new(Mutex::new(c)));
 
@@ -139,12 +139,12 @@ impl AsyncComponent for CadenzaShellModel {
                                 Ok(event) => {
                                     out.send(CadenzaShellCommandOutput::TrayEvent(event))
                                         .unwrap_or_else(|_| {
-                                            log::error!(
+                                            tracing::error!(
                                                 "unable to send tray event as command output",
                                             )
                                         });
                                 }
-                                Err(e) => log::error!("error receiving tray event: {}", e),
+                                Err(e) => tracing::error!("error receiving tray event: {}", e),
                             }
                         }
                     })
@@ -175,7 +175,7 @@ impl AsyncComponent for CadenzaShellModel {
                 .collect(),
         ));
 
-        log::debug!("initial monitors: {:?}", tracked.borrow().as_slice());
+        tracing::debug!("initial monitors: {:?}", tracked.borrow().as_slice());
 
         // create bars for existing monitors (skip any without a connector)
         for monitor in monitors.iter::<gdk4::Monitor>() {
@@ -188,7 +188,7 @@ impl AsyncComponent for CadenzaShellModel {
         // monitor for display changes (hotplug support)
         let sender_clone = sender.clone();
         monitors.connect_items_changed(move |monitors, position, removed, added| {
-            log::debug!(
+            tracing::debug!(
                 "items_changed: position={}, removed={}, added={}",
                 position,
                 removed,
@@ -226,7 +226,7 @@ impl AsyncComponent for CadenzaShellModel {
                 );
             }
 
-            log::debug!(
+            tracing::debug!(
                 "hotplug — removing {:?}, adding {:?}",
                 removed_connectors,
                 added_connectors
@@ -255,7 +255,7 @@ impl AsyncComponent for CadenzaShellModel {
         match msg {
             CadenzaShellMsg::MonitorAdded(monitor) => {
                 let Some(connector) = monitor.connector() else {
-                    log::warn!("ignoring monitor with no connector name");
+                    tracing::warn!("ignoring monitor with no connector name");
                     return;
                 };
 
@@ -265,7 +265,7 @@ impl AsyncComponent for CadenzaShellModel {
                 // new Monitor object is used; this handles disconnect→reconnect
                 // cycles where the compositor reuses the same connector name
                 if self.bars.contains_key(&connector_str) {
-                    log::warn!(
+                    tracing::warn!(
                         "bar already exists for connector '{}' — replacing with fresh monitor",
                         connector_str
                     );
@@ -279,7 +279,7 @@ impl AsyncComponent for CadenzaShellModel {
                     None
                 };
 
-                log::info!("creating bar for monitor: {}", connector_str);
+                tracing::info!("creating bar for monitor: {}", connector_str);
 
                 let bar = Bar::builder()
                     .launch(BarInit {
@@ -301,11 +301,11 @@ impl AsyncComponent for CadenzaShellModel {
                 self.bars.insert(connector_str, bar);
             }
             CadenzaShellMsg::MonitorRemoved(connector) => {
-                log::info!("removing bar for monitor: {}", connector);
+                tracing::info!("removing bar for monitor: {}", connector);
                 self.bars.remove(&connector);
             }
             CadenzaShellMsg::MonitorInvalidated(connector) => {
-                log::info!(
+                tracing::info!(
                     "monitor invalidated, removing bar for connector: {}",
                     connector
                 );
@@ -320,7 +320,10 @@ impl AsyncComponent for CadenzaShellModel {
                             .activate(activate_request)
                             .await
                             .unwrap_or_else(|e| {
-                                log::error!("error sending activate request to tray client: {}", e)
+                                tracing::error!(
+                                    "error sending activate request to tray client: {}",
+                                    e
+                                )
                             });
                     }
                 }

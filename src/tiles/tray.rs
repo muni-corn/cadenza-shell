@@ -126,7 +126,7 @@ impl SimpleComponent for TrayWidget {
                         self.items
                             .send(index_to_update, TrayItemInput::DataUpdate(update_event));
                     } else {
-                        log::warn!("couldn't find tray item {} to send update", address);
+                        tracing::warn!("couldn't find tray item {} to send update", address);
                     }
                 }
                 TrayEvent::Remove(address) => {
@@ -139,7 +139,7 @@ impl SimpleComponent for TrayWidget {
                     if let Some(index) = index_opt {
                         self.items.guard().remove(index);
                     } else {
-                        log::warn!("couldn't find tray item for {address}");
+                        tracing::warn!("couldn't find tray item for {address}");
                     }
                 }
             },

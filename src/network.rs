@@ -79,7 +79,7 @@ pub enum NetworkPropertyChange {
 pub async fn run_network_service() {
     let Ok((conn, event_tx, mut event_rx)) = setup_property_watching()
         .await
-        .inspect_err(|e| log::error!("failed to setup network property watching: {e}"))
+        .inspect_err(|e| tracing::error!("failed to setup network property watching: {e}"))
     else {
         return;
     };
@@ -93,10 +93,10 @@ pub async fn run_network_service() {
                 Ok(()) => {
                     event_tx_wake
                         .send(NetworkPropertyChange::Wake)
-                        .unwrap_or_else(|e| log::error!("couldn't send wake event: {e}"));
+                        .unwrap_or_else(|e| tracing::error!("couldn't send wake event: {e}"));
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    log::warn!("network wake receiver lagged, missed {n} wake event(s)");
+                    tracing::warn!("network wake receiver lagged, missed {n} wake event(s)");
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
@@ -107,7 +107,7 @@ pub async fn run_network_service() {
     // arrive
     let mut strength_task: Option<tokio::task::AbortHandle> = None;
     if let Err(e) = handle_primary_change(&conn, &event_tx, &mut strength_task).await {
-        log::warn!("couldn't fetch initial network state: {e}");
+        tracing::warn!("couldn't fetch initial network state: {e}");
     }
 
     while let Some(event) = event_rx.recv().await {
@@ -123,11 +123,13 @@ pub async fn run_network_service() {
                 if let State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal = state
                     && NETWORK_STATE.read().specific_info.is_none()
                 {
-                    log::debug!("connected state with no device info, refetching network state");
+                    tracing::debug!(
+                        "connected state with no device info, refetching network state"
+                    );
                     if let Err(e) =
                         handle_primary_change(&conn, &event_tx, &mut strength_task).await
                     {
-                        log::warn!("couldn't refetch network info after state change: {e}");
+                        tracing::warn!("couldn't refetch network info after state change: {e}");
                     }
                 }
             }
@@ -136,7 +138,7 @@ pub async fn run_network_service() {
             }
             NetworkPropertyChange::Primary(_) => {
                 if let Err(e) = handle_primary_change(&conn, &event_tx, &mut strength_task).await {
-                    log::error!("couldn't handle primary connection change: {e}");
+                    tracing::error!("couldn't handle primary connection change: {e}");
                 }
             }
             NetworkPropertyChange::Strength(strength) => {
@@ -150,14 +152,14 @@ pub async fn run_network_service() {
                 }
             }
             NetworkPropertyChange::Wake => {
-                log::debug!("system wake: refreshing network state");
+                tracing::debug!("system wake: refreshing network state");
                 if let Err(e) = handle_primary_change(&conn, &event_tx, &mut strength_task).await {
-                    log::warn!("couldn't refresh network state after wake: {e}");
+                    tracing::warn!("couldn't refresh network state after wake: {e}");
                 }
             }
         }
     }
-    log::warn!("network service has stopped receiving events");
+    tracing::warn!("network service has stopped receiving events");
 }
 
 /// Fetches current NM state, updates [`NETWORK_STATE`], and (re)subscribes to
@@ -178,7 +180,7 @@ async fn handle_primary_change(
     let primary_path = nm_proxy.primary_connection().await?;
     let (info, ap_path) = fetch_network_info(conn, primary_path).await?;
 
-    log::debug!("fetched network info: {:?}", info);
+    tracing::debug!("fetched network info: {:?}", info);
     *NETWORK_STATE.write() = info;
 
     // subscribe to strength changes for the new access point
@@ -216,15 +218,15 @@ async fn setup_property_watching() -> anyhow::Result<(
             if let Ok(new_state) = change
                 .get()
                 .await
-                .inspect_err(|e| log::error!("couldn't get network state change value: {e}"))
+                .inspect_err(|e| tracing::error!("couldn't get network state change value: {e}"))
             {
                 event_tx_clone
                     .clone()
                     .send(NetworkPropertyChange::State(new_state))
-                    .unwrap_or_else(|e| log::error!("couldn't send state change: {e}"));
+                    .unwrap_or_else(|e| tracing::error!("couldn't send state change: {e}"));
             }
         }
-        log::warn!("stream for network state changes has closed");
+        tracing::warn!("stream for network state changes has closed");
     });
 
     // watch for connectivity changes
@@ -232,17 +234,15 @@ async fn setup_property_watching() -> anyhow::Result<(
     let event_tx_clone = event_tx.clone();
     relm4::spawn(async move {
         while let Some(change) = connectivity_stream.next().await {
-            if let Ok(new_connectivity) = change
-                .get()
-                .await
-                .inspect_err(|e| log::error!("couldn't get network connectivity change value: {e}"))
-            {
+            if let Ok(new_connectivity) = change.get().await.inspect_err(|e| {
+                tracing::error!("couldn't get network connectivity change value: {e}")
+            }) {
                 event_tx_clone
                     .send(NetworkPropertyChange::Connectivity(new_connectivity))
-                    .unwrap_or_else(|e| log::error!("couldn't send connectivity change: {e}"));
+                    .unwrap_or_else(|e| tracing::error!("couldn't send connectivity change: {e}"));
             }
         }
-        log::warn!("stream for connectivity state changes has closed");
+        tracing::warn!("stream for connectivity state changes has closed");
     });
 
     // watch for primary connection changes
@@ -250,19 +250,17 @@ async fn setup_property_watching() -> anyhow::Result<(
     let event_tx_clone = event_tx.clone();
     relm4::spawn(async move {
         while let Some(change) = primary_connection_stream.next().await {
-            if let Ok(new_primary_connection_path) = change
-                .get()
-                .await
-                .inspect_err(|e| log::error!("couldn't get primary connection change value: {e}"))
-            {
+            if let Ok(new_primary_connection_path) = change.get().await.inspect_err(|e| {
+                tracing::error!("couldn't get primary connection change value: {e}")
+            }) {
                 event_tx_clone
                     .send(NetworkPropertyChange::Primary(new_primary_connection_path))
                     .unwrap_or_else(|e| {
-                        log::error!("couldn't send primary connection path change: {e}")
+                        tracing::error!("couldn't send primary connection path change: {e}")
                     });
             }
         }
-        log::warn!("stream for primary connection state changes has closed");
+        tracing::warn!("stream for primary connection state changes has closed");
     });
 
     Ok((conn, event_tx, event_rx))
@@ -297,7 +295,7 @@ async fn fetch_network_info(
 
         let active_device_paths = active_conn_proxy.devices().await?;
 
-        log::debug!("active network device paths: {:?}", active_device_paths);
+        tracing::debug!("active network device paths: {:?}", active_device_paths);
 
         if let Some(device_path) = active_device_paths.first() {
             let device_proxy = NetworkDeviceProxy::builder(conn)
@@ -415,33 +413,33 @@ async fn subscribe_ap_strength(
     let builder = match AccessPointProxy::builder(&conn).path(&ap_path) {
         Ok(b) => b,
         Err(e) => {
-            log::error!("invalid access point path {ap_path}: {e}");
+            tracing::error!("invalid access point path {ap_path}: {e}");
             return;
         }
     };
     let ap_proxy = match builder.build().await {
         Ok(p) => p,
         Err(e) => {
-            log::error!("couldn't build access point proxy for strength subscription: {e}");
+            tracing::error!("couldn't build access point proxy for strength subscription: {e}");
             return;
         }
     };
 
     let mut stream = ap_proxy.receive_strength_changed().await;
-    log::debug!("subscribed to strength changes for access point {ap_path}");
+    tracing::debug!("subscribed to strength changes for access point {ap_path}");
 
     while let Some(change) = stream.next().await {
         if let Ok(strength) = change
             .get()
             .await
-            .inspect_err(|e| log::debug!("couldn't get strength value: {e}"))
+            .inspect_err(|e| tracing::debug!("couldn't get strength value: {e}"))
         {
             tx.send(NetworkPropertyChange::Strength(strength))
-                .unwrap_or_else(|e| log::error!("couldn't send strength change: {e}"));
+                .unwrap_or_else(|e| tracing::error!("couldn't send strength change: {e}"));
         }
     }
 
-    log::debug!("strength subscription for access point {ap_path} ended");
+    tracing::debug!("strength subscription for access point {ap_path} ended");
 }
 
 /// Returns an appropriate icon name for the current networking state.

@@ -43,7 +43,7 @@ impl BluetoothState {
 pub async fn run_bluetooth_service() {
     let Ok(session) = Session::new()
         .await
-        .inspect_err(|e| log::error!("couldn't initialize bluetooth session: {e}"))
+        .inspect_err(|e| tracing::error!("couldn't initialize bluetooth session: {e}"))
     else {
         return;
     };
@@ -51,7 +51,7 @@ pub async fn run_bluetooth_service() {
     let Ok(adapter) = session
         .default_adapter()
         .await
-        .inspect_err(|e| log::error!("couldn't get default bluetooth adapter: {e}"))
+        .inspect_err(|e| tracing::error!("couldn't get default bluetooth adapter: {e}"))
     else {
         return;
     };
@@ -89,7 +89,7 @@ pub async fn run_bluetooth_service() {
     // set up bluetooth monitoring
     let Ok((event_tx, mut event_rx)) = start_event_listening(adapter)
         .await
-        .inspect_err(|e| log::error!("failed to setup bluetooth monitoring: {e}"))
+        .inspect_err(|e| tracing::error!("failed to setup bluetooth monitoring: {e}"))
     else {
         return;
     };
@@ -103,10 +103,10 @@ pub async fn run_bluetooth_service() {
                 Ok(()) => {
                     event_tx_wake
                         .send(BluetoothEvent::Wake)
-                        .unwrap_or_else(|e| log::error!("couldn't send wake event: {e}"));
+                        .unwrap_or_else(|e| tracing::error!("couldn't send wake event: {e}"));
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                    log::warn!("bluetooth wake receiver lagged, missed {n} wake event(s)");
+                    tracing::warn!("bluetooth wake receiver lagged, missed {n} wake event(s)");
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
@@ -116,7 +116,7 @@ pub async fn run_bluetooth_service() {
     while let Some(event) = event_rx.recv().await {
         update(event, &event_tx).await;
     }
-    log::warn!("bluetooth service has stopped receiving events");
+    tracing::warn!("bluetooth service has stopped receiving events");
 }
 
 async fn start_event_listening(
@@ -134,9 +134,9 @@ async fn start_event_listening(
         while let Some(event) = adapter_events.next().await {
             event_tx_clone
                 .send(BluetoothEvent::Adapter(event))
-                .unwrap_or_else(|e| log::error!("couldn't send adapter bluetooth event: {e}"));
+                .unwrap_or_else(|e| tracing::error!("couldn't send adapter bluetooth event: {e}"));
         }
-        log::error!("bluetooth service has stopped receiving adapter events");
+        tracing::error!("bluetooth service has stopped receiving adapter events");
     });
 
     // monitor existing devices for connection status changes
@@ -151,10 +151,10 @@ async fn start_event_listening(
                     event_tx_clone
                         .send(BluetoothEvent::Device(addr, event))
                         .unwrap_or_else(|e| {
-                            log::error!("couldn't send device bluetooth event: {e}")
+                            tracing::error!("couldn't send device bluetooth event: {e}")
                         });
                 }
-                log::warn!(
+                tracing::warn!(
                     "bluetooth service has stopped receiving events for device address {}",
                     addr
                 );
@@ -185,7 +185,7 @@ async fn update(input: BluetoothEvent, event_tx: &UnboundedSender<BluetoothEvent
 /// Re-polls adapter powered/discovering state and connected device count after
 /// a system wake, since D-Bus events may have been missed during sleep.
 async fn refresh_state_after_wake() {
-    log::debug!("system wake: refreshing bluetooth state");
+    tracing::debug!("system wake: refreshing bluetooth state");
 
     // clone the adapter and devices list without holding the write lock
     let (adapter, devices) = {
@@ -221,7 +221,7 @@ fn update_from_event(input: BluetoothEvent) -> Option<(Address, Device)> {
     let mut guard = BLUETOOTH_STATE.write();
     let state = (*guard).as_mut()?;
 
-    log::debug!("updating bluetooth state with event: {:?}", input);
+    tracing::debug!("updating bluetooth state with event: {:?}", input);
 
     match input {
         BluetoothEvent::Adapter(adapter_event) => match adapter_event {
@@ -240,7 +240,7 @@ fn update_from_event(input: BluetoothEvent) -> Option<(Address, Device)> {
                 match adapter_property {
                     AdapterProperty::Powered(p) => state.powered = p,
                     AdapterProperty::Discovering(d) => state.discovering = d,
-                    p => log::warn!("unhandled AdapterProperty event: {p:?}"),
+                    p => tracing::warn!("unhandled AdapterProperty event: {p:?}"),
                 }
                 None
             }
@@ -257,13 +257,13 @@ fn update_from_event(input: BluetoothEvent) -> Option<(Address, Device)> {
                         state.connected_device_count =
                             state.connected_device_count.saturating_sub(1);
                     }
-                    log::debug!(
+                    tracing::debug!(
                         "device {address} connected={connected}, count={}",
                         state.connected_device_count
                     );
                 }
                 DeviceEvent::PropertyChanged(device_property) => {
-                    log::debug!("device {address} property changed: {device_property:?}");
+                    tracing::debug!("device {address} property changed: {device_property:?}");
                 }
             }
             None
@@ -285,14 +285,16 @@ async fn subscribe_device_events(
                 while let Some(event) = device_events.next().await {
                     tx.send(BluetoothEvent::Device(address, event))
                         .unwrap_or_else(|e| {
-                            log::error!("couldn't send device bluetooth event for {address}: {e}")
+                            tracing::error!(
+                                "couldn't send device bluetooth event for {address}: {e}"
+                            )
                         });
                 }
-                log::warn!("bluetooth event stream ended for device {address}");
+                tracing::warn!("bluetooth event stream ended for device {address}");
             });
         }
         Err(e) => {
-            log::warn!("couldn't subscribe to events for device {address}: {e}");
+            tracing::warn!("couldn't subscribe to events for device {address}: {e}");
         }
     }
 }

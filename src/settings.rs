@@ -125,7 +125,7 @@ impl ConfigManager {
         if path.exists() {
             let content = fs::read_to_string(path)?;
             let config: CadenzaShellConfig = serde_json::from_str(&content)?;
-            log::info!("loaded configuration from: {}", path.display());
+            tracing::info!("loaded configuration from: {}", path.display());
             Ok(config)
         } else {
             let default_config = CadenzaShellConfig::default();
@@ -138,7 +138,7 @@ impl ConfigManager {
             // write default config
             let content = serde_json::to_string_pretty(&default_config)?;
             fs::write(path, content)?;
-            log::info!("created default configuration at: {}", path.display());
+            tracing::info!("created default configuration at: {}", path.display());
 
             Ok(default_config)
         }
@@ -174,14 +174,14 @@ impl ConfigManager {
     pub fn save(&self) -> Result<()> {
         let content = serde_json::to_string_pretty(&self.config)?;
         fs::write(&self.config_path, content)?;
-        log::info!("saved configuration to: {}", self.config_path.display());
+        tracing::info!("saved configuration to: {}", self.config_path.display());
         Ok(())
     }
 
     /// Reload configuration from file
     pub fn reload(&mut self) -> Result<()> {
         self.config = Self::load_config(&self.config_path)?;
-        log::info!("reloaded configuration from file");
+        tracing::info!("reloaded configuration from file");
         Ok(())
     }
 
@@ -189,7 +189,7 @@ impl ConfigManager {
     pub fn reset_to_defaults(&mut self) -> Result<()> {
         self.config = CadenzaShellConfig::default();
         self.save()?;
-        log::info!("reset configuration to defaults");
+        tracing::info!("reset configuration to defaults");
         Ok(())
     }
 }
@@ -204,8 +204,8 @@ pub fn init() -> Result<()> {
     let config = match ConfigManager::new() {
         Ok(manager) => manager.config,
         Err(e) => {
-            log::error!("failed to load configuration: {}", e);
-            log::info!("using default configuration");
+            tracing::error!("failed to load configuration: {}", e);
+            tracing::info!("using default configuration");
             CadenzaShellConfig::default()
         }
     };
@@ -237,7 +237,7 @@ pub fn update_config(new_config: CadenzaShellConfig) -> Result<()> {
         let config_path = ConfigManager::get_config_path();
         let content = serde_json::to_string_pretty(&new_config)?;
         fs::write(&config_path, content)?;
-        log::info!("updated and saved configuration");
+        tracing::info!("updated and saved configuration");
     }
     Ok(())
 }
@@ -251,7 +251,7 @@ pub fn reload_config() -> Result<()> {
         && let Ok(mut config) = config_mutex.lock()
     {
         *config = reloaded_config;
-        log::info!("reloaded configuration from file");
+        tracing::info!("reloaded configuration from file");
     }
     Ok(())
 }

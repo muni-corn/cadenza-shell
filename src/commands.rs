@@ -149,37 +149,37 @@ impl Command for AppCommand {
     fn execute(&self) -> Result<(), String> {
         match self {
             AppCommand::ToggleNotificationCenter => {
-                log::info!("toggling notification center");
+                tracing::info!("toggling notification center");
                 // in a real implementation, this would send a message to the notification
                 // center component
                 Ok(())
             }
             AppCommand::DismissNotification(id) => {
-                log::info!("dismissing notification {}", id);
+                tracing::info!("dismissing notification {}", id);
                 // in a real implementation, this would interact with the notification service
                 Ok(())
             }
             AppCommand::ToggleNetworkMenu => {
-                log::info!("toggling network menu");
+                tracing::info!("toggling network menu");
                 Ok(())
             }
             AppCommand::SwitchWorkspace(workspace) => {
-                log::info!("switching to workspace {}", workspace);
+                tracing::info!("switching to workspace {}", workspace);
                 // this would interact with Hyprland service
                 Ok(())
             }
             AppCommand::SetVolume(volume) => {
-                log::info!("setting volume to {}", volume);
+                tracing::info!("setting volume to {}", volume);
                 // this would interact with audio service
                 Ok(())
             }
             AppCommand::SetBrightness(brightness) => {
-                log::info!("setting brightness to {}", brightness);
+                tracing::info!("setting brightness to {}", brightness);
                 // this would interact with brightness service
                 Ok(())
             }
             AppCommand::ToggleMediaPlayback => {
-                log::info!("toggling media playback");
+                tracing::info!("toggling media playback");
                 // this would interact with MPRIS service
                 Ok(())
             }
@@ -190,15 +190,15 @@ impl Command for AppCommand {
         match self {
             // some commands can be undone
             AppCommand::SwitchWorkspace(_) => {
-                log::info!("undoing workspace switch (return to previous)");
+                tracing::info!("undoing workspace switch (return to previous)");
                 Ok(())
             }
             AppCommand::SetVolume(_) => {
-                log::info!("undoing volume change (restore previous level)");
+                tracing::info!("undoing volume change (restore previous level)");
                 Ok(())
             }
             AppCommand::SetBrightness(_) => {
-                log::info!("undoing brightness change (restore previous level)");
+                tracing::info!("undoing brightness change (restore previous level)");
                 Ok(())
             }
             // others cannot be meaningfully undone

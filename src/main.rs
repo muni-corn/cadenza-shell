@@ -29,12 +29,20 @@ mod icon_names {
 }
 
 use relm4::{RELM_THREADS, RelmApp};
+use tracing_subscriber::{EnvFilter, fmt};
 
 use crate::{app::CadenzaShellModel, style::compile_styles};
 
 #[tokio::main]
 async fn main() -> glib::ExitCode {
-    env_logger::init();
+    // default to info; bump notifications to debug for richer diagnostics
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
+        EnvFilter::new(
+            "info,cadenza_shell::notifications=debug,cadenza_shell::tiles::notifications=debug",
+        )
+    });
+
+    fmt().with_env_filter(filter).with_target(true).init();
 
     RELM_THREADS.set(16).unwrap();
 
@@ -42,12 +50,12 @@ async fn main() -> glib::ExitCode {
 
     // initialize configuration system
     if let Err(e) = settings::init() {
-        log::error!("failed to initialize settings: {}", e);
+        tracing::error!("failed to initialize settings: {}", e);
     }
 
     match compile_styles() {
         Ok(css) => relm4::set_global_css(&css),
-        Err(e) => log::error!("couldn't load scss: {e}"),
+        Err(e) => tracing::error!("couldn't load scss: {e}"),
     }
 
     RelmApp::new("com.musicaloft.cadenza-shell")

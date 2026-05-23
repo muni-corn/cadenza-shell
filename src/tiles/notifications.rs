@@ -65,14 +65,16 @@ impl SimpleComponent for NotificationsTile {
                         event_sender
                             .send(NotificationsTileMsg::Event(event))
                             .unwrap_or_else(|_| {
-                                log::error!("couldn't forward notification event to tile")
+                                tracing::error!("couldn't forward notification event to tile")
                             });
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        log::warn!("notifications tile missed {n} events (lagged receiver)");
+                        tracing::warn!("notifications tile missed {n} events (lagged receiver)");
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                        log::warn!("notifications event channel closed; tile event loop stopping");
+                        tracing::warn!(
+                            "notifications event channel closed; tile event loop stopping"
+                        );
                         break;
                     }
                 }
@@ -130,11 +132,11 @@ impl SimpleComponent for NotificationsTile {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             NotificationsTileMsg::TileClicked => {
-                log::debug!("notifications tile clicked");
+                tracing::debug!("notifications tile clicked");
                 sender
                     .output(NotificationsTileOutput::ToggleNotificationCenter)
                     .unwrap_or_else(|_| {
-                        log::error!("couldn't send output to open notification center")
+                        tracing::error!("couldn't send output to open notification center")
                     });
             }
             NotificationsTileMsg::StateUpdate(state) => {
@@ -142,12 +144,12 @@ impl SimpleComponent for NotificationsTile {
             }
             NotificationsTileMsg::Event(event) => match event {
                 NotificationEvent::Received(notification) => {
-                    log::debug!("new notification received: {}", notification.id);
+                    tracing::debug!("new notification received: {}", notification.id);
                     self.fresh_panel
                         .emit(FreshNotificationsMsg::NewNotification(notification));
                 }
                 NotificationEvent::Closed { id, .. } => {
-                    log::debug!("notification {} closed", id);
+                    tracing::debug!("notification {} closed", id);
                     self.fresh_panel
                         .emit(FreshNotificationsMsg::RemoveNotification(id));
                 }

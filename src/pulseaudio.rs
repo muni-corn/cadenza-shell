@@ -34,7 +34,7 @@ impl Default for PulseAudioData {
 
 pub async fn run_pulseaudio_loop() {
     let Some(mut proplist) = Proplist::new() else {
-        log::error!("failed to create pulseaudio proplist");
+        tracing::error!("failed to create pulseaudio proplist");
         return;
     };
 
@@ -42,17 +42,17 @@ pub async fn run_pulseaudio_loop() {
         .set_str("APPLICATION_NAME", "cadenza-shell")
         .is_err()
     {
-        log::error!("failed to update pulseaudio proplist");
+        tracing::error!("failed to update pulseaudio proplist");
         return;
     }
 
     let Some(mut mainloop) = Mainloop::new() else {
-        log::error!("failed to create pulseaudio mainloop");
+        tracing::error!("failed to create pulseaudio mainloop");
         return;
     };
 
     let Some(context) = Context::new_with_proplist(&mainloop, "cadenza-shell", &proplist) else {
-        log::error!("failed to create pulseaudio context");
+        tracing::error!("failed to create pulseaudio context");
         return;
     };
 
@@ -73,7 +73,7 @@ pub async fn run_pulseaudio_loop() {
         .unwrap()
         .connect(None, FlagSet::NOAUTOSPAWN, None)
     {
-        log::error!("failed to connect to pulse: {}", err);
+        tracing::error!("failed to connect to pulse: {}", err);
         return;
     }
 
@@ -82,7 +82,7 @@ pub async fn run_pulseaudio_loop() {
         match mainloop.iterate(true) {
             IterateResult::Success(_) => {}
             IterateResult::Err(err) => {
-                log::error!("pulse mainloop error: {:?}", err);
+                tracing::error!("pulse mainloop error: {:?}", err);
             }
             IterateResult::Quit(_) => break,
         }
@@ -96,7 +96,7 @@ fn on_state_change(context: &Arc<Mutex<Context>>) {
 
     match state {
         State::Ready => {
-            log::info!("connected to pulseaudio server");
+            tracing::info!("connected to pulseaudio server");
 
             let introspect = context.lock().unwrap().introspect();
 
@@ -124,11 +124,11 @@ fn on_state_change(context: &Arc<Mutex<Context>>) {
                 .subscribe(InterestMaskSet::SERVER | InterestMaskSet::SINK, |_| ());
         }
         State::Failed => {
-            log::error!("failed to connect to pulseaudio server");
+            tracing::error!("failed to connect to pulseaudio server");
             VOLUME_STATE.write().default_sink_name = None;
         }
         State::Terminated => {
-            log::warn!("connection to pulseaudio server terminated");
+            tracing::warn!("connection to pulseaudio server terminated");
         }
         _ => {}
     }

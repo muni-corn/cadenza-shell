@@ -118,7 +118,7 @@ impl FactoryComponent for TrayItem {
         {
             menu.as_menu_with_actions(&sender, &self.address, menu_path)
         } else {
-            log::warn!(
+            tracing::warn!(
                 "initializing tray item '{}' without menu (has_menu={}, has_menu_path={})",
                 self.address,
                 self.menu.is_some(),
@@ -194,7 +194,9 @@ impl FactoryComponent for TrayItem {
                     x: 0,
                     y: 0,
                 }))
-                .unwrap_or_else(|_| log::error!("couldn't activate tray item {}", address_clone));
+                .unwrap_or_else(|_| {
+                    tracing::error!("couldn't activate tray item {}", address_clone)
+                });
         });
 
         // right click for context menu
@@ -323,7 +325,7 @@ fn create_menu_from_items(
                                 submenu_id,
                             }))
                             .unwrap_or_else(|_| {
-                                log::error!("failed to activate menu item {}", submenu_id)
+                                tracing::error!("failed to activate menu item {}", submenu_id)
                             });
                     });
 
@@ -356,7 +358,7 @@ fn pixmap_to_texture(pixmaps: &[IconPixmap]) -> Option<gdk4::Texture> {
     let expected_len = width * height * 4;
 
     if pixmap.pixels.len() != expected_len {
-        log::warn!(
+        tracing::warn!(
             "pixmap size mismatch: expected {} bytes, got {}",
             expected_len,
             pixmap.pixels.len()

@@ -37,7 +37,7 @@ pub async fn run_sleep_monitor() {
     let conn = match zbus::Connection::system().await {
         Ok(c) => c,
         Err(e) => {
-            log::error!("couldn't connect to system D-Bus for sleep monitor: {e}");
+            tracing::error!("couldn't connect to system D-Bus for sleep monitor: {e}");
             return;
         }
     };
@@ -45,7 +45,7 @@ pub async fn run_sleep_monitor() {
     let proxy = match Login1ManagerProxy::new(&conn).await {
         Ok(p) => p,
         Err(e) => {
-            log::error!("couldn't create login1 manager proxy: {e}");
+            tracing::error!("couldn't create login1 manager proxy: {e}");
             return;
         }
     };
@@ -53,7 +53,7 @@ pub async fn run_sleep_monitor() {
     let mut stream = match proxy.receive_prepare_for_sleep().await {
         Ok(s) => s,
         Err(e) => {
-            log::error!("couldn't subscribe to PrepareForSleep signal: {e}");
+            tracing::error!("couldn't subscribe to PrepareForSleep signal: {e}");
             return;
         }
     };
@@ -62,12 +62,12 @@ pub async fn run_sleep_monitor() {
         if let Ok(args) = signal.args() {
             // start=false means the system has just woken up
             if !args.start {
-                log::debug!("system wake detected, notifying subscribers");
+                tracing::debug!("system wake detected, notifying subscribers");
                 // ignore send errors; no subscribers is fine
                 let _ = wake_tx().send(());
             }
         }
     }
 
-    log::warn!("sleep monitor has stopped receiving PrepareForSleep signals");
+    tracing::warn!("sleep monitor has stopped receiving PrepareForSleep signals");
 }

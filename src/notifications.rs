@@ -167,11 +167,11 @@ pub async fn run_notifications_service() {
 
     let connection = match initialize_notifications_daemon().await {
         Ok(c) => {
-            log::info!("notifications service started");
+            tracing::info!("notifications service started");
             c
         }
         Err(e) => {
-            log::error!("failed to start notifications service: {}", e);
+            tracing::error!("failed to start notifications service: {}", e);
             return;
         }
     };
@@ -184,7 +184,7 @@ pub async fn run_notifications_service() {
     {
         Ok(r) => r,
         Err(e) => {
-            log::error!("couldn't look up notifications daemon interface: {}", e);
+            tracing::error!("couldn't look up notifications daemon interface: {}", e);
             return;
         }
     };
@@ -192,14 +192,14 @@ pub async fn run_notifications_service() {
     // install the command sender so free functions can push commands
     let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<NotificationCommand>();
     if COMMAND_TX.set(cmd_tx).is_err() {
-        log::warn!("notifications service started more than once; extra instance exiting");
+        tracing::warn!("notifications service started more than once; extra instance exiting");
         return;
     }
 
     // drive the command loop
     loop {
         let Some(cmd) = cmd_rx.recv().await else {
-            log::warn!("notification command channel closed; service stopping");
+            tracing::warn!("notification command channel closed; service stopping");
             break;
         };
 
@@ -210,7 +210,7 @@ pub async fn run_notifications_service() {
 
                 // also emit the D-Bus signal so external clients are notified
                 if let Err(e) = interface_ref.notification_closed(id, 2).await {
-                    log::error!("couldn't emit notification_closed signal: {}", e);
+                    tracing::error!("couldn't emit notification_closed signal: {}", e);
                 }
             }
             NotificationCommand::ClearAll => {
@@ -224,7 +224,7 @@ pub async fn run_notifications_service() {
                 });
 
                 if let Err(e) = interface_ref.action_invoked(id, action_key).await {
-                    log::error!("couldn't emit action_invoked signal: {}", e);
+                    tracing::error!("couldn't emit action_invoked signal: {}", e);
                 }
             }
         }

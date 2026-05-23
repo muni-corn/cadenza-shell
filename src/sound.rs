@@ -11,6 +11,6 @@ pub fn play(event_id: &str) {
         .arg(event_id)
         .spawn()
     {
-        log::error!("couldn't spawn canberra-gtk-play: {e}");
+        tracing::error!("couldn't spawn canberra-gtk-play: {e}");
     }
 }

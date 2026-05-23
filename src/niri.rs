@@ -67,7 +67,7 @@ pub async fn start_event_listener() {
         // initial fetch
         fetch_and_update(&socket_path)
             .await
-            .unwrap_or_else(|e| log::error!("error getting initial niri state: {e}"));
+            .unwrap_or_else(|e| tracing::error!("error getting initial niri state: {e}"));
 
         loop {
             if let Ok(mut stream) = UnixStream::connect(&socket_path).await {
@@ -81,7 +81,7 @@ pub async fn start_event_listener() {
                     while reader.read_line(&mut line).await.is_ok() {
                         match serde_json::from_str::<Event>(line.trim()) {
                             Ok(event) => {
-                                log::debug!("niri event received: {:?}", event);
+                                tracing::debug!("niri event received: {:?}", event);
                                 match event {
                                     Event::WorkspacesChanged { .. }
                                     | Event::WorkspaceActivated { .. }
@@ -91,13 +91,13 @@ pub async fn start_event_listener() {
                                     | Event::WindowClosed { .. }
                                     | Event::WindowFocusChanged { .. } => {
                                         fetch_and_update(&socket_path).await.unwrap_or_else(|e| {
-                                            log::error!("couldn't update niri state: {}", e)
+                                            tracing::error!("couldn't update niri state: {}", e)
                                         });
                                     }
                                     _ => (),
                                 }
                             }
-                            Err(e) => log::error!("error parsing niri message: {}", e),
+                            Err(e) => tracing::error!("error parsing niri message: {}", e),
                         }
                         line.clear();
                     }
@@ -106,6 +106,6 @@ pub async fn start_event_listener() {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     } else {
-        log::warn!("NIRI_SOCKET env var is not available; niri service won't start");
+        tracing::warn!("NIRI_SOCKET env var is not available; niri service won't start");
     }
 }

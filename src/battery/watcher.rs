@@ -15,14 +15,14 @@ use crate::battery::{
 pub async fn start_battery_service() {
     // detect battery sysfs path
     let Some(battery_path) = detect_battery_path() else {
-        log::error!("couldn't detect battery interface");
+        tracing::error!("couldn't detect battery interface");
         return;
     };
 
     // read device identity for per-device profile keying
     let identity = read_battery_identity(&battery_path);
     let device_key = identity.device_key();
-    log::info!(
+    tracing::info!(
         "battery device: '{}' (key: '{device_key}')",
         identity.sysfs_name,
     );
@@ -30,11 +30,11 @@ pub async fn start_battery_service() {
     // load or create power usage history
     let mut power_history = match DischargeProfile::read_from_disk() {
         Ok(p) => {
-            log::info!("loaded power history from previous session");
+            tracing::info!("loaded power history from previous session");
             p
         }
         Err(e) => {
-            log::info!("creating new power usage log: {}", e);
+            tracing::info!("creating new power usage log: {}", e);
             DischargeProfile::default()
         }
     };
@@ -58,7 +58,7 @@ pub async fn start_battery_service() {
     let monitor = match create_battery_monitor() {
         Ok(m) => m,
         Err(e) => {
-            log::error!("couldn't create udev battery monitor: {}", e);
+            tracing::error!("couldn't create udev battery monitor: {}", e);
             return;
         }
     };
@@ -66,7 +66,7 @@ pub async fn start_battery_service() {
     let async_fd = match AsyncFd::new(monitor) {
         Ok(fd) => fd,
         Err(e) => {
-            log::error!("couldn't wrap udev monitor in AsyncFd: {}", e);
+            tracing::error!("couldn't wrap udev monitor in AsyncFd: {}", e);
             return;
         }
     };
@@ -100,36 +100,36 @@ async fn watch_battery(
                 let mut guard = match guard {
                     Ok(g) => g,
                     Err(e) => {
-                        log::error!("error acquiring guard: {e}");
+                        tracing::error!("error acquiring guard: {e}");
                         continue;
                     },
                 };
 
-                log::debug!("async_fd ready: {:?}", guard.ready());
+                tracing::debug!("async_fd ready: {:?}", guard.ready());
 
                 // drain all pending events from the monitor
                 for event in guard.get_inner().iter() {
-                    log::debug!("udev event received: {event:?}");
+                    tracing::debug!("udev event received: {event:?}");
                     if is_battery_change(&event) {
-                        log::debug!("event is a battery event");
+                        tracing::debug!("event is a battery event");
                         update_battery_state(
                             battery_path,
                             power_history,
                             alert_state,
                         ).await;
                     } else {
-                        log::debug!("event was not a battery event");
+                        tracing::debug!("event was not a battery event");
                     }
                 }
 
-                log::debug!("reaching end of socket iterator");
+                tracing::debug!("reaching end of socket iterator");
 
                 // clear readiness so we wait for the next edge
                 guard.clear_ready();
             }
 
             _ = poll_interval.tick() => {
-                log::debug!("battery poll interval elapsed, fetching battery info");
+                tracing::debug!("battery poll interval elapsed, fetching battery info");
                 update_battery_state(
                     battery_path,
                     power_history,
@@ -148,7 +148,7 @@ async fn update_battery_state(
     alert_state: &mut AlertState,
 ) {
     let Some(reading) = read_battery_sysfs(battery_path) else {
-        log::warn!("couldn't read battery sysfs");
+        tracing::warn!("couldn't read battery sysfs");
         return;
     };
 

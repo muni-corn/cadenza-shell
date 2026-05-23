@@ -81,7 +81,7 @@ impl SimpleComponent for NiriTile {
 
     fn update(&mut self, _msg: Self::Input, _sender: ComponentSender<Self>) {
         let Some(state) = NIRI_STATE.read().clone() else {
-            log::debug!("no niri state, not updating niri tile");
+            tracing::debug!("no niri state, not updating niri tile");
             return;
         };
 
@@ -150,7 +150,7 @@ impl SimpleComponent for NiriTile {
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         let Some(state) = NIRI_STATE.read().clone() else {
-            log::debug!("no niri state, not updating niri tile view",);
+            tracing::debug!("no niri state, not updating niri tile view",);
             return;
         };
 

@@ -69,7 +69,7 @@ impl NotificationsDaemon {
             actions,
         };
 
-        log::debug!("new notification received: {:?}", notification);
+        tracing::debug!("new notification received: {:?}", notification);
 
         // write to the global state
         NOTIFICATIONS_STATE
@@ -104,7 +104,7 @@ impl NotificationsDaemon {
 
         // emit D-Bus signal (reason 2 = closed by the notification server)
         if let Err(e) = emitter.notification_closed(id, 2).await {
-            log::error!("failed to emit notification_closed signal: {}", e);
+            tracing::error!("failed to emit notification_closed signal: {}", e);
         }
 
         let _ = self

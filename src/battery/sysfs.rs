@@ -180,7 +180,7 @@ pub fn read_battery_identity(battery_path: &Path) -> BatteryIdentity {
         sysfs_name,
     };
 
-    log::debug!(
+    tracing::debug!(
         "battery identity: sysfs='{}' manufacturer={} model={} serial={} → key='{}'",
         identity.sysfs_name,
         identity.manufacturer.as_deref().unwrap_or("(none)"),

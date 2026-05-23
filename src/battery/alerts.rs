@@ -48,12 +48,12 @@ impl AlertState {
             // automatically set warn_triggered to true here, because it's implied
             self.warn_triggered = true;
             self.critical_triggered = true;
-            log::info!("battery critical alert ({:.0}%)", percentage * 100.0);
+            tracing::info!("battery critical alert ({:.0}%)", percentage * 100.0);
             fire_battery_alert(AlertLevel::Critical).await;
         } else if percentage <= BATTERY_THRESHOLD_LOW && !self.warn_triggered {
             // warning alert (20%)
             self.warn_triggered = true;
-            log::info!("battery low alert ({:.0}%)", percentage * 100.0);
+            tracing::info!("battery low alert ({:.0}%)", percentage * 100.0);
             fire_battery_alert(AlertLevel::Normal).await;
         }
     }
@@ -96,7 +96,7 @@ async fn send_notification(summary: &str, body: &str, urgency: u8) {
     let connection = match zbus::Connection::session().await {
         Ok(c) => c,
         Err(e) => {
-            log::warn!("couldn't open D-Bus session for battery alert: {}", e);
+            tracing::warn!("couldn't open D-Bus session for battery alert: {}", e);
             return;
         }
     };
@@ -132,6 +132,6 @@ async fn send_notification(summary: &str, body: &str, urgency: u8) {
         .await;
 
     if let Err(e) = result {
-        log::warn!("couldn't send battery alert notification: {}", e);
+        tracing::warn!("couldn't send battery alert notification: {}", e);
     }
 }

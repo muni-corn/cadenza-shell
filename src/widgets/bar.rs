@@ -151,7 +151,7 @@ impl SimpleAsyncComponent for Bar {
             .map(|c| c.to_string())
             .unwrap_or_default();
         model.monitor.connect_invalidate(move |_| {
-            log::info!(
+            tracing::info!(
                 "monitor invalidated, notifying app to remove bar for: {}",
                 connector
             );
@@ -159,7 +159,7 @@ impl SimpleAsyncComponent for Bar {
                 .send(BarOutput::MonitorInvalidated(connector.clone()))
                 .is_err()
             {
-                log::error!("failed to send MonitorInvalidated: receiver already dropped");
+                tracing::error!("failed to send MonitorInvalidated: receiver already dropped");
             }
         });
 
@@ -184,7 +184,7 @@ impl SimpleAsyncComponent for Bar {
         // surface immediately; without this, GTK may finalize the GtkWindow while
         // the layer surface is still alive, which causes wlr-layer-shell
         // compositors (including Niri) to move the surface to another output
-        log::debug!(
+        tracing::debug!(
             "shutting down bar for monitor: {:?}",
             self.monitor.connector()
         );

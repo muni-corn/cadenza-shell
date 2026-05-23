@@ -92,7 +92,7 @@ impl DischargeProfile {
 
             // do nothing otherwise
             _ => {
-                log::warn!("update called in DischargeProfile while not discharging");
+                tracing::warn!("update called in DischargeProfile while not discharging");
                 return;
             }
         }
@@ -101,7 +101,7 @@ impl DischargeProfile {
         let now = Local::now();
         if now.signed_duration_since(self.last_save) >= SAVE_INTERVAL {
             if let Err(e) = self.save_to_disk() {
-                log::error!("couldn't save discharge profile: {e}");
+                tracing::error!("couldn't save discharge profile: {e}");
             } else {
                 self.last_save = now;
             }
@@ -152,7 +152,7 @@ impl DischargeProfile {
             })
             .map(|(i, (a, b))| (i + 1, a, b))
         {
-            log::debug!(
+            tracing::debug!(
                 "most useless harmonic: #{smallest_coefficient_ordinal} (a = {smallest_a}, b = \
                  {smallest_b})"
             );
@@ -305,7 +305,7 @@ impl DischargeProfile {
         let json = serde_json::to_string_pretty(&self)?;
         let path = Self::get_state_path()?;
         fs::write(&path, json).context("couldn't write predictor state")?;
-        log::debug!("saved power history state to {:?}", path);
+        tracing::debug!("saved power history state to {:?}", path);
         Ok(())
     }
 }
@@ -401,29 +401,29 @@ impl DischargingStatistics {
         let standard_deviation = self.variance_ema.sqrt();
         let value = current_estimate_ts as f64;
 
-        log::debug!("-----discharging statistics--------------------");
+        tracing::debug!("-----discharging statistics--------------------");
 
         if let Some(new_utc) = DateTime::from_timestamp(current_estimate_ts, 0) {
-            log::debug!(
+            tracing::debug!(
                 "{:>17}: {}",
                 "tte estimate now",
                 DateTime::<Local>::from(new_utc)
             );
         }
         if let Some(ema_utc) = DateTime::from_timestamp(self.ema as i64, 0) {
-            log::debug!(
+            tracing::debug!(
                 "{:>17}: {}",
                 "tte estimate ema",
                 DateTime::<Local>::from(ema_utc)
             );
         }
 
-        log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
+        tracing::debug!("- - - - - - - - - - - - - - - - - - - - - ");
 
         if let Some(min_ts) = self.min_observed
             && let Some(min_utc) = DateTime::from_timestamp(min_ts, 0)
         {
-            log::debug!(
+            tracing::debug!(
                 "{:>17}: {}",
                 "earliest end",
                 DateTime::<Local>::from(min_utc)
@@ -432,7 +432,7 @@ impl DischargingStatistics {
 
         let pessimistic_ts = value - standard_deviation;
         if let Some(pessimistic_utc) = DateTime::from_timestamp(pessimistic_ts as i64, 0) {
-            log::debug!(
+            tracing::debug!(
                 "{:>17}: {}",
                 "pessimistic end",
                 DateTime::<Local>::from(pessimistic_utc)
@@ -441,7 +441,7 @@ impl DischargingStatistics {
 
         let optimistic_ts = value + standard_deviation;
         if let Some(optimistic_utc) = DateTime::from_timestamp(optimistic_ts as i64, 0) {
-            log::debug!(
+            tracing::debug!(
                 "{:>17}: {}",
                 "optimistic end",
                 DateTime::<Local>::from(optimistic_utc)
@@ -451,27 +451,27 @@ impl DischargingStatistics {
         if let Some(max_ts) = self.max_observed
             && let Some(max_utc) = DateTime::from_timestamp(max_ts, 0)
         {
-            log::debug!("{:>17}: {}", "latest end", DateTime::<Local>::from(max_utc));
+            tracing::debug!("{:>17}: {}", "latest end", DateTime::<Local>::from(max_utc));
         }
 
-        log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
+        tracing::debug!("- - - - - - - - - - - - - - - - - - - - - ");
 
-        log::debug!("{:>17}: {:>6}", "predictions made", self.n_updates);
+        tracing::debug!("{:>17}: {:>6}", "predictions made", self.n_updates);
 
         if let (Some(min_ts), Some(max_ts)) = (self.min_observed, self.max_observed) {
             let span_hours = (max_ts - min_ts) as f64 / SECONDS_PER_HOUR as f64;
-            log::debug!("{:>17}: {:>6.1} h", "observed tte span", span_hours);
+            tracing::debug!("{:>17}: {:>6.1} h", "observed tte span", span_hours);
         }
 
-        log::debug!(
+        tracing::debug!(
             "{:>17}: {:>6.1} min^2",
             "variance",
             self.variance_ema / SECONDS_PER_HOUR as f64
         );
 
-        log::debug!("{:>17}: {:>6.1} min", "σ", standard_deviation / 60.0);
+        tracing::debug!("{:>17}: {:>6.1} min", "σ", standard_deviation / 60.0);
 
-        log::debug!(
+        tracing::debug!(
             "{:>17}: {:>+6.1} min",
             "bias (ema Δ)",
             self.deviation_ema / 60.0
@@ -479,8 +479,8 @@ impl DischargingStatistics {
 
         let bias_now = value - self.ema;
         if self.variance_ema > 0.0 {
-            log::debug!("- - - - - - - - - - - - - - - - - - - - - ");
-            log::debug!(
+            tracing::debug!("- - - - - - - - - - - - - - - - - - - - - ");
+            tracing::debug!(
                 "current estimate is {:+.1} min ({:.1}σ) from ema estimate",
                 bias_now / 60.0,
                 bias_now.abs() / standard_deviation

@@ -22,7 +22,7 @@ pub async fn start_brightness_watcher() {
     let mut inotify = match Inotify::init() {
         Ok(inotify) => inotify,
         Err(e) => {
-            log::error!("failed to init inotify: {}", e);
+            tracing::error!("failed to init inotify: {}", e);
             return;
         }
     };
@@ -31,7 +31,7 @@ pub async fn start_brightness_watcher() {
     let Ok(_wd) = inotify
         .watches()
         .add(&brightness_path, WatchMask::CLOSE_WRITE)
-        .map_err(|e| log::error!("couldn't set up inotify watch for brightness: {}", e))
+        .map_err(|e| tracing::error!("couldn't set up inotify watch for brightness: {}", e))
     else {
         return;
     };
@@ -44,12 +44,12 @@ pub async fn start_brightness_watcher() {
                     // when the brightness file is closed after writing, read the new value
                     match read_current_brightness_percentage(&interface_clone, max_val) {
                         Ok(percentage) => *BRIGHTNESS_STATE.write() = Some(percentage),
-                        Err(e) => log::error!("couldn't update brightness info: {}", e),
+                        Err(e) => tracing::error!("couldn't update brightness info: {}", e),
                     }
                 }
             }
             Err(e) => {
-                log::error!("error while reading inotify events: {}", e);
+                tracing::error!("error while reading inotify events: {}", e);
                 break;
             }
         }

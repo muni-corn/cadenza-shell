@@ -85,7 +85,7 @@ impl SimpleComponent for NetworkTile {
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
-        log::debug!("network tile received update: {msg:?}");
+        tracing::debug!("network tile received update: {msg:?}");
         let NetworkTileMsg::Update(new_info) = msg;
         self.current_state = new_info.clone();
     }

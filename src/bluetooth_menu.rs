@@ -163,7 +163,7 @@ impl SimpleComponent for BluetoothMenu {
                     if let Some(state) = state_clone
                         && let Err(e) = state.adapter.set_powered(enabled).await
                     {
-                        log::error!("failed to toggle bluetooth: {}", e);
+                        tracing::error!("failed to toggle bluetooth: {}", e);
                     }
                 });
             }
@@ -174,7 +174,7 @@ impl SimpleComponent for BluetoothMenu {
                         && let Some(device) = state.get_device(&addr)
                         && let Err(e) = device.connect().await
                     {
-                        log::error!("failed to connect to device {}: {}", addr, e);
+                        tracing::error!("failed to connect to device {}: {}", addr, e);
                     }
                 });
             }
@@ -185,7 +185,7 @@ impl SimpleComponent for BluetoothMenu {
                         && let Some(device) = state.get_device(&addr)
                         && let Err(e) = device.disconnect().await
                     {
-                        log::error!("failed to disconnect from device {}: {}", addr, e);
+                        tracing::error!("failed to disconnect from device {}: {}", addr, e);
                     }
                 });
             }
