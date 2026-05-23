@@ -231,9 +231,18 @@ impl FactoryComponent for NotificationCard {
     fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         match msg {
             NotificationCardMsg::Dismiss => {
+                tracing::trace!(
+                    notification.id = self.notification.id,
+                    "notification card dismiss clicked"
+                );
                 let _ = sender.output(NotificationCardOutput::Dismiss(self.notification.id));
             }
             NotificationCardMsg::Action(action_id) => {
+                tracing::trace!(
+                    notification.id = self.notification.id,
+                    %action_id,
+                    "notification card action clicked"
+                );
                 let _ = sender.output(NotificationCardOutput::Action(
                     self.notification.id,
                     action_id,

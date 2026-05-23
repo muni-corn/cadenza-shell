@@ -163,18 +163,27 @@ impl SimpleComponent for ActionPanel {
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
             ActionPanelMsg::Toggle => {
-                self.visible = !self.visible;
+                let next = !self.visible;
+                tracing::debug!(visible = next, "notification center toggled");
+                self.visible = next;
             }
             ActionPanelMsg::DismissAll => {
+                tracing::debug!("notification center dismiss-all triggered");
                 crate::notifications::clear_all();
             }
             ActionPanelMsg::StateUpdate => {
                 // view is rebuilt from the global in update_view
             }
             ActionPanelMsg::DismissNotification(id) => {
+                tracing::trace!(notification.id = id, "notification dismissed from center");
                 crate::notifications::dismiss(id);
             }
             ActionPanelMsg::NotificationAction(id, action) => {
+                tracing::trace!(
+                    notification.id = id,
+                    %action,
+                    "notification action invoked from center"
+                );
                 crate::notifications::invoke_action(id, action);
             }
         }
