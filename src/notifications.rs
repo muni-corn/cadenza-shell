@@ -160,6 +160,7 @@ pub struct NotificationHints {
 ///
 /// Must be started exactly once, from `app.rs`, before any UI component
 /// subscribes to the state or issues commands.
+#[tracing::instrument(level = "debug", skip_all)]
 pub async fn run_notifications_service() {
     // initialize the broadcast sender so subscribers can call subscribe_events()
     // before the first event arrives
@@ -167,11 +168,14 @@ pub async fn run_notifications_service() {
 
     let connection = match initialize_notifications_daemon().await {
         Ok(c) => {
-            tracing::info!("notifications service started");
+            tracing::info!(
+                bus_name = "org.freedesktop.Notifications",
+                "notifications service registered on session bus"
+            );
             c
         }
         Err(e) => {
-            tracing::error!("failed to start notifications service: {}", e);
+            tracing::error!(error = %e, "failed to start notifications service");
             return;
         }
     };
@@ -184,7 +188,7 @@ pub async fn run_notifications_service() {
     {
         Ok(r) => r,
         Err(e) => {
-            tracing::error!("couldn't look up notifications daemon interface: {}", e);
+            tracing::error!(error = %e, "couldn't look up notifications daemon interface");
             return;
         }
     };
@@ -196,6 +200,8 @@ pub async fn run_notifications_service() {
         return;
     }
 
+    tracing::debug!("entering command loop");
+
     // drive the command loop
     loop {
         let Some(cmd) = cmd_rx.recv().await else {
@@ -205,33 +211,46 @@ pub async fn run_notifications_service() {
 
         match cmd {
             NotificationCommand::Dismiss(id) => {
+                tracing::trace!(notification.id = id, "dismiss command received");
+
                 NOTIFICATIONS_STATE.write().notifications.remove(&id);
+                let remaining = NOTIFICATIONS_STATE.read().notifications.len();
+                tracing::debug!(notification.id = id, remaining, "notification dismissed");
+
                 let _ = event_tx().send(NotificationEvent::Closed { id, reason: 2 });
 
                 // also emit the D-Bus signal so external clients are notified
                 if let Err(e) = interface_ref.notification_closed(id, 2).await {
-                    tracing::error!("couldn't emit notification_closed signal: {}", e);
+                    tracing::error!(notification.id = id, error = %e, "couldn't emit notification_closed signal");
                 }
             }
             NotificationCommand::ClearAll => {
+                tracing::trace!("clear_all command received");
+
                 NOTIFICATIONS_STATE.write().notifications.clear();
+                tracing::debug!("all notifications cleared from state");
+
                 let _ = event_tx().send(NotificationEvent::AllCleared);
             }
             NotificationCommand::InvokeAction { id, action_key } => {
+                tracing::trace!(notification.id = id, %action_key, "invoke_action command received");
+
                 let _ = event_tx().send(NotificationEvent::ActionInvoked {
                     id,
                     action_key: action_key.clone(),
                 });
 
                 if let Err(e) = interface_ref.action_invoked(id, action_key).await {
-                    tracing::error!("couldn't emit action_invoked signal: {}", e);
+                    tracing::error!(notification.id = id, error = %e, "couldn't emit action_invoked signal");
                 }
             }
         }
     }
 }
 
+#[tracing::instrument(level = "debug", skip_all)]
 async fn initialize_notifications_daemon() -> Result<Connection> {
+    tracing::debug!("building D-Bus connection for org.freedesktop.Notifications");
     Ok(zbus::connection::Builder::session()?
         .name("org.freedesktop.Notifications")?
         .serve_at(
