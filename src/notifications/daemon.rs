@@ -42,6 +42,7 @@ impl NotificationsDaemon {
             NOTIFICATION_ID.fetch_add(1, Ordering::SeqCst)
         };
 
+        let is_replacement = replaces_id != 0;
         let urgency = hints.urgency.unwrap_or(NotificationUrgency::Normal);
 
         let timestamp = SystemTime::now()
@@ -52,7 +53,7 @@ impl NotificationsDaemon {
         let actions = {
             let evens = actions.iter().step_by(2).cloned();
             let odds = actions.iter().skip(1).step_by(2).cloned();
-            evens.zip(odds).collect()
+            evens.zip(odds).collect::<Vec<_>>()
         };
 
         let notification = Notification {
@@ -66,10 +67,19 @@ impl NotificationsDaemon {
             urgency,
             timeout: expire_timeout,
             timestamp,
-            actions,
+            actions: actions.clone(),
         };
 
-        tracing::debug!("new notification received: {:?}", notification);
+        tracing::info!(
+            notification.id = id,
+            notification.app = %app_name,
+            notification.summary = %summary,
+            ?urgency,
+            expire_timeout,
+            action_count = actions.len(),
+            is_replacement,
+            "notify accepted"
+        );
 
         // write to the global state
         NOTIFICATIONS_STATE
@@ -84,10 +94,16 @@ impl NotificationsDaemon {
 
         // handle timeout — auto-close non-persistent notifications
         if expire_timeout > 0 {
+            tracing::debug!(
+                notification.id = id,
+                expire_timeout,
+                "scheduling auto-close timer"
+            );
             let event_tx = self.event_tx.clone();
             relm4::spawn(async move {
                 tokio::time::sleep(tokio::time::Duration::from_millis(expire_timeout as u64)).await;
                 NOTIFICATIONS_STATE.write().notifications.remove(&id);
+                tracing::debug!(notification.id = id, "auto-close timer fired");
                 let _ = event_tx.send(NotificationEvent::Closed { id, reason: 1 });
             });
         }
@@ -100,11 +116,16 @@ impl NotificationsDaemon {
         id: u32,
         #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
     ) {
+        tracing::debug!(
+            notification.id = id,
+            "close_notification invoked over D-Bus"
+        );
+
         NOTIFICATIONS_STATE.write().notifications.remove(&id);
 
         // emit D-Bus signal (reason 2 = closed by the notification server)
         if let Err(e) = emitter.notification_closed(id, 2).await {
-            tracing::error!("failed to emit notification_closed signal: {}", e);
+            tracing::error!(notification.id = id, error = %e, "failed to emit notification_closed signal");
         }
 
         let _ = self
@@ -113,6 +134,7 @@ impl NotificationsDaemon {
     }
 
     async fn get_capabilities(&self) -> Vec<String> {
+        tracing::trace!("get_capabilities called");
         vec![
             "action-icons".to_string(),
             "actions".to_string(),
@@ -127,6 +149,7 @@ impl NotificationsDaemon {
     }
 
     async fn get_server_information(&self) -> (String, String, String, String) {
+        tracing::trace!("get_server_information called");
         (
             "cadenza-shell".to_string(),
             "municorn".to_string(),
