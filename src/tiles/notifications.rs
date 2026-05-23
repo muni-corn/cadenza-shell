@@ -69,7 +69,10 @@ impl SimpleComponent for NotificationsTile {
                             });
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!("notifications tile missed {n} events (lagged receiver)");
+                        tracing::warn!(
+                            missed_events = n,
+                            "notifications tile lagged on broadcast receiver"
+                        );
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                         tracing::warn!(
@@ -140,24 +143,44 @@ impl SimpleComponent for NotificationsTile {
                     });
             }
             NotificationsTileMsg::StateUpdate(state) => {
-                self.notification_count = state.notifications.len();
+                let new_count = state.notifications.len();
+                tracing::debug!(
+                    previous_count = self.notification_count,
+                    notification_count = new_count,
+                    "tile state update"
+                );
+                self.notification_count = new_count;
             }
             NotificationsTileMsg::Event(event) => match event {
                 NotificationEvent::Received(notification) => {
-                    tracing::debug!("new notification received: {}", notification.id);
+                    tracing::debug!(
+                        notification.id = notification.id,
+                        notification.app = %notification.app_name,
+                        "tile received new notification event"
+                    );
                     self.fresh_panel
                         .emit(FreshNotificationsMsg::NewNotification(notification));
                 }
                 NotificationEvent::Closed { id, .. } => {
-                    tracing::debug!("notification {} closed", id);
+                    tracing::debug!(
+                        notification.id = id,
+                        "tile received notification closed event"
+                    );
                     self.fresh_panel
                         .emit(FreshNotificationsMsg::RemoveNotification(id));
                 }
                 NotificationEvent::AllCleared => {
+                    tracing::debug!("tile received all-cleared event");
                     // fresh panel will drain as each close event arrives via
                     // the state update; no extra action needed here
                 }
-                NotificationEvent::ActionInvoked { .. } => {}
+                NotificationEvent::ActionInvoked { id, action_key } => {
+                    tracing::debug!(
+                        notification.id = id,
+                        %action_key,
+                        "tile received action-invoked event"
+                    );
+                }
             },
             NotificationsTileMsg::Nothing => {}
         }
