@@ -67,7 +67,7 @@ in
                 mkdir -p "$out"
                 tar xzf ${attrs.src} --strip-components=1 \
                   --directory="$out" \
-                  relm4-icons-build-0.10.1/icons
+                  relm4-icons-build-0.11.0/icons
               '';
             in
             {
