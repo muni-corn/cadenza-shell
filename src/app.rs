@@ -12,7 +12,11 @@ use crate::{
     mpris::run_mpris_service,
     network::run_network_service,
     niri,
-    notifications::run_notifications_service,
+    notifications::{
+        NotificationEvent,
+        fresh::{FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput},
+        run_notifications_service, subscribe_events,
+    },
     pulseaudio::run_pulseaudio_loop,
     sleep_monitor::run_sleep_monitor,
     weather::start_weather_polling,
@@ -22,9 +26,18 @@ use crate::{
     },
 };
 
+/// Pairs a monitor connector name with its fresh-notification panel so we can
+/// drop the panel if that specific monitor is removed or invalidated.
+struct FreshPanel {
+    connector: String,
+    controller: Controller<FreshNotifications>,
+}
+
 pub(crate) struct CadenzaShellModel {
     bars: HashMap<String, AsyncController<Bar>>,
     tray_client: Option<Arc<Mutex<TrayClient>>>,
+    /// Single global fresh-notification popup panel, anchored to one monitor.
+    fresh_panel: Option<FreshPanel>,
 
     _display: Display,
 }
@@ -41,11 +54,18 @@ pub(crate) enum CadenzaShellMsg {
     MonitorInvalidated(String),
     HandleTrayItemOutput(TrayItemOutput),
     ToggleNotificationCenter,
+    /// A notification event forwarded from the global broadcast channel.
+    NotificationEvent(NotificationEvent),
+    /// A notification was dismissed from the fresh panel.
+    FreshNotificationDismissed(u32),
+    /// A notification action was triggered from the fresh panel.
+    FreshNotificationAction(u32, String),
 }
 
 #[derive(Debug)]
 pub(crate) enum CadenzaShellCommandOutput {
     TrayEvent(TrayEvent),
+    NotificationEvent(NotificationEvent),
 }
 
 impl AsyncComponent for CadenzaShellModel {
@@ -80,6 +100,41 @@ impl AsyncComponent for CadenzaShellModel {
         sender.command(|_, shutdown| {
             shutdown
                 .register(run_notifications_service())
+                .drop_on_shutdown()
+        });
+
+        // subscribe to notification events and forward them into update()
+        // note: run_notifications_service initializes EVENT_TX eagerly, so
+        // subscribe_events() is safe to call from here
+        sender.command(|out, shutdown| {
+            shutdown
+                .register(async move {
+                    let mut rx = subscribe_events();
+                    loop {
+                        match rx.recv().await {
+                            Ok(event) => {
+                                out.send(CadenzaShellCommandOutput::NotificationEvent(event))
+                                    .unwrap_or_else(|_| {
+                                        tracing::error!(
+                                            "couldn't forward notification event to app"
+                                        )
+                                    });
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                                tracing::warn!(
+                                    missed_events = n,
+                                    "app lagged on notification broadcast receiver"
+                                );
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                                tracing::warn!(
+                                    "notification event channel closed; app listener stopping"
+                                );
+                                break;
+                            }
+                        }
+                    }
+                })
                 .drop_on_shutdown()
         });
 
@@ -156,6 +211,7 @@ impl AsyncComponent for CadenzaShellModel {
         let model = CadenzaShellModel {
             bars: HashMap::new(),
             tray_client,
+            fresh_panel: None,
 
             _display: display.clone(),
         };
@@ -283,7 +339,7 @@ impl AsyncComponent for CadenzaShellModel {
 
                 let bar = Bar::builder()
                     .launch(BarInit {
-                        monitor,
+                        monitor: monitor.clone(),
                         tray_items,
                     })
                     .forward(sender.input_sender(), |output| match output {
@@ -298,11 +354,16 @@ impl AsyncComponent for CadenzaShellModel {
                         }
                     });
 
-                self.bars.insert(connector_str, bar);
+                self.bars.insert(connector_str.clone(), bar);
+
+                // create the fresh panel on the first available monitor if we
+                // don't have one yet
+                self.ensure_fresh_panel(connector_str, monitor, &sender);
             }
             CadenzaShellMsg::MonitorRemoved(connector) => {
                 tracing::info!("removing bar for monitor: {}", connector);
                 self.bars.remove(&connector);
+                self.drop_fresh_panel_if_owned(&connector);
             }
             CadenzaShellMsg::MonitorInvalidated(connector) => {
                 tracing::info!(
@@ -310,6 +371,7 @@ impl AsyncComponent for CadenzaShellModel {
                     connector
                 );
                 self.bars.remove(&connector);
+                self.drop_fresh_panel_if_owned(&connector);
             }
             CadenzaShellMsg::HandleTrayItemOutput(tray_item_output) => match tray_item_output {
                 TrayItemOutput::Activate(activate_request) => {
@@ -334,13 +396,55 @@ impl AsyncComponent for CadenzaShellModel {
                     bar.emit(BarMsg::ToggleNotificationCenter);
                 }
             }
+            CadenzaShellMsg::NotificationEvent(event) => {
+                let Some(panel) = &self.fresh_panel else {
+                    return;
+                };
+
+                match event {
+                    NotificationEvent::Received(notification) => {
+                        tracing::debug!(
+                            notification.id = notification.id,
+                            notification.app = %notification.app_name,
+                            "app forwarding new notification to fresh panel"
+                        );
+                        panel
+                            .controller
+                            .emit(FreshNotificationsMsg::NewNotification(notification));
+                    }
+                    NotificationEvent::Closed { id, .. } => {
+                        tracing::debug!(
+                            notification.id = id,
+                            "app forwarding notification closed to fresh panel"
+                        );
+                        panel
+                            .controller
+                            .emit(FreshNotificationsMsg::RemoveNotification(id));
+                    }
+                    // AllCleared and ActionInvoked don't require fresh panel
+                    // updates; individual Closed events will drain it
+                    NotificationEvent::AllCleared | NotificationEvent::ActionInvoked { .. } => {}
+                }
+            }
+            CadenzaShellMsg::FreshNotificationDismissed(id) => {
+                tracing::debug!(notification.id = id, "fresh panel dismissed notification");
+                crate::notifications::dismiss(id);
+            }
+            CadenzaShellMsg::FreshNotificationAction(id, action) => {
+                tracing::debug!(
+                    notification.id = id,
+                    %action,
+                    "fresh panel triggered notification action"
+                );
+                crate::notifications::invoke_action(id, action);
+            }
         }
     }
 
     async fn update_cmd(
         &mut self,
         message: Self::CommandOutput,
-        _sender: AsyncComponentSender<Self>,
+        sender: AsyncComponentSender<Self>,
         _root: &Self::Root,
     ) {
         match message {
@@ -349,6 +453,65 @@ impl AsyncComponent for CadenzaShellModel {
                     bar.emit(BarMsg::TrayEvent(event.clone()));
                 }
             }
+            Self::CommandOutput::NotificationEvent(event) => {
+                sender.input(CadenzaShellMsg::NotificationEvent(event));
+            }
+        }
+    }
+}
+
+impl CadenzaShellModel {
+    /// Creates the fresh notification panel anchored to `monitor` if none
+    /// exists yet. Does nothing if a panel is already running.
+    fn ensure_fresh_panel(
+        &mut self,
+        connector: String,
+        monitor: gdk4::Monitor,
+        sender: &AsyncComponentSender<Self>,
+    ) {
+        if self.fresh_panel.is_some() {
+            return;
+        }
+
+        tracing::info!(
+            connector = %connector,
+            "creating fresh notification panel on monitor"
+        );
+
+        let controller =
+            FreshNotifications::builder()
+                .launch(monitor)
+                .forward(sender.input_sender(), |msg| match msg {
+                    FreshNotificationsOutput::NotificationDismissed(id) => {
+                        CadenzaShellMsg::FreshNotificationDismissed(id)
+                    }
+                    FreshNotificationsOutput::NotificationActionTriggered(id, action) => {
+                        CadenzaShellMsg::FreshNotificationAction(id, action)
+                    }
+                });
+
+        self.fresh_panel = Some(FreshPanel {
+            connector,
+            controller,
+        });
+    }
+
+    /// Drops the fresh panel if it is anchored to `connector`.
+    ///
+    /// Called when a monitor is removed or invalidated so the panel is
+    /// re-created on the next available monitor.
+    fn drop_fresh_panel_if_owned(&mut self, connector: &str) {
+        let should_drop = self
+            .fresh_panel
+            .as_ref()
+            .is_some_and(|p| p.connector == connector);
+
+        if should_drop {
+            tracing::info!(
+                connector = %connector,
+                "dropping fresh notification panel; monitor removed"
+            );
+            self.fresh_panel = None;
         }
     }
 }

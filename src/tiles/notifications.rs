@@ -3,11 +3,7 @@ use relm4::prelude::*;
 
 use crate::{
     icon_names::BELL,
-    notifications::{
-        NOTIFICATIONS_STATE, NotificationEvent, NotificationsState,
-        fresh::{FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput},
-        subscribe_events,
-    },
+    notifications::{NOTIFICATIONS_STATE, NotificationsState},
     tiles::Attention,
     widgets::tile::{Tile, TileInit, TileMsg, TileOutput},
 };
@@ -15,14 +11,12 @@ use crate::{
 #[derive(Debug)]
 pub struct NotificationsTile {
     notification_count: usize,
-    fresh_panel: Controller<FreshNotifications>,
 }
 
 #[derive(Debug)]
 pub enum NotificationsTileMsg {
     TileClicked,
     StateUpdate(NotificationsState),
-    Event(NotificationEvent),
     Nothing,
 }
 
@@ -54,59 +48,6 @@ impl SimpleComponent for NotificationsTile {
             NotificationsTileMsg::StateUpdate(s.clone())
         });
 
-        // subscribe to per-event stream for driving fresh popups
-        let event_rx = subscribe_events();
-        let event_sender = sender.input_sender().clone();
-        relm4::spawn(async move {
-            let mut rx = event_rx;
-            loop {
-                match rx.recv().await {
-                    Ok(event) => {
-                        event_sender
-                            .send(NotificationsTileMsg::Event(event))
-                            .unwrap_or_else(|_| {
-                                tracing::error!("couldn't forward notification event to tile")
-                            });
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!(
-                            missed_events = n,
-                            "notifications tile lagged on broadcast receiver"
-                        );
-                    }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                        tracing::warn!(
-                            "notifications event channel closed; tile event loop stopping"
-                        );
-                        break;
-                    }
-                }
-            }
-        });
-
-        // create popups for first monitor only
-        let display = gdk4::Display::default().expect("could not get default display");
-        let monitor = display
-            .monitors()
-            .iter()
-            .next()
-            .expect("no monitor available for notifications")
-            .expect("couldn't get available monitor for notifications");
-
-        let fresh_panel =
-            FreshNotifications::builder()
-                .launch(monitor)
-                .forward(sender.input_sender(), |msg| match msg {
-                    FreshNotificationsOutput::NotificationDismissed(id) => {
-                        crate::notifications::dismiss(id);
-                        NotificationsTileMsg::Nothing
-                    }
-                    FreshNotificationsOutput::NotificationActionTriggered(id, action) => {
-                        crate::notifications::invoke_action(id, action);
-                        NotificationsTileMsg::Nothing
-                    }
-                });
-
         let notification_count = NOTIFICATIONS_STATE.read().notifications.len();
 
         let widgets = NotificationsTileWidgets {
@@ -124,10 +65,7 @@ impl SimpleComponent for NotificationsTile {
 
         widgets.root.append(widgets.tile.widget());
 
-        let model = NotificationsTile {
-            notification_count,
-            fresh_panel,
-        };
+        let model = NotificationsTile { notification_count };
 
         ComponentParts { model, widgets }
     }
@@ -151,37 +89,6 @@ impl SimpleComponent for NotificationsTile {
                 );
                 self.notification_count = new_count;
             }
-            NotificationsTileMsg::Event(event) => match event {
-                NotificationEvent::Received(notification) => {
-                    tracing::debug!(
-                        notification.id = notification.id,
-                        notification.app = %notification.app_name,
-                        "tile received new notification event"
-                    );
-                    self.fresh_panel
-                        .emit(FreshNotificationsMsg::NewNotification(notification));
-                }
-                NotificationEvent::Closed { id, .. } => {
-                    tracing::debug!(
-                        notification.id = id,
-                        "tile received notification closed event"
-                    );
-                    self.fresh_panel
-                        .emit(FreshNotificationsMsg::RemoveNotification(id));
-                }
-                NotificationEvent::AllCleared => {
-                    tracing::debug!("tile received all-cleared event");
-                    // fresh panel will drain as each close event arrives via
-                    // the state update; no extra action needed here
-                }
-                NotificationEvent::ActionInvoked { id, action_key } => {
-                    tracing::debug!(
-                        notification.id = id,
-                        %action_key,
-                        "tile received action-invoked event"
-                    );
-                }
-            },
             NotificationsTileMsg::Nothing => {}
         }
     }
