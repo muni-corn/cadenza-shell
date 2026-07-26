@@ -22,6 +22,10 @@ pub enum NetworkTileMsg {
 pub struct NetworkTileWidgets {
     tile: Controller<Tile>,
     _popover: gtk::Popover,
+    // kept alive so the menu's component runtime (and its NETWORK_STATE
+    // subscription) isn't shut down; dropping a Controller stops its
+    // runtime immediately
+    _network_menu: Controller<NetworkMenu>,
 }
 
 impl SimpleComponent for NetworkTile {
@@ -80,6 +84,7 @@ impl SimpleComponent for NetworkTile {
             widgets: NetworkTileWidgets {
                 tile,
                 _popover: popover,
+                _network_menu: network_menu,
             },
         }
     }

@@ -25,6 +25,7 @@ pub enum NetworkMenuMsg {
     UpdateState(NetworkInfo),
 }
 
+#[derive(Debug)]
 pub struct NetworkMenuWidgets {
     wifi_icon: gtk::Image,
     wifi_switch: gtk::Switch,
