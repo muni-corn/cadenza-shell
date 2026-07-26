@@ -37,6 +37,31 @@ pub enum NetworkPropertyChange {
     /// state that a missed or dropped signal would otherwise leave stale
     /// forever, the same way battery::watcher's poll interval does.
     Reconcile,
+    /// NetworkManager (re)appeared on the bus under a new unique name (e.g.
+    /// `systemctl restart NetworkManager`, or it starting after us). Existing
+    /// property-change subscriptions are bound to the previous owner's
+    /// unique name and go silent when it disappears, so they must be torn
+    /// down and re-established against the new owner.
+    NetworkManagerRestarted,
+}
+
+/// Tracks the abort handles for the top-level NetworkManager property
+/// watchers, so they can be cancelled and respawned when NetworkManager
+/// itself restarts under a new unique bus name.
+struct PropertyWatcherTasks {
+    state: tokio::task::AbortHandle,
+    connectivity: tokio::task::AbortHandle,
+    primary: tokio::task::AbortHandle,
+    wireless_enabled: tokio::task::AbortHandle,
+}
+
+impl PropertyWatcherTasks {
+    fn abort_all(&self) {
+        self.state.abort();
+        self.connectivity.abort();
+        self.primary.abort();
+        self.wireless_enabled.abort();
+    }
 }
 
 /// Tracks the abort handles for the per-connection subscription tasks that
@@ -59,7 +84,7 @@ impl SubscriptionTasks {
 }
 
 pub async fn run_network_service() {
-    let Ok((conn, event_tx, mut event_rx)) = setup_property_watching()
+    let Ok((conn, event_tx, mut event_rx, mut property_tasks)) = setup_property_watching()
         .await
         .inspect_err(|e| tracing::error!("failed to setup network property watching: {e}"))
     else {
@@ -169,6 +194,21 @@ pub async fn run_network_service() {
                     tracing::warn!("couldn't reconcile network state: {e}");
                 }
             }
+            NetworkPropertyChange::NetworkManagerRestarted => {
+                tracing::info!(
+                    "networkmanager reappeared on the bus, re-establishing subscriptions"
+                );
+                property_tasks.abort_all();
+                match spawn_property_watchers(&conn, &event_tx).await {
+                    Ok(new_tasks) => property_tasks = new_tasks,
+                    Err(e) => {
+                        tracing::error!("couldn't re-establish property watchers: {e}");
+                    }
+                }
+                if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
+                    tracing::warn!("couldn't refetch network state after restart: {e}");
+                }
+            }
         }
     }
     tracing::warn!("network service has stopped receiving events");
@@ -222,40 +262,60 @@ async fn handle_primary_change(
 /// Sets up D-Bus property watchers for NetworkManager.
 ///
 /// Returns the shared connection, a sender for injecting events (used when
-/// spawning the strength subscription task), and the event receiver.
+/// spawning the strength subscription task), the event receiver, and the
+/// abort handles for the spawned property watcher tasks.
 async fn setup_property_watching() -> anyhow::Result<(
     zbus::Connection,
     UnboundedSender<NetworkPropertyChange>,
     UnboundedReceiver<NetworkPropertyChange>,
+    PropertyWatcherTasks,
 )> {
     let conn = zbus::Connection::system().await?;
-    let nm_proxy = NetworkManagerProxy::new(&conn).await?;
-
     let (event_tx, event_rx) = mpsc::unbounded_channel::<NetworkPropertyChange>();
+
+    let property_tasks = spawn_property_watchers(&conn, &event_tx).await?;
+    spawn_name_owner_watcher(&conn, &event_tx).await;
+
+    Ok((conn, event_tx, event_rx, property_tasks))
+}
+
+/// Spawns the top-level NetworkManager property watchers (state,
+/// connectivity, primary connection, wifi enabled), forwarding changes into
+/// `event_tx`.
+///
+/// Callable both at startup and again after a `NetworkManagerRestarted`
+/// event, since the resulting signal subscriptions are bound to whichever
+/// unique name currently owns the `org.freedesktop.NetworkManager` bus name
+/// at subscribe time.
+async fn spawn_property_watchers(
+    conn: &zbus::Connection,
+    event_tx: &UnboundedSender<NetworkPropertyChange>,
+) -> anyhow::Result<PropertyWatcherTasks> {
+    let nm_proxy = NetworkManagerProxy::new(conn).await?;
 
     // watch for state changes
     let event_tx_clone = event_tx.clone();
     let mut state_stream = nm_proxy.receive_state_changed().await;
-    relm4::spawn(async move {
-        while let Some(change) = state_stream.next().await {
-            if let Ok(new_state) = change
-                .get()
-                .await
-                .inspect_err(|e| tracing::error!("couldn't get network state change value: {e}"))
-            {
-                event_tx_clone
-                    .clone()
-                    .send(NetworkPropertyChange::State(new_state))
-                    .unwrap_or_else(|e| tracing::error!("couldn't send state change: {e}"));
+    let state =
+        relm4::spawn(async move {
+            while let Some(change) = state_stream.next().await {
+                if let Ok(new_state) = change.get().await.inspect_err(|e| {
+                    tracing::error!("couldn't get network state change value: {e}")
+                }) {
+                    event_tx_clone
+                        .clone()
+                        .send(NetworkPropertyChange::State(new_state))
+                        .unwrap_or_else(|e| tracing::error!("couldn't send state change: {e}"));
+                }
             }
-        }
-        tracing::warn!("stream for network state changes has closed");
-    });
+            tracing::warn!("stream for network state changes has closed");
+        })
+        .abort_handle();
 
     // watch for connectivity changes
     let mut connectivity_stream = nm_proxy.receive_connectivity_changed().await;
     let event_tx_clone = event_tx.clone();
-    relm4::spawn(async move {
+    let connectivity = relm4::spawn(async move {
         while let Some(change) = connectivity_stream.next().await {
             if let Ok(new_connectivity) = change.get().await.inspect_err(|e| {
                 tracing::error!("couldn't get network connectivity change value: {e}")
@@ -266,12 +326,13 @@ async fn setup_property_watching() -> anyhow::Result<(
             }
         }
         tracing::warn!("stream for connectivity state changes has closed");
-    });
+    })
+    .abort_handle();
 
     // watch for primary connection changes
     let mut primary_connection_stream = nm_proxy.receive_primary_connection_changed().await;
     let event_tx_clone = event_tx.clone();
-    relm4::spawn(async move {
+    let primary = relm4::spawn(async move {
         while let Some(change) = primary_connection_stream.next().await {
             if let Ok(new_primary_connection_path) = change.get().await.inspect_err(|e| {
                 tracing::error!("couldn't get primary connection change value: {e}")
@@ -284,12 +345,13 @@ async fn setup_property_watching() -> anyhow::Result<(
             }
         }
         tracing::warn!("stream for primary connection state changes has closed");
-    });
+    })
+    .abort_handle();
 
     // watch for the wifi radio being switched on or off
     let mut wireless_enabled_stream = nm_proxy.receive_wireless_enabled_changed().await;
     let event_tx_clone = event_tx.clone();
-    relm4::spawn(async move {
+    let wireless_enabled = relm4::spawn(async move {
         while let Some(change) = wireless_enabled_stream.next().await {
             if let Ok(enabled) = change
                 .get()
@@ -302,9 +364,74 @@ async fn setup_property_watching() -> anyhow::Result<(
             }
         }
         tracing::warn!("stream for wireless enabled changes has closed");
-    });
+    })
+    .abort_handle();
 
-    Ok((conn, event_tx, event_rx))
+    Ok(PropertyWatcherTasks {
+        state,
+        connectivity,
+        primary,
+        wireless_enabled,
+    })
+}
+
+/// Watches for NetworkManager appearing under a new unique bus name (a
+/// restart, or it starting up after us) and forwards
+/// [`NetworkPropertyChange::NetworkManagerRestarted`] when it does.
+///
+/// This task itself never needs to be respawned: it's subscribed against
+/// `org.freedesktop.DBus`, the bus daemon itself, which does not restart
+/// out from under us the way NetworkManager can.
+async fn spawn_name_owner_watcher(
+    conn: &zbus::Connection,
+    event_tx: &UnboundedSender<NetworkPropertyChange>,
+) {
+    let dbus_proxy = match zbus::fdo::DBusProxy::new(conn).await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!("couldn't create DBus proxy for name owner watching: {e}");
+            return;
+        }
+    };
+
+    let mut stream = match dbus_proxy.receive_name_owner_changed().await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::error!("couldn't subscribe to NameOwnerChanged: {e}");
+            return;
+        }
+    };
+
+    let event_tx = event_tx.clone();
+    relm4::spawn(async move {
+        while let Some(signal) = stream.next().await {
+            let Ok(args) = signal
+                .args()
+                .inspect_err(|e| tracing::error!("couldn't parse NameOwnerChanged args: {e}"))
+            else {
+                continue;
+            };
+
+            if args.name.as_str() != "org.freedesktop.NetworkManager" {
+                continue;
+            }
+
+            // a non-empty new_owner means NetworkManager is now owned by
+            // some process (either it just started, or it restarted under a
+            // new unique name); either way our existing subscriptions need
+            // to be re-established against the current owner
+            if args.new_owner.is_some() {
+                event_tx
+                    .send(NetworkPropertyChange::NetworkManagerRestarted)
+                    .unwrap_or_else(|e| {
+                        tracing::error!("couldn't send networkmanager restart event: {e}")
+                    });
+            } else {
+                tracing::warn!("networkmanager disappeared from the bus");
+            }
+        }
+        tracing::warn!("stream for NameOwnerChanged has closed");
+    });
 }
 
 /// Fetches full network info for the given primary connection path.
