@@ -250,7 +250,11 @@ pub trait WirelessDevice {
     fn active_access_point(&self) -> zbus::Result<zvariant::OwnedObjectPath>;
 
     /// Request the device to scan.
-    fn request_scan(&self) -> zbus::Result<()>;
+    ///
+    /// `options` is currently always empty (no supported keys are needed for
+    /// a plain rescan), but the D-Bus method itself takes a mandatory
+    /// `a{sv}` argument, so it must be passed even if empty.
+    fn request_scan(&self, options: HashMap<String, zvariant::Value<'_>>) -> zbus::Result<()>;
 
     /// The bit rate currently used by the wireless device, in kilobits/second
     /// (Kb/s).
