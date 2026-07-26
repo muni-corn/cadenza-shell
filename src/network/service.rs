@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use futures_lite::StreamExt;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use zbus::zvariant::OwnedObjectPath;
@@ -11,7 +13,7 @@ use crate::{
         state::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo},
         types::{DeviceType, State},
     },
-    sleep_monitor,
+    settings, sleep_monitor,
 };
 
 #[allow(dead_code)]
@@ -31,6 +33,10 @@ pub enum NetworkPropertyChange {
     WifiEnabled(bool),
     /// The system just woke from sleep; triggers a full refetch.
     Wake,
+    /// Periodic full refetch, independent of any D-Bus event. Self-heals
+    /// state that a missed or dropped signal would otherwise leave stale
+    /// forever, the same way battery::watcher's poll interval does.
+    Reconcile,
 }
 
 /// Tracks the abort handles for the per-connection subscription tasks that
@@ -76,6 +82,23 @@ pub async fn run_network_service() {
                 }
                 Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
             }
+        }
+    });
+
+    // periodically reconcile full state so a missed or dropped D-Bus signal
+    // never leaves the tile stale indefinitely
+    let event_tx_reconcile = event_tx.clone();
+    relm4::spawn(async move {
+        let interval_secs = settings::get_config().network.reconcile_interval;
+        let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
+        // skip the first tick, which fires immediately; we already fetch
+        // initial state separately below
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            event_tx_reconcile
+                .send(NetworkPropertyChange::Reconcile)
+                .unwrap_or_else(|e| tracing::error!("couldn't send reconcile tick: {e}"));
         }
     });
 
@@ -138,6 +161,12 @@ pub async fn run_network_service() {
                 tracing::debug!("system wake: refreshing network state");
                 if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
                     tracing::warn!("couldn't refresh network state after wake: {e}");
+                }
+            }
+            NetworkPropertyChange::Reconcile => {
+                tracing::debug!("periodic reconcile: refreshing network state");
+                if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
+                    tracing::warn!("couldn't reconcile network state: {e}");
                 }
             }
         }
