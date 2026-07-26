@@ -7,6 +7,7 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct CadenzaShellConfig {
     pub ui: UiConfig,
     pub bar: BarConfig,
@@ -15,6 +16,7 @@ pub struct CadenzaShellConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct UiConfig {
     /// Overall UI scaling factor
     pub scale_factor: f64,
@@ -28,6 +30,7 @@ pub enum BarPosition {
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct BarConfig {
     /// Bar height in pixels
     pub height: i32,
@@ -40,6 +43,7 @@ pub struct BarConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct NotificationConfig {
     /// Maximum number of notifications to show
     pub max_notifications: usize,
@@ -52,6 +56,7 @@ pub struct NotificationConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct TileConfig {
     /// Default tile icon size
     pub icon_size: i32,
