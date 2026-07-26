@@ -239,6 +239,18 @@ pub trait NetworkDevice {
 
     #[zbus(property)]
     fn state_reason(&self) -> zbus::Result<DeviceStateReason>;
+
+    /// Emitted whenever the device's state changes, carrying both the new
+    /// and old state plus the reason for the transition (e.g. a failed
+    /// connection attempt due to missing/incorrect secrets).
+    ///
+    /// Named differently from the `State` property's auto-generated
+    /// `receive_state_changed` to avoid colliding with it; NM exposes both a
+    /// standard property-change notification for `State` and this separate,
+    /// richer legacy signal of the same D-Bus name.
+    #[zbus(signal, name = "StateChanged")]
+    fn device_state_changed(&self, new_state: u32, old_state: u32, reason: u32)
+    -> zbus::Result<()>;
 }
 
 #[proxy(
@@ -256,10 +268,32 @@ pub trait WirelessDevice {
     /// `a{sv}` argument, so it must be passed even if empty.
     fn request_scan(&self, options: HashMap<String, zvariant::Value<'_>>) -> zbus::Result<()>;
 
+    /// Get the list of all access points visible to this device, including
+    /// ones not currently visible in the scan list.
+    fn get_all_access_points(&self) -> zbus::Result<Vec<zvariant::OwnedObjectPath>>;
+
+    /// The list of access points visible to this device.
+    #[zbus(property)]
+    fn access_points(&self) -> zbus::Result<Vec<zvariant::OwnedObjectPath>>;
+
+    /// The timestamp (in CLOCK_BOOTTIME milliseconds) for the last time a
+    /// scan was completed. A value of -1 means the device never scanned for
+    /// access points.
+    #[zbus(property)]
+    fn last_scan(&self) -> zbus::Result<i64>;
+
     /// The bit rate currently used by the wireless device, in kilobits/second
     /// (Kb/s).
     #[zbus(property)]
     fn bitrate(&self) -> zbus::Result<u32>;
+
+    /// Emitted when an access point appears in the scan list.
+    #[zbus(signal)]
+    fn access_point_added(&self, access_point: zvariant::ObjectPath<'_>) -> zbus::Result<()>;
+
+    /// Emitted when an access point disappears from the scan list.
+    #[zbus(signal)]
+    fn access_point_removed(&self, access_point: zvariant::ObjectPath<'_>) -> zbus::Result<()>;
 }
 
 #[proxy(
@@ -364,4 +398,51 @@ pub trait ActiveConnection {
     /// The path of the connection object.
     #[zbus(property)]
     fn connection(&self) -> zbus::Result<zvariant::OwnedObjectPath>;
+}
+
+#[proxy(
+    interface = "org.freedesktop.NetworkManager.Settings",
+    default_service = "org.freedesktop.NetworkManager",
+    default_path = "/org/freedesktop/NetworkManager/Settings"
+)]
+pub trait Settings {
+    /// Adds a new connection profile, saved to disk, without activating it.
+    fn add_connection(
+        &self,
+        connection: HashMap<String, HashMap<String, zvariant::Value<'_>>>,
+    ) -> zbus::Result<zvariant::OwnedObjectPath>;
+
+    /// Returns the list of all known saved connection profiles.
+    fn list_connections(&self) -> zbus::Result<Vec<zvariant::OwnedObjectPath>>;
+
+    /// Returns the connection profile with the given UUID, if any.
+    fn get_connection_by_uuid(&self, uuid: &str) -> zbus::Result<zvariant::OwnedObjectPath>;
+
+    /// List of object paths of available saved connection profiles.
+    #[zbus(property)]
+    fn connections(&self) -> zbus::Result<Vec<zvariant::OwnedObjectPath>>;
+
+    /// Emitted when a new connection profile is added.
+    #[zbus(signal)]
+    fn new_connection(&self, connection: zvariant::ObjectPath<'_>) -> zbus::Result<()>;
+
+    /// Emitted when a connection profile is removed.
+    #[zbus(signal)]
+    fn connection_removed(&self, connection: zvariant::ObjectPath<'_>) -> zbus::Result<()>;
+}
+
+#[proxy(
+    interface = "org.freedesktop.NetworkManager.Settings.Connection",
+    default_service = "org.freedesktop.NetworkManager"
+)]
+pub trait SettingsConnection {
+    /// Returns the settings of this connection profile.
+    fn get_settings(&self) -> zbus::Result<HashMap<String, HashMap<String, zvariant::OwnedValue>>>;
+
+    /// Deletes this connection profile.
+    fn delete(&self) -> zbus::Result<()>;
+
+    /// The path of the connection's `.nmconnection` file on disk, if any.
+    #[zbus(property)]
+    fn filename(&self) -> zbus::Result<String>;
 }
