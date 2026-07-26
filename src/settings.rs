@@ -13,6 +13,8 @@ pub struct CadenzaShellConfig {
     pub bar: BarConfig,
     pub notifications: NotificationConfig,
     pub tiles: TileConfig,
+    pub network: NetworkConfig,
+    pub bluetooth: BluetoothConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -68,6 +70,33 @@ pub struct TileConfig {
     pub analog_clock_radius: f64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct NetworkConfig {
+    /// How often (in seconds) to reconcile network state from NetworkManager
+    /// even without an incoming property change event.
+    pub reconcile_interval: u64,
+    /// How often (in seconds) the network menu re-requests a wifi scan while
+    /// it is open.
+    pub scan_interval: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BluetoothConfig {
+    /// Whether cadenza-shell should register itself as BlueZ's default
+    /// pairing agent. Leave this false to coexist with another agent (e.g.
+    /// blueman); cadenza-shell still handles pairing prompts for pairings it
+    /// initiates itself either way.
+    pub default_agent: bool,
+    /// How often (in seconds) to reconcile bluetooth state from BlueZ even
+    /// without an incoming property change event.
+    pub reconcile_interval: u64,
+    /// How long (in seconds) a device discovery session runs before
+    /// automatically stopping.
+    pub discovery_timeout: u64,
+}
+
 impl Default for UiConfig {
     fn default() -> Self {
         Self { scale_factor: 1.0 }
@@ -103,6 +132,25 @@ impl Default for TileConfig {
             show_labels: true,
             max_text_width: 30,
             analog_clock_radius: 60.0,
+        }
+    }
+}
+
+impl Default for NetworkConfig {
+    fn default() -> Self {
+        Self {
+            reconcile_interval: 10,
+            scan_interval: 15,
+        }
+    }
+}
+
+impl Default for BluetoothConfig {
+    fn default() -> Self {
+        Self {
+            default_agent: false,
+            reconcile_interval: 10,
+            discovery_timeout: 30,
         }
     }
 }
