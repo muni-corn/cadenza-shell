@@ -15,6 +15,12 @@ pub struct NetworkInfo {
     pub connection_state: State,
     pub connectivity: ConnectivityState,
     pub specific_info: Option<SpecificNetworkInfo>,
+    /// Whether NetworkManager's wifi radio is enabled (the
+    /// `WirelessEnabled` property). This is the correct source of truth for
+    /// a wifi on/off toggle; `connection_state` reflects the overall
+    /// connection, not the radio, and can be `Asleep` for reasons other than
+    /// wifi being switched off.
+    pub wifi_enabled: bool,
 }
 
 impl Default for NetworkInfo {
@@ -23,15 +29,12 @@ impl Default for NetworkInfo {
             connection_state: State::Unknown,
             connectivity: ConnectivityState::Unknown,
             specific_info: None,
+            wifi_enabled: true,
         }
     }
 }
 
 impl NetworkInfo {
-    pub fn is_asleep(&self) -> bool {
-        self.connection_state == State::Asleep
-    }
-
     pub fn wifi_ssid(&self) -> Option<String> {
         if let Some(SpecificNetworkInfo::WiFi { ref wifi_ssid, .. }) = self.specific_info {
             Some(wifi_ssid.clone())

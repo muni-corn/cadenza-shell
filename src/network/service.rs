@@ -23,8 +23,33 @@ pub enum NetworkPropertyChange {
     Primary(OwnedObjectPath),
     /// The active access point's signal strength changed.
     Strength(u8),
+    /// The wireless device's active access point changed (e.g. NetworkManager
+    /// roamed to a different BSSID on the same SSID, which doesn't change
+    /// `PrimaryConnection`); triggers a full refetch.
+    ActiveApChanged,
+    /// The wifi radio was turned on or off.
+    WifiEnabled(bool),
     /// The system just woke from sleep; triggers a full refetch.
     Wake,
+}
+
+/// Tracks the abort handles for the per-connection subscription tasks that
+/// are cancelled and respawned every time the primary connection changes.
+#[derive(Default)]
+struct SubscriptionTasks {
+    strength: Option<tokio::task::AbortHandle>,
+    active_ap: Option<tokio::task::AbortHandle>,
+}
+
+impl SubscriptionTasks {
+    fn abort_all(&mut self) {
+        if let Some(handle) = self.strength.take() {
+            handle.abort();
+        }
+        if let Some(handle) = self.active_ap.take() {
+            handle.abort();
+        }
+    }
 }
 
 pub async fn run_network_service() {
@@ -56,8 +81,8 @@ pub async fn run_network_service() {
 
     // fetch initial state immediately so the tile is correct before any events
     // arrive
-    let mut strength_task: Option<tokio::task::AbortHandle> = None;
-    if let Err(e) = handle_primary_change(&conn, &event_tx, &mut strength_task).await {
+    let mut tasks = SubscriptionTasks::default();
+    if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
         tracing::warn!("couldn't fetch initial network state: {e}");
     }
 
@@ -77,9 +102,7 @@ pub async fn run_network_service() {
                     tracing::debug!(
                         "connected state with no device info, refetching network state"
                     );
-                    if let Err(e) =
-                        handle_primary_change(&conn, &event_tx, &mut strength_task).await
-                    {
+                    if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
                         tracing::warn!("couldn't refetch network info after state change: {e}");
                     }
                 }
@@ -88,7 +111,7 @@ pub async fn run_network_service() {
                 NETWORK_STATE.write().connectivity = connectivity
             }
             NetworkPropertyChange::Primary(_) => {
-                if let Err(e) = handle_primary_change(&conn, &event_tx, &mut strength_task).await {
+                if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
                     tracing::error!("couldn't handle primary connection change: {e}");
                 }
             }
@@ -102,9 +125,18 @@ pub async fn run_network_service() {
                     *wifi_strength = strength;
                 }
             }
+            NetworkPropertyChange::ActiveApChanged => {
+                tracing::debug!("active access point changed, refetching network state");
+                if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
+                    tracing::warn!("couldn't refetch network state after roaming: {e}");
+                }
+            }
+            NetworkPropertyChange::WifiEnabled(enabled) => {
+                NETWORK_STATE.write().wifi_enabled = enabled;
+            }
             NetworkPropertyChange::Wake => {
                 tracing::debug!("system wake: refreshing network state");
-                if let Err(e) = handle_primary_change(&conn, &event_tx, &mut strength_task).await {
+                if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
                     tracing::warn!("couldn't refresh network state after wake: {e}");
                 }
             }
@@ -114,22 +146,20 @@ pub async fn run_network_service() {
 }
 
 /// Fetches current NM state, updates [`NETWORK_STATE`], and (re)subscribes to
-/// access point signal strength changes if on WiFi.
+/// access point signal strength changes and active-access-point changes if
+/// on WiFi.
 ///
-/// Any previously running strength subscription task is cancelled first.
+/// Any previously running subscription tasks are cancelled first.
 async fn handle_primary_change(
     conn: &zbus::Connection,
     event_tx: &UnboundedSender<NetworkPropertyChange>,
-    strength_task: &mut Option<tokio::task::AbortHandle>,
+    tasks: &mut SubscriptionTasks,
 ) -> anyhow::Result<()> {
-    // cancel previous strength subscription before fetching
-    if let Some(handle) = strength_task.take() {
-        handle.abort();
-    }
+    tasks.abort_all();
 
     let nm_proxy = NetworkManagerProxy::new(conn).await?;
     let primary_path = nm_proxy.primary_connection().await?;
-    let (info, ap_path) = fetch_network_info(conn, primary_path).await?;
+    let (info, ap_path, wifi_device_path) = fetch_network_info(conn, primary_path).await?;
 
     tracing::debug!("fetched network info: {:?}", info);
     *NETWORK_STATE.write() = info;
@@ -141,7 +171,20 @@ async fn handle_primary_change(
         let handle = relm4::spawn(async move {
             subscribe_ap_strength(conn_clone, ap_path, tx).await;
         });
-        *strength_task = Some(handle.abort_handle());
+        tasks.strength = Some(handle.abort_handle());
+    }
+
+    // subscribe to active access point changes on the wireless device, so
+    // roaming to a different BSSID (which doesn't change PrimaryConnection)
+    // still triggers a refetch instead of leaving strength/SSID frozen on
+    // the now-disappeared access point object
+    if let Some(device_path) = wifi_device_path {
+        let tx = event_tx.clone();
+        let conn_clone = conn.clone();
+        let handle = relm4::spawn(async move {
+            subscribe_active_ap(conn_clone, device_path, tx).await;
+        });
+        tasks.active_ap = Some(handle.abort_handle());
     }
 
     Ok(())
@@ -214,13 +257,33 @@ async fn setup_property_watching() -> anyhow::Result<(
         tracing::warn!("stream for primary connection state changes has closed");
     });
 
+    // watch for the wifi radio being switched on or off
+    let mut wireless_enabled_stream = nm_proxy.receive_wireless_enabled_changed().await;
+    let event_tx_clone = event_tx.clone();
+    relm4::spawn(async move {
+        while let Some(change) = wireless_enabled_stream.next().await {
+            if let Ok(enabled) = change
+                .get()
+                .await
+                .inspect_err(|e| tracing::error!("couldn't get wireless enabled value: {e}"))
+            {
+                event_tx_clone
+                    .send(NetworkPropertyChange::WifiEnabled(enabled))
+                    .unwrap_or_else(|e| tracing::error!("couldn't send wifi enabled change: {e}"));
+            }
+        }
+        tracing::warn!("stream for wireless enabled changes has closed");
+    });
+
     Ok((conn, event_tx, event_rx))
 }
 
 /// Fetches full network info for the given primary connection path.
 ///
 /// Returns the `NetworkInfo` and, if connected via WiFi, the active access
-/// point object path (for setting up a strength subscription).
+/// point object path (for setting up a strength subscription) and the
+/// wireless device's object path (for setting up an active-access-point
+/// subscription).
 ///
 /// Only fails if the overall connection state and connectivity themselves
 /// can't be read (i.e. NetworkManager itself is unreachable). If the
@@ -232,26 +295,38 @@ async fn setup_property_watching() -> anyhow::Result<(
 async fn fetch_network_info(
     conn: &zbus::Connection,
     primary_connection_path: OwnedObjectPath,
-) -> anyhow::Result<(NetworkInfo, Option<OwnedObjectPath>)> {
+) -> anyhow::Result<(
+    NetworkInfo,
+    Option<OwnedObjectPath>,
+    Option<OwnedObjectPath>,
+)> {
     let nm_proxy = NetworkManagerProxy::new(conn).await?;
 
     let connection_state = nm_proxy.state().await?;
     let connectivity = nm_proxy.connectivity().await?;
+    // WirelessEnabled should basically never fail to read alongside State
+    // and Connectivity, but fall back to "enabled" defensively rather than
+    // abort the whole fetch over a single missing property.
+    let wifi_enabled = nm_proxy
+        .wireless_enabled()
+        .await
+        .inspect_err(|e| tracing::warn!("couldn't read wireless enabled state: {e}"))
+        .unwrap_or(true);
 
     let is_connected = matches!(
         connection_state,
         State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal
     );
 
-    let (specific_info, ap_path) = if is_connected {
+    let (specific_info, ap_path, wifi_device_path) = if is_connected {
         fetch_specific_info(conn, &primary_connection_path)
             .await
             .unwrap_or_else(|e| {
                 tracing::debug!("couldn't fetch device-specific network info: {e}");
-                (None, None)
+                (None, None, None)
             })
     } else {
-        (None, None)
+        (None, None, None)
     };
 
     Ok((
@@ -259,20 +334,28 @@ async fn fetch_network_info(
             connection_state,
             connectivity,
             specific_info,
+            wifi_enabled,
         },
         ap_path,
+        wifi_device_path,
     ))
 }
 
 /// Fetches the connected device's type-specific info (wired or wifi).
 ///
-/// Returns `Ok((None, None))` when the primary connection has no associated
-/// device yet, or the device is of a type we don't render distinctly (e.g.
-/// mobile broadband).
+/// Returns `Ok((None, None, None))` when the primary connection has no
+/// associated device yet, or the device is of a type we don't render
+/// distinctly (e.g. mobile broadband). The third element is the wireless
+/// device's own object path, present whenever the connected device is wifi
+/// regardless of whether an access point could be read.
 async fn fetch_specific_info(
     conn: &zbus::Connection,
     primary_connection_path: &OwnedObjectPath,
-) -> anyhow::Result<(Option<SpecificNetworkInfo>, Option<OwnedObjectPath>)> {
+) -> anyhow::Result<(
+    Option<SpecificNetworkInfo>,
+    Option<OwnedObjectPath>,
+    Option<OwnedObjectPath>,
+)> {
     let active_conn_proxy = ActiveConnectionProxy::builder(conn)
         .path(primary_connection_path)?
         .build()
@@ -282,7 +365,7 @@ async fn fetch_specific_info(
     tracing::debug!("active network device paths: {:?}", active_device_paths);
 
     let Some(device_path) = active_device_paths.first() else {
-        return Ok((None, None));
+        return Ok((None, None, None));
     };
 
     let device_proxy = NetworkDeviceProxy::builder(conn)
@@ -291,18 +374,28 @@ async fn fetch_specific_info(
         .await?;
 
     match device_proxy.device_type().await? {
-        DeviceType::Ethernet => Ok((Some(SpecificNetworkInfo::Wired), None)),
+        DeviceType::Ethernet => Ok((Some(SpecificNetworkInfo::Wired), None, None)),
         DeviceType::Wifi => {
-            let (ssid, strength, ap_path) = get_wifi_info(conn, device_path).await?;
-            Ok((
-                Some(SpecificNetworkInfo::WiFi {
-                    wifi_ssid: ssid,
-                    wifi_strength: strength,
-                }),
-                Some(ap_path),
-            ))
+            // always report the wifi device path so the caller can subscribe
+            // to ActiveAccessPoint changes even if there's no access point to
+            // read yet (e.g. mid-association); otherwise we'd never notice
+            // once one becomes available until an unrelated event fires
+            match get_wifi_info(conn, device_path).await {
+                Ok((ssid, strength, ap_path)) => Ok((
+                    Some(SpecificNetworkInfo::WiFi {
+                        wifi_ssid: ssid,
+                        wifi_strength: strength,
+                    }),
+                    Some(ap_path),
+                    Some(device_path.clone()),
+                )),
+                Err(e) => {
+                    tracing::debug!("couldn't fetch wifi access point info: {e}");
+                    Ok((None, None, Some(device_path.clone())))
+                }
+            }
         }
-        _ => Ok((None, None)),
+        _ => Ok((None, None, None)),
     }
 }
 
@@ -387,4 +480,44 @@ async fn subscribe_ap_strength(
     }
 
     tracing::debug!("strength subscription for access point {ap_path} ended");
+}
+
+/// Subscribes to active-access-point changes on a wireless device and
+/// forwards them as [`NetworkPropertyChange::ActiveApChanged`] events.
+///
+/// This catches roaming to a different BSSID on the same SSID, which does
+/// not change `PrimaryConnection` and would otherwise leave the strength
+/// subscription pointed at an access point object that has left the bus.
+///
+/// This task runs until the stream closes or the task is aborted (e.g. when
+/// the primary connection changes or the system sleeps).
+async fn subscribe_active_ap(
+    conn: zbus::Connection,
+    device_path: OwnedObjectPath,
+    tx: UnboundedSender<NetworkPropertyChange>,
+) {
+    let builder = match WirelessDeviceProxy::builder(&conn).path(&device_path) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::error!("invalid wireless device path {device_path}: {e}");
+            return;
+        }
+    };
+    let wifi_proxy = match builder.build().await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::error!("couldn't build wireless device proxy for active AP subscription: {e}");
+            return;
+        }
+    };
+
+    let mut stream = wifi_proxy.receive_active_access_point_changed().await;
+    tracing::debug!("subscribed to active access point changes for device {device_path}");
+
+    while stream.next().await.is_some() {
+        tx.send(NetworkPropertyChange::ActiveApChanged)
+            .unwrap_or_else(|e| tracing::error!("couldn't send active AP change: {e}"));
+    }
+
+    tracing::debug!("active access point subscription for device {device_path} ended");
 }

@@ -90,7 +90,7 @@ impl SimpleComponent for NetworkMenu {
             .build();
 
         let wifi_switch = gtk::Switch::builder()
-            .active(!current_state.is_asleep())
+            .active(current_state.wifi_enabled)
             .halign(gtk::Align::End)
             .valign(gtk::Align::End)
             .build();
@@ -261,7 +261,7 @@ impl SimpleComponent for NetworkMenu {
             .set_icon_name(Some(get_icon(&self.network_state)));
         widgets
             .wifi_switch
-            .set_active(!self.network_state.is_asleep());
+            .set_active(self.network_state.wifi_enabled);
 
         widgets
             .ssid_label
