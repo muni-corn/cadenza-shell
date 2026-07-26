@@ -221,92 +221,88 @@ async fn setup_property_watching() -> anyhow::Result<(
 ///
 /// Returns the `NetworkInfo` and, if connected via WiFi, the active access
 /// point object path (for setting up a strength subscription).
+///
+/// Only fails if the overall connection state and connectivity themselves
+/// can't be read (i.e. NetworkManager itself is unreachable). If the
+/// device-specific details (which device, which access point) can't be
+/// determined - e.g. because `ActiveAccessPoint` hasn't been populated yet
+/// mid-association - `specific_info` degrades to `None` rather than
+/// discarding the whole fetch, so [`NETWORK_STATE`] is never left stale
+/// after a transient read failure.
 async fn fetch_network_info(
     conn: &zbus::Connection,
     primary_connection_path: OwnedObjectPath,
 ) -> anyhow::Result<(NetworkInfo, Option<OwnedObjectPath>)> {
     let nm_proxy = NetworkManagerProxy::new(conn).await?;
 
-    // get overall state
     let connection_state = nm_proxy.state().await?;
-
-    // get connectivity
     let connectivity = nm_proxy.connectivity().await?;
 
     let is_connected = matches!(
         connection_state,
         State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal
     );
-    if is_connected {
-        // get primary connection details
-        let active_conn_proxy = ActiveConnectionProxy::builder(conn)
-            .path(&primary_connection_path)?
-            .build()
-            .await?;
 
-        let active_device_paths = active_conn_proxy.devices().await?;
+    let (specific_info, ap_path) = if is_connected {
+        fetch_specific_info(conn, &primary_connection_path)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::debug!("couldn't fetch device-specific network info: {e}");
+                (None, None)
+            })
+    } else {
+        (None, None)
+    };
 
-        tracing::debug!("active network device paths: {:?}", active_device_paths);
+    Ok((
+        NetworkInfo {
+            connection_state,
+            connectivity,
+            specific_info,
+        },
+        ap_path,
+    ))
+}
 
-        if let Some(device_path) = active_device_paths.first() {
-            let device_proxy = NetworkDeviceProxy::builder(conn)
-                .path(device_path)?
-                .build()
-                .await?;
+/// Fetches the connected device's type-specific info (wired or wifi).
+///
+/// Returns `Ok((None, None))` when the primary connection has no associated
+/// device yet, or the device is of a type we don't render distinctly (e.g.
+/// mobile broadband).
+async fn fetch_specific_info(
+    conn: &zbus::Connection,
+    primary_connection_path: &OwnedObjectPath,
+) -> anyhow::Result<(Option<SpecificNetworkInfo>, Option<OwnedObjectPath>)> {
+    let active_conn_proxy = ActiveConnectionProxy::builder(conn)
+        .path(primary_connection_path)?
+        .build()
+        .await?;
 
-            let device_type = device_proxy.device_type().await?;
+    let active_device_paths = active_conn_proxy.devices().await?;
+    tracing::debug!("active network device paths: {:?}", active_device_paths);
 
-            match device_type {
-                DeviceType::Ethernet => Ok((
-                    NetworkInfo {
-                        connection_state,
-                        connectivity,
-                        specific_info: Some(SpecificNetworkInfo::Wired),
-                    },
-                    None,
-                )),
-                DeviceType::Wifi => {
-                    let (ssid, strength, ap_path) = get_wifi_info(conn, device_path).await?;
-                    Ok((
-                        NetworkInfo {
-                            connection_state,
-                            connectivity,
-                            specific_info: Some(SpecificNetworkInfo::WiFi {
-                                wifi_ssid: ssid,
-                                wifi_strength: strength,
-                            }),
-                        },
-                        Some(ap_path),
-                    ))
-                }
-                _ => Ok((
-                    NetworkInfo {
-                        connection_state,
-                        connectivity,
-                        specific_info: None,
-                    },
-                    None,
-                )),
-            }
-        } else {
+    let Some(device_path) = active_device_paths.first() else {
+        return Ok((None, None));
+    };
+
+    let device_proxy = NetworkDeviceProxy::builder(conn)
+        .path(device_path)?
+        .build()
+        .await?;
+
+    match device_proxy.device_type().await? {
+        DeviceType::Ethernet => Ok((Some(SpecificNetworkInfo::Wired), None)),
+        DeviceType::Wifi => {
+            let (ssid, strength, ap_path) = get_wifi_info(conn, device_path).await?;
             Ok((
-                NetworkInfo {
-                    connection_state,
-                    connectivity,
-                    specific_info: None,
-                },
-                None,
+                Some(SpecificNetworkInfo::WiFi {
+                    wifi_ssid: ssid,
+                    wifi_strength: strength,
+                }),
+                Some(ap_path),
             ))
         }
-    } else {
-        Ok((
-            NetworkInfo {
-                connection_state,
-                connectivity,
-                specific_info: None,
-            },
-            None,
-        ))
+        _ => Ok((None, None)),
     }
 }
 
