@@ -368,7 +368,7 @@ fn pixmap_to_texture(pixmaps: &[IconPixmap]) -> Option<gdk4::Texture> {
 
     let mut rgba_data = Vec::with_capacity(expected_len);
 
-    for chunk in pixmap.pixels.chunks_exact(4) {
+    for chunk in pixmap.pixels.as_chunks::<4>().0 {
         let a = chunk[0];
         let r = chunk[1];
         let g = chunk[2];

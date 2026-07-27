@@ -1,4 +1,3 @@
-#![feature(result_option_map_or_default)]
 #![feature(never_type)]
 
 mod analog_clock;
