@@ -12,7 +12,6 @@ use crate::{
 pub struct BluetoothTile {
     tile: Controller<Tile>,
     bluetooth_info: Option<BluetoothState>,
-    tooltip_text: String,
 }
 
 #[derive(Debug)]
@@ -26,13 +25,8 @@ pub enum BluetoothTileMsg {
     Update(Option<BluetoothState>),
 }
 
-#[derive(Debug)]
-pub enum BluetoothTileCommandOutput {
-    TooltipText(String),
-}
-
 impl Component for BluetoothTile {
-    type CommandOutput = BluetoothTileCommandOutput;
+    type CommandOutput = ();
     type Init = ();
     type Input = BluetoothTileMsg;
     type Output = TileOutput;
@@ -81,7 +75,6 @@ impl Component for BluetoothTile {
             model: Self {
                 tile,
                 bluetooth_info: current_state,
-                tooltip_text: String::new(),
             },
             widgets: BluetoothWidgets {
                 _popover: popover,
@@ -93,7 +86,7 @@ impl Component for BluetoothTile {
     fn update(
         &mut self,
         BluetoothTileMsg::Update(info): Self::Input,
-        sender: ComponentSender<Self>,
+        _sender: ComponentSender<Self>,
         root: &Self::Root,
     ) {
         root.set_visible(info.is_some());
@@ -102,22 +95,9 @@ impl Component for BluetoothTile {
         if let Some(state) = info {
             self.tile
                 .emit(TileMsg::SetIcon(Some(get_bluetooth_icon(&state))));
-            sender.oneshot_command(async move {
-                let text = get_tooltip_text(&state);
-                BluetoothTileCommandOutput::TooltipText(text)
-            });
+            self.tile
+                .emit(TileMsg::SetTooltip(Some(get_tooltip_text(&state))));
         }
-    }
-
-    fn update_cmd(
-        &mut self,
-        BluetoothTileCommandOutput::TooltipText(text): Self::CommandOutput,
-        _sender: ComponentSender<Self>,
-        _root: &Self::Root,
-    ) {
-        self.tooltip_text = text;
-        self.tile
-            .emit(TileMsg::SetTooltip(Some(self.tooltip_text.clone())));
     }
 
     fn init_root() -> Self::Root {
@@ -138,10 +118,11 @@ fn get_bluetooth_icon(state: &BluetoothState) -> String {
     .to_string()
 }
 
-// TODO: this no longer needs to be wrapped in a oneshot_command by its
-// caller now that device info is a synchronous snapshot; left as-is here to
-// keep this change scoped to the snapshot migration; see the tile's
-// update() for the async wrapper this feeds.
+/// Builds the tile's tooltip text from cached device snapshots.
+///
+/// Synchronous: device connection state and alias are already snapshotted
+/// in `BluetoothState`, so this no longer needs a per-device D-Bus round
+/// trip (previously wrapped in a `oneshot_command` for exactly that reason).
 fn get_tooltip_text(state: &BluetoothState) -> String {
     if !state.powered {
         return "Bluetooth disabled".to_string();
