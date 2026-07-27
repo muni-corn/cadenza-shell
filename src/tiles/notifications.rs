@@ -17,7 +17,6 @@ pub struct NotificationsTile {
 pub enum NotificationsTileMsg {
     TileClicked,
     StateUpdate(NotificationsState),
-    Nothing,
 }
 
 #[derive(Debug)]
@@ -57,9 +56,8 @@ impl SimpleComponent for NotificationsTile {
                     icon_name: Some(BELL.to_string()),
                     ..Default::default()
                 })
-                .forward(sender.input_sender(), |msg| match msg {
-                    TileOutput::Clicked => NotificationsTileMsg::TileClicked,
-                    _ => NotificationsTileMsg::Nothing,
+                .forward(sender.input_sender(), |TileOutput::Clicked| {
+                    NotificationsTileMsg::TileClicked
                 }),
         };
 
@@ -89,7 +87,6 @@ impl SimpleComponent for NotificationsTile {
                 );
                 self.notification_count = new_count;
             }
-            NotificationsTileMsg::Nothing => {}
         }
     }
 

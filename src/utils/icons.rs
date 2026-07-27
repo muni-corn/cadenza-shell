@@ -1,6 +1,3 @@
-// temporary until we figure things out
-#![allow(dead_code)]
-
 use crate::icon_names::*;
 
 // icon constants for various widgets
@@ -38,14 +35,11 @@ pub const BATTERY_CHARGING_ICON_NAMES: &[&str] = &[
     BATTERY_100_CH,
 ];
 
-pub const NETWORK_WIFI: &str = RADIOWAVES_1;
 pub const NETWORK_WIFI_ICON_NAMES: &[&str] =
     &[RADIOWAVES_1, RADIOWAVES_2, RADIOWAVES_3, RADIOWAVES_4];
 pub const NETWORK_WIFI_DISABLED: &str = RADIOWAVES_NO;
-pub const NETWORK_WIFI_DISCONNECTED: &str = RADIOWAVES_X;
 pub const NETWORK_WIRED_DISABLED: &str = RADIOWAVES_NO;
 pub const NETWORK_WIRED_CONNECTED: &str = LAN;
-pub const NETWORK_WIRED_UNREACHABLE: &str = LAN_QUESTION;
 
 /// Get an icon from a list based on a percentage value from 0.0 to 1.0.
 pub fn percentage_to_icon_from_list<'a>(percentage: f64, icons: &'a [&'a str]) -> &'a str {

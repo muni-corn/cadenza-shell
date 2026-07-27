@@ -1,6 +1,3 @@
-// temporary until we figure things out
-#![allow(dead_code)]
-
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
@@ -25,37 +22,9 @@ pub enum TileMsg {
     SetTooltip(Option<String>),
 }
 
-// Tile-specific messages
-#[derive(Debug)]
-pub enum TileMessage {
-    Click,
-    RightClick,
-    MiddleClick,
-    ScrollUp,
-    ScrollDown,
-    ShowPopup,
-    HidePopup,
-}
-
-#[derive(Debug)]
-pub enum TileMenuType {
-    Context,
-    Settings,
-    Actions,
-}
-
-#[derive(Debug)]
-pub enum TilePopupType {
-    Details,
-    Controls,
-    Menu,
-}
-
 #[derive(Debug)]
 pub enum TileOutput {
     Clicked,
-    MenuRequested(String, TileMenuType),
-    PopupRequested(String, TilePopupType),
 }
 
 #[derive(Debug)]

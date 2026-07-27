@@ -58,7 +58,6 @@ fn main() {
             "snowflake",
             "moon-cloud",
             // wifi
-            "radiowaves-x",
             "radiowaves-1",
             "radiowaves-2",
             "radiowaves-3",
@@ -66,7 +65,6 @@ fn main() {
             "radiowaves-no",
             // network misc
             "lan",
-            "lan-question",
             // bluetooth
             "bluetooth",
             "bluetooth-dots",
