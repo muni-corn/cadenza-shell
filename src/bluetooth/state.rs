@@ -38,12 +38,22 @@ pub struct BluetoothState {
     pub discovering: bool,
 
     pub powered: bool,
-    pub connected_device_count: u8,
 }
 
 impl BluetoothState {
     pub fn devices(&self) -> hash_map::Values<'_, Address, DeviceInfo> {
         self.devices.values()
+    }
+
+    /// Number of currently-connected devices.
+    ///
+    /// Derived from the device snapshots on every read rather than tracked
+    /// as a separate incrementally-updated counter, so it can never drift
+    /// out of sync with the devices it's supposed to be counting (a missed
+    /// or duplicated `Connected` event used to desync a standalone counter
+    /// permanently until the next system wake).
+    pub fn connected_device_count(&self) -> usize {
+        self.devices.values().filter(|d| d.connected).count()
     }
 
     /// Builds a handle for issuing commands (connect/disconnect/pair/etc.)

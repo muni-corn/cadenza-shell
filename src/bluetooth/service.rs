@@ -45,19 +45,9 @@ pub async fn run_bluetooth_service() {
         }
     };
 
-    // poll initial connected count once; subsequent changes are tracked
-    // incrementally via DeviceProperty::Connected events
-    let mut connected_device_count: u8 = 0;
-    for info in devices.values() {
-        if info.connected {
-            connected_device_count = connected_device_count.saturating_add(1);
-        }
-    }
-
     let state = BluetoothState {
         _session: session,
         powered: adapter.is_powered().await.unwrap_or(false),
-        connected_device_count,
         devices,
         discovering: adapter.is_discovering().await.unwrap_or(false),
         adapter: adapter.clone(),
@@ -229,23 +219,17 @@ async fn refresh_state_after_wake() {
     let powered = adapter.is_powered().await.unwrap_or(false);
     let discovering = adapter.is_discovering().await.unwrap_or(false);
 
-    let mut connected_device_count: u8 = 0;
     let mut devices = HashMap::with_capacity(addresses.len());
     for address in addresses {
         let Ok(device) = adapter.device(address) else {
             continue;
         };
-        let info = build_device_info(&device).await;
-        if info.connected {
-            connected_device_count = connected_device_count.saturating_add(1);
-        }
-        devices.insert(address, info);
+        devices.insert(address, build_device_info(&device).await);
     }
 
     if let Some(ref mut state) = *BLUETOOTH_STATE.write() {
         state.powered = powered;
         state.discovering = discovering;
-        state.connected_device_count = connected_device_count;
         state.devices = devices;
     }
 }
@@ -288,20 +272,7 @@ fn update_from_event(input: BluetoothEvent) {
             match device_event {
                 DeviceEvent::PropertyChanged(DeviceProperty::Connected(connected)) => {
                     info.connected = connected;
-
-                    // kept alongside the per-device snapshot for now;
-                    // removed in favor of a derived count in a follow-up
-                    if connected {
-                        state.connected_device_count =
-                            state.connected_device_count.saturating_add(1);
-                    } else {
-                        state.connected_device_count =
-                            state.connected_device_count.saturating_sub(1);
-                    }
-                    tracing::debug!(
-                        "device {address} connected={connected}, count={}",
-                        state.connected_device_count
-                    );
+                    tracing::debug!("device {address} connected={connected}");
                 }
                 DeviceEvent::PropertyChanged(DeviceProperty::Alias(alias)) => info.alias = alias,
                 DeviceEvent::PropertyChanged(DeviceProperty::Icon(icon)) => info.icon = Some(icon),

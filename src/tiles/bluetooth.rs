@@ -127,7 +127,7 @@ impl Component for BluetoothTile {
 
 fn get_bluetooth_icon(state: &BluetoothState) -> String {
     if state.powered {
-        if state.connected_device_count > 0 {
+        if state.connected_device_count() > 0 {
             BLUETOOTH
         } else {
             BLUETOOTH_X

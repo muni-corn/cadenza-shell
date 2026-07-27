@@ -229,7 +229,7 @@ impl SimpleComponent for BluetoothMenu {
 fn get_icon(state: &Option<BluetoothState>) -> &str {
     match state {
         Some(s) if s.powered && s.discovering => BLUETOOTH_DOTS,
-        Some(s) if s.powered && s.connected_device_count > 0 => BLUETOOTH,
+        Some(s) if s.powered && s.connected_device_count() > 0 => BLUETOOTH,
         Some(s) if s.powered => BLUETOOTH_X,
         _ => BLUETOOTH_NO,
     }
@@ -239,9 +239,9 @@ fn get_status_text(state: &Option<BluetoothState>) -> String {
     match state {
         Some(s) if !s.powered => "Bluetooth disabled".to_string(),
         Some(s) if s.discovering => "Searching for devices...".to_string(),
-        Some(s) if s.connected_device_count == 1 => "1 device connected".to_string(),
-        Some(s) if s.connected_device_count > 0 => {
-            format!("{} device(s) connected", s.connected_device_count)
+        Some(s) if s.connected_device_count() == 1 => "1 device connected".to_string(),
+        Some(s) if s.connected_device_count() > 0 => {
+            format!("{} device(s) connected", s.connected_device_count())
         }
         Some(_) => "Bluetooth enabled".to_string(),
         None => "Bluetooth unavailable".to_string(),
