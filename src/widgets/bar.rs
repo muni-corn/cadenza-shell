@@ -100,6 +100,7 @@ impl SimpleAsyncComponent for Bar {
                 .launch(RightGroupInit {
                     bar_config: config.bar,
                     tray_items,
+                    monitor: monitor.clone(),
                 })
                 .forward(sender.output_sender(), |output| match output {
                     RightGroupOutput::ToggleNotificationCenter => {

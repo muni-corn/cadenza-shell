@@ -1,6 +1,3 @@
-// temporary until wired up by the network and bluetooth tiles
-#![allow(dead_code)]
-
 use gdk4::Monitor;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
@@ -53,6 +50,7 @@ pub enum MenuWindowOutput {
     Hidden,
 }
 
+#[derive(Debug)]
 pub struct MenuWindowWidgets {
     window: gtk::Window,
 }

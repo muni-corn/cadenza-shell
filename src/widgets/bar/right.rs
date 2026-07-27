@@ -1,5 +1,6 @@
 use std::sync::{Arc, Mutex};
 
+use gdk4::Monitor;
 use gtk4::prelude::BoxExt;
 use relm4::prelude::*;
 use system_tray::{client::Event as TrayEvent, data::BaseMap};
@@ -37,6 +38,10 @@ pub struct RightWidgets {
 pub struct RightGroupInit {
     pub bar_config: BarConfig,
     pub tray_items: Option<Arc<Mutex<BaseMap>>>,
+    /// The monitor this bar (and thus this group) belongs to, so tiles with
+    /// their own layer-shell menu windows (wifi, bluetooth) can pin those
+    /// windows to the correct output.
+    pub monitor: Monitor,
 }
 
 #[derive(Debug)]
@@ -65,6 +70,7 @@ impl SimpleComponent for RightGroup {
         RightGroupInit {
             bar_config,
             tray_items,
+            monitor,
         }: Self::Init,
         root: Self::Root,
         sender: relm4::ComponentSender<Self>,
@@ -75,7 +81,7 @@ impl SimpleComponent for RightGroup {
         let brightness = BrightnessTile::builder().launch(()).detach();
         let volume = PulseAudioTile::builder().launch(()).detach();
         let bluetooth = BluetoothTile::builder().launch(()).detach();
-        let network = NetworkTile::builder().launch(()).detach();
+        let network = NetworkTile::builder().launch(monitor.clone()).detach();
         let battery = BatteryTile::builder().launch(()).detach();
         let notifications = NotificationsTile::builder().launch(()).forward(
             sender.output_sender(),

@@ -1,3 +1,4 @@
+use gdk4::Monitor;
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
@@ -5,23 +6,29 @@ use crate::{
     network::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, get_icon, types::State},
     network_menu::NetworkMenu,
     tiles::Attention,
-    widgets::tile::{Tile, TileInit, TileMsg, TileOutput},
+    widgets::{
+        menu_window::{MenuWindow, MenuWindowInit, MenuWindowMsg, MenuWindowOutput},
+        tile::{Tile, TileInit, TileMsg, TileOutput},
+    },
 };
 
 #[derive(Debug)]
 pub struct NetworkTile {
     current_state: NetworkInfo,
+    menu_open: bool,
+    menu_window: Controller<MenuWindow>,
 }
 
 #[derive(Debug)]
 pub enum NetworkTileMsg {
     Update(NetworkInfo),
+    ToggleMenu,
+    MenuClosed,
 }
 
 #[derive(Debug)]
 pub struct NetworkTileWidgets {
     tile: Controller<Tile>,
-    _popover: gtk::Popover,
     // kept alive so the menu's component runtime (and its NETWORK_STATE
     // subscription) isn't shut down; dropping a Controller stops its
     // runtime immediately
@@ -29,14 +36,14 @@ pub struct NetworkTileWidgets {
 }
 
 impl SimpleComponent for NetworkTile {
-    type Init = ();
+    type Init = Monitor;
     type Input = NetworkTileMsg;
     type Output = TileOutput;
     type Root = gtk::Box;
     type Widgets = NetworkTileWidgets;
 
     fn init(
-        _init: Self::Init,
+        monitor: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -58,32 +65,37 @@ impl SimpleComponent for NetworkTile {
         // initialize the network menu component
         let network_menu = NetworkMenu::builder().launch(()).detach();
 
-        // create the popover
-        let popover = gtk::Popover::builder()
-            .child(network_menu.widget())
-            .width_request(384)
-            .height_request(256)
-            .autohide(true)
-            .build();
-        popover.set_parent(tile.widget());
+        // present it in a keyboard-interactive layer-shell window instead of
+        // a gtk::Popover, since the bar itself never accepts keyboard focus
+        let menu_window = MenuWindow::builder()
+            .launch(MenuWindowInit {
+                namespace: "network-menu",
+                monitor: Some(monitor),
+                width: 384,
+                content: network_menu.widget().clone().upcast(),
+            })
+            .forward(sender.input_sender(), |output| match output {
+                MenuWindowOutput::Hidden => NetworkTileMsg::MenuClosed,
+            });
 
-        // connect click handler to show popover
-        let popover_clone = popover.clone();
-        tile.widget().connect_clicked(move |_| {
-            if popover_clone.is_visible() {
-                popover_clone.popdown();
-            } else {
-                popover_clone.popup();
-            }
+        // toggle the menu window on click; authoritative for open/closed
+        // state so it doesn't depend on the window's own visibility (see
+        // MenuWindow's docs on why it doesn't dismiss on focus loss)
+        tile.widget().connect_clicked({
+            let sender = sender.clone();
+            move |_| sender.input(NetworkTileMsg::ToggleMenu)
         });
 
         root.append(tile.widget());
 
         ComponentParts {
-            model: NetworkTile { current_state },
+            model: NetworkTile {
+                current_state,
+                menu_open: false,
+                menu_window,
+            },
             widgets: NetworkTileWidgets {
                 tile,
-                _popover: popover,
                 _network_menu: network_menu,
             },
         }
@@ -91,8 +103,22 @@ impl SimpleComponent for NetworkTile {
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         tracing::debug!("network tile received update: {msg:?}");
-        let NetworkTileMsg::Update(new_info) = msg;
-        self.current_state = new_info.clone();
+        match msg {
+            NetworkTileMsg::Update(new_info) => {
+                self.current_state = new_info;
+            }
+            NetworkTileMsg::ToggleMenu => {
+                self.menu_open = !self.menu_open;
+                self.menu_window.emit(if self.menu_open {
+                    MenuWindowMsg::Show
+                } else {
+                    MenuWindowMsg::Hide
+                });
+            }
+            NetworkTileMsg::MenuClosed => {
+                self.menu_open = false;
+            }
+        }
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
