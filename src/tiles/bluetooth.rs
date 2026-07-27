@@ -4,7 +4,7 @@ use relm4::prelude::*;
 use crate::{
     bluetooth::{BLUETOOTH_STATE, BluetoothState},
     bluetooth_menu::BluetoothMenu,
-    icon_names::{BLUETOOTH, BLUETOOTH_NO, BLUETOOTH_X},
+    icon_names::{BLUETOOTH, BLUETOOTH_DOTS, BLUETOOTH_NO, BLUETOOTH_X},
     widgets::tile::{Tile, TileMsg, TileOutput},
 };
 
@@ -106,14 +106,16 @@ impl Component for BluetoothTile {
 }
 
 fn get_bluetooth_icon(state: &BluetoothState) -> String {
-    if state.powered {
-        if state.connected_device_count() > 0 {
-            BLUETOOTH
-        } else {
-            BLUETOOTH_X
-        }
-    } else {
+    // matches bluetooth_menu's four-state icon mapping; this previously
+    // only had three states and never showed a discovering indicator
+    if !state.powered {
         BLUETOOTH_NO
+    } else if state.discovering {
+        BLUETOOTH_DOTS
+    } else if state.connected_device_count() > 0 {
+        BLUETOOTH
+    } else {
+        BLUETOOTH_X
     }
     .to_string()
 }
