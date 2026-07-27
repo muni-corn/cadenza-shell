@@ -2,9 +2,10 @@ use std::{collections::HashMap, time::Duration};
 
 use bluer::{
     Adapter, AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, DeviceProperty, Session,
+    SessionEvent,
 };
 use futures_lite::StreamExt;
-use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 use crate::{
     bluetooth::state::{BLUETOOTH_STATE, BluetoothState, DeviceInfo},
@@ -15,6 +16,10 @@ use crate::{
 pub enum BluetoothEvent {
     Adapter(AdapterEvent),
     Device(Address, DeviceEvent),
+    /// An adapter appeared or disappeared on the bus (e.g. bluetoothd
+    /// restarting, a USB dongle being unplugged/replugged, or rfkill being
+    /// toggled).
+    Session(SessionEvent),
     /// The system has just woken from sleep; triggers a full state refresh.
     Wake,
     /// Periodic full refetch, independent of any BlueZ event. Self-heals
@@ -31,41 +36,13 @@ pub async fn run_bluetooth_service() {
         return;
     };
 
-    let Ok(adapter) = session
-        .default_adapter()
-        .await
-        .inspect_err(|e| tracing::error!("couldn't get default bluetooth adapter: {e}"))
-    else {
-        return;
-    };
+    let (event_tx, mut event_rx) = unbounded_channel();
 
-    let mut devices = HashMap::new();
-    if let Ok(addresses) = adapter.device_addresses().await {
-        for address in addresses {
-            let Ok(device) = adapter.device(address) else {
-                continue;
-            };
-            devices.insert(address, build_device_info(&device).await);
-        }
-    };
-
-    let state = BluetoothState {
-        _session: session,
-        powered: adapter.is_powered().await.unwrap_or(false),
-        devices,
-        discovering: adapter.is_discovering().await.unwrap_or(false),
-        adapter: adapter.clone(),
-    };
-
-    *BLUETOOTH_STATE.write() = Some(state);
-
-    // set up bluetooth monitoring
-    let Ok((event_tx, mut event_rx, mut device_event_tasks)) = start_event_listening(adapter)
-        .await
-        .inspect_err(|e| tracing::error!("failed to setup bluetooth monitoring: {e}"))
-    else {
-        return;
-    };
+    // watch for adapters appearing or disappearing on the bus; this task
+    // itself never needs to be respawned, since it's subscribed against the
+    // session (bluetoothd's D-Bus connection at the session level), not any
+    // particular adapter
+    spawn_session_watcher(session.clone(), event_tx.clone());
 
     // subscribe to system wake events and forward them into the event channel
     let mut wake_rx = sleep_monitor::subscribe_wake();
@@ -93,7 +70,7 @@ pub async fn run_bluetooth_service() {
         let interval_secs = settings::get_config().bluetooth.reconcile_interval;
         let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
         // skip the first tick, which fires immediately; initial state is
-        // already fetched separately above
+        // already fetched separately below
         interval.tick().await;
         loop {
             interval.tick().await;
@@ -103,45 +80,163 @@ pub async fn run_bluetooth_service() {
         }
     });
 
+    let mut adapter_events_task: Option<tokio::task::AbortHandle> = None;
+    let mut device_event_tasks: HashMap<Address, tokio::task::AbortHandle> = HashMap::new();
+
+    reinitialize_adapter(
+        &session,
+        &event_tx,
+        &mut adapter_events_task,
+        &mut device_event_tasks,
+    )
+    .await;
+
     while let Some(event) = event_rx.recv().await {
-        update(event, &event_tx, &mut device_event_tasks).await;
+        match event {
+            BluetoothEvent::Session(SessionEvent::AdapterRemoved(name)) => {
+                let is_ours = BLUETOOTH_STATE
+                    .read()
+                    .as_ref()
+                    .is_some_and(|state| state.adapter.name() == name);
+                if is_ours {
+                    tracing::warn!("bluetooth adapter '{name}' disappeared, clearing state");
+                    if let Some(handle) = adapter_events_task.take() {
+                        handle.abort();
+                    }
+                    for (_, handle) in device_event_tasks.drain() {
+                        handle.abort();
+                    }
+                    *BLUETOOTH_STATE.write() = None;
+                }
+            }
+            BluetoothEvent::Session(SessionEvent::AdapterAdded(name)) => {
+                let have_adapter = BLUETOOTH_STATE.read().is_some();
+                if !have_adapter {
+                    tracing::info!("bluetooth adapter '{name}' available, initializing");
+                    reinitialize_adapter(
+                        &session,
+                        &event_tx,
+                        &mut adapter_events_task,
+                        &mut device_event_tasks,
+                    )
+                    .await;
+                }
+            }
+            other => update(other, &event_tx, &mut device_event_tasks).await,
+        }
     }
     tracing::warn!("bluetooth service has stopped receiving events");
 }
 
+/// Watches for adapters appearing or disappearing and forwards them as
+/// [`BluetoothEvent::Session`] events.
+fn spawn_session_watcher(session: Session, event_tx: UnboundedSender<BluetoothEvent>) {
+    relm4::spawn(async move {
+        let stream = match session.events().await {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::error!("couldn't subscribe to bluetooth session events: {e}");
+                return;
+            }
+        };
+        // Session::events()'s stream isn't Unpin, unlike Adapter/Device's;
+        // pin it to a stack slot so StreamExt::next() can be called on it
+        let mut stream = std::pin::pin!(stream);
+
+        while let Some(event) = stream.next().await {
+            tracing::debug!("bluetooth session event: {event:?}");
+            event_tx
+                .send(BluetoothEvent::Session(event))
+                .unwrap_or_else(|e| tracing::error!("couldn't send session event: {e}"));
+        }
+        tracing::warn!("stream for bluetooth session events has closed");
+    });
+}
+
+/// (Re-)establishes [`BLUETOOTH_STATE`] and its watcher tasks against the
+/// session's current default adapter, or clears state to `None` if none is
+/// currently available.
+///
+/// Called at startup and again whenever the tracked adapter disappears and a
+/// (possibly different) one becomes available, since BlueZ restarting or a
+/// USB adapter being replugged gets a fresh D-Bus object with fresh
+/// subscriptions required.
+async fn reinitialize_adapter(
+    session: &Session,
+    event_tx: &UnboundedSender<BluetoothEvent>,
+    adapter_events_task: &mut Option<tokio::task::AbortHandle>,
+    device_event_tasks: &mut HashMap<Address, tokio::task::AbortHandle>,
+) {
+    let Ok(adapter) = session.default_adapter().await.inspect_err(|e| {
+        tracing::warn!("no bluetooth adapter currently available: {e}");
+    }) else {
+        *BLUETOOTH_STATE.write() = None;
+        return;
+    };
+
+    let mut devices = HashMap::new();
+    if let Ok(addresses) = adapter.device_addresses().await {
+        for address in addresses {
+            let Ok(device) = adapter.device(address) else {
+                continue;
+            };
+            devices.insert(address, build_device_info(&device).await);
+        }
+    }
+
+    let state = BluetoothState {
+        _session: session.clone(),
+        powered: adapter.is_powered().await.unwrap_or(false),
+        devices,
+        discovering: adapter.is_discovering().await.unwrap_or(false),
+        adapter: adapter.clone(),
+    };
+
+    *BLUETOOTH_STATE.write() = Some(state);
+
+    match start_event_listening(adapter, event_tx).await {
+        Ok((new_adapter_events_task, new_device_event_tasks)) => {
+            *adapter_events_task = Some(new_adapter_events_task);
+            *device_event_tasks = new_device_event_tasks;
+        }
+        Err(e) => {
+            tracing::error!("failed to setup bluetooth monitoring: {e}");
+        }
+    }
+}
+
 async fn start_event_listening(
     adapter: Adapter,
+    event_tx: &UnboundedSender<BluetoothEvent>,
 ) -> anyhow::Result<(
-    UnboundedSender<BluetoothEvent>,
-    UnboundedReceiver<BluetoothEvent>,
+    tokio::task::AbortHandle,
     HashMap<Address, tokio::task::AbortHandle>,
 )> {
-    let (event_tx, event_rx) = unbounded_channel();
-
     // monitor adapter events
     let mut adapter_events = adapter.events().await?;
     let event_tx_clone = event_tx.clone();
-    relm4::spawn(async move {
+    let adapter_events_task = relm4::spawn(async move {
         while let Some(event) = adapter_events.next().await {
             event_tx_clone
                 .send(BluetoothEvent::Adapter(event))
                 .unwrap_or_else(|e| tracing::error!("couldn't send adapter bluetooth event: {e}"));
         }
-        tracing::error!("bluetooth service has stopped receiving adapter events");
-    });
+        tracing::warn!("bluetooth service has stopped receiving adapter events");
+    })
+    .abort_handle();
 
     // monitor existing devices for connection status changes
     let mut device_event_tasks = HashMap::new();
     let devices = adapter.device_addresses().await.unwrap_or_default();
     for addr in devices {
         if let Ok(device) = adapter.device(addr)
-            && let Some(handle) = subscribe_device_events(addr, device, &event_tx).await
+            && let Some(handle) = subscribe_device_events(addr, device, event_tx).await
         {
             device_event_tasks.insert(addr, handle);
         }
     }
 
-    Ok((event_tx, event_rx, device_event_tasks))
+    Ok((adapter_events_task, device_event_tasks))
 }
 
 async fn update(
@@ -300,8 +395,9 @@ fn update_from_event(input: BluetoothEvent) {
                 p => tracing::warn!("unhandled AdapterProperty event: {p:?}"),
             },
         },
-        // wake and reconcile are handled before this function is called
-        BluetoothEvent::Wake | BluetoothEvent::Reconcile => {}
+        // wake, reconcile, and session events are all handled before this
+        // function is called
+        BluetoothEvent::Wake | BluetoothEvent::Reconcile | BluetoothEvent::Session(_) => {}
         BluetoothEvent::Device(address, device_event) => {
             let Some(info) = state.devices.get_mut(&address) else {
                 tracing::debug!("property change for untracked device {address}, ignoring");
