@@ -1,7 +1,3 @@
-// temporary until bluetooth_menu calls these free functions; the service
-// already handles every command variant
-#![allow(dead_code)]
-
 use std::sync::OnceLock;
 
 use bluer::Address;
@@ -23,7 +19,6 @@ pub(crate) enum BluetoothCommand {
     StartDiscovery,
     StopDiscovery,
     Pair(Address),
-    SetTrusted(Address, bool),
     Remove(Address),
     /// A reply to the currently pending pairing prompt, if any.
     PairingReply(PairingReply),
@@ -63,11 +58,6 @@ pub fn stop_discovery() {
 /// Initiates pairing with a device by address.
 pub fn pair(address: Address) {
     send(BluetoothCommand::Pair(address));
-}
-
-/// Sets whether a device is trusted (auto-connect/auto-authorize).
-pub fn set_trusted(address: Address, trusted: bool) {
-    send(BluetoothCommand::SetTrusted(address, trusted));
 }
 
 /// Removes (unpairs and forgets) a device by address.

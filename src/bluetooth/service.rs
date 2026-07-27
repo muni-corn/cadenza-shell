@@ -193,11 +193,6 @@ async fn handle_command(
         BluetoothCommand::Pair(address) => {
             handle_pair(address);
         }
-        BluetoothCommand::SetTrusted(address, trusted) => {
-            if let Err(e) = handle_set_trusted(address, trusted).await {
-                tracing::warn!("couldn't set trusted={trusted} for {address}: {e}");
-            }
-        }
         BluetoothCommand::Remove(address) => {
             if let Err(e) = handle_remove(address).await {
                 tracing::warn!("couldn't remove device {address}: {e}");
@@ -310,20 +305,6 @@ fn handle_pair(address: Address) {
             Err(e) => tracing::warn!("pairing with {address} failed: {e}"),
         }
     });
-}
-
-async fn handle_set_trusted(address: Address, trusted: bool) -> anyhow::Result<()> {
-    let adapter = {
-        let state = BLUETOOTH_STATE.read();
-        let Some(ref state) = *state else {
-            anyhow::bail!("no bluetooth adapter available");
-        };
-        state.adapter.clone()
-    };
-
-    let device = adapter.device(address)?;
-    device.set_trusted(trusted).await?;
-    Ok(())
 }
 
 async fn handle_remove(address: Address) -> anyhow::Result<()> {

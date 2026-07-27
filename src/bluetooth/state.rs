@@ -12,8 +12,6 @@ pub static BLUETOOTH_STATE: SharedState<Option<BluetoothState>> = SharedState::n
 /// `agent::respond`/`agent::cancel`) or once BlueZ cancels the request.
 pub static PAIRING_PROMPT: SharedState<Option<PairingPrompt>> = SharedState::new();
 
-// fields aren't read yet; wired up when bluetooth_menu renders the prompt
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub struct PairingPrompt {
     pub address: Address,
@@ -21,7 +19,6 @@ pub struct PairingPrompt {
 }
 
 /// What BlueZ is asking us for, or asking us to show, during pairing.
-#[allow(dead_code)]
 #[derive(Debug, Clone)]
 pub enum PairingRequest {
     /// The remote device needs a PIN code (legacy, pre-2.1 devices).

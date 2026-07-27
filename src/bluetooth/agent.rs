@@ -1,6 +1,3 @@
-// temporary until bluetooth_menu calls respond/cancel
-#![allow(dead_code)]
-
 use std::sync::Mutex;
 
 use bluer::{
