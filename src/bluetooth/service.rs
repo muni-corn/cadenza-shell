@@ -7,7 +7,7 @@ use futures_lite::StreamExt;
 use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::{
-    bluetooth::state::{BLUETOOTH_STATE, BluetoothState},
+    bluetooth::state::{BLUETOOTH_STATE, BluetoothState, DeviceInfo},
     sleep_monitor,
 };
 
@@ -41,15 +41,15 @@ pub async fn run_bluetooth_service() {
             let Ok(device) = adapter.device(address) else {
                 continue;
             };
-            devices.insert(address, device);
+            devices.insert(address, build_device_info(&device).await);
         }
     };
 
     // poll initial connected count once; subsequent changes are tracked
     // incrementally via DeviceProperty::Connected events
     let mut connected_device_count: u8 = 0;
-    for device in devices.values() {
-        if device.is_connected().await.unwrap_or(false) {
+    for info in devices.values() {
+        if info.connected {
             connected_device_count = connected_device_count.saturating_add(1);
         }
     }
@@ -145,90 +145,152 @@ async fn start_event_listening(
 }
 
 async fn update(input: BluetoothEvent, event_tx: &UnboundedSender<BluetoothEvent>) {
-    if let BluetoothEvent::Wake = input {
-        refresh_state_after_wake().await;
-        return;
-    }
-
-    // update_from_event is sync so the write lock is always released before the
-    // async subscription below
-    let new_device = update_from_event(input);
-
-    // subscribe to events for any newly added device; this must
-    // happen outside the write lock (hence the two-step approach above)
-    if let Some((address, device)) = new_device {
-        subscribe_device_events(address, device, event_tx).await;
+    match input {
+        BluetoothEvent::Wake => {
+            refresh_state_after_wake().await;
+        }
+        // a newly added device needs its full property snapshot fetched
+        // before it can be inserted, which requires an async round trip
+        // that update_from_event's synchronous write-lock section can't do
+        BluetoothEvent::Adapter(AdapterEvent::DeviceAdded(address)) => {
+            handle_device_added(address, event_tx).await;
+        }
+        other => {
+            // sync, so the write lock is always released before any
+            // subsequent async subscription work
+            update_from_event(other);
+        }
     }
 }
 
-/// Re-polls adapter powered/discovering state and connected device count after
-/// a system wake, since D-Bus events may have been missed during sleep.
-async fn refresh_state_after_wake() {
-    tracing::debug!("system wake: refreshing bluetooth state");
-
-    // clone the adapter and devices list without holding the write lock
-    let (adapter, devices) = {
+/// Fetches a full property snapshot for a newly discovered device, inserts
+/// it into [`BLUETOOTH_STATE`], and subscribes to its future property
+/// changes.
+async fn handle_device_added(address: Address, event_tx: &UnboundedSender<BluetoothEvent>) {
+    let adapter = {
         let state = BLUETOOTH_STATE.read();
         let Some(ref state) = *state else {
             return;
         };
-        (state.adapter.clone(), state.devices.clone())
+        state.adapter.clone()
+    };
+
+    let Ok(device) = adapter.device(address) else {
+        return;
+    };
+    let info = build_device_info(&device).await;
+
+    {
+        let mut guard = BLUETOOTH_STATE.write();
+        if let Some(ref mut state) = *guard {
+            state.devices.insert(address, info);
+        }
+    }
+
+    subscribe_device_events(address, device, event_tx).await;
+}
+
+/// Fetches a full property snapshot for a device.
+async fn build_device_info(device: &Device) -> DeviceInfo {
+    DeviceInfo {
+        address: device.address(),
+        alias: device
+            .alias()
+            .await
+            .unwrap_or_else(|_| device.address().to_string()),
+        icon: device.icon().await.unwrap_or(None),
+        paired: device.is_paired().await.unwrap_or(false),
+        trusted: device.is_trusted().await.unwrap_or(false),
+        connected: device.is_connected().await.unwrap_or(false),
+        rssi: device.rssi().await.unwrap_or(None),
+        battery_percentage: device.battery_percentage().await.unwrap_or(None),
+    }
+}
+
+/// Re-polls adapter powered/discovering state and refreshes every device's
+/// property snapshot after a system wake, since D-Bus events may have been
+/// missed during sleep.
+async fn refresh_state_after_wake() {
+    tracing::debug!("system wake: refreshing bluetooth state");
+
+    // clone the adapter and known addresses without holding the write lock
+    // across the async re-fetch below
+    let (adapter, addresses) = {
+        let state = BLUETOOTH_STATE.read();
+        let Some(ref state) = *state else {
+            return;
+        };
+        (
+            state.adapter.clone(),
+            state.devices.keys().copied().collect::<Vec<_>>(),
+        )
     };
 
     let powered = adapter.is_powered().await.unwrap_or(false);
     let discovering = adapter.is_discovering().await.unwrap_or(false);
 
     let mut connected_device_count: u8 = 0;
-    for device in devices.values() {
-        if device.is_connected().await.unwrap_or(false) {
+    let mut devices = HashMap::with_capacity(addresses.len());
+    for address in addresses {
+        let Ok(device) = adapter.device(address) else {
+            continue;
+        };
+        let info = build_device_info(&device).await;
+        if info.connected {
             connected_device_count = connected_device_count.saturating_add(1);
         }
+        devices.insert(address, info);
     }
 
     if let Some(ref mut state) = *BLUETOOTH_STATE.write() {
         state.powered = powered;
         state.discovering = discovering;
         state.connected_device_count = connected_device_count;
+        state.devices = devices;
     }
 }
 
 /// Applies a bluetooth event to [`BLUETOOTH_STATE`] synchronously.
 ///
-/// Returns `Some((address, device))` when a new device was added that needs
-/// an event subscription set up (handled asynchronously by the caller).
-fn update_from_event(input: BluetoothEvent) -> Option<(Address, Device)> {
+/// Handles everything except newly-added devices, which need an async
+/// property fetch before they can be snapshotted (see
+/// [`handle_device_added`]).
+fn update_from_event(input: BluetoothEvent) {
     let mut guard = BLUETOOTH_STATE.write();
-    let state = (*guard).as_mut()?;
+    let Some(state) = (*guard).as_mut() else {
+        return;
+    };
 
     tracing::debug!("updating bluetooth state with event: {:?}", input);
 
     match input {
         BluetoothEvent::Adapter(adapter_event) => match adapter_event {
-            AdapterEvent::DeviceAdded(address) => {
-                let Ok(device) = state.adapter.device(address) else {
-                    return None;
-                };
-                state.devices.insert(address, device.clone());
-                Some((address, device))
+            AdapterEvent::DeviceAdded(_) => {
+                unreachable!("DeviceAdded is handled by handle_device_added")
             }
             AdapterEvent::DeviceRemoved(address) => {
                 state.devices.remove(&address);
-                None
             }
-            AdapterEvent::PropertyChanged(adapter_property) => {
-                match adapter_property {
-                    AdapterProperty::Powered(p) => state.powered = p,
-                    AdapterProperty::Discovering(d) => state.discovering = d,
-                    p => tracing::warn!("unhandled AdapterProperty event: {p:?}"),
-                }
-                None
-            }
+            AdapterEvent::PropertyChanged(adapter_property) => match adapter_property {
+                AdapterProperty::Powered(p) => state.powered = p,
+                AdapterProperty::Discovering(d) => state.discovering = d,
+                p => tracing::warn!("unhandled AdapterProperty event: {p:?}"),
+            },
         },
         // wake is handled before this function is called
-        BluetoothEvent::Wake => None,
+        BluetoothEvent::Wake => {}
         BluetoothEvent::Device(address, device_event) => {
+            let Some(info) = state.devices.get_mut(&address) else {
+                tracing::debug!("property change for untracked device {address}, ignoring");
+                return;
+            };
+
             match device_event {
                 DeviceEvent::PropertyChanged(DeviceProperty::Connected(connected)) => {
+                    info.connected = connected;
+
+                    // kept alongside the per-device snapshot for now;
+                    // removed in favor of a derived count in a follow-up
                     if connected {
                         state.connected_device_count =
                             state.connected_device_count.saturating_add(1);
@@ -241,11 +303,22 @@ fn update_from_event(input: BluetoothEvent) -> Option<(Address, Device)> {
                         state.connected_device_count
                     );
                 }
+                DeviceEvent::PropertyChanged(DeviceProperty::Alias(alias)) => info.alias = alias,
+                DeviceEvent::PropertyChanged(DeviceProperty::Icon(icon)) => info.icon = Some(icon),
+                DeviceEvent::PropertyChanged(DeviceProperty::Paired(paired)) => {
+                    info.paired = paired
+                }
+                DeviceEvent::PropertyChanged(DeviceProperty::Trusted(trusted)) => {
+                    info.trusted = trusted
+                }
+                DeviceEvent::PropertyChanged(DeviceProperty::Rssi(rssi)) => info.rssi = Some(rssi),
+                DeviceEvent::PropertyChanged(DeviceProperty::BatteryPercentage(pct)) => {
+                    info.battery_percentage = Some(pct)
+                }
                 DeviceEvent::PropertyChanged(device_property) => {
                     tracing::debug!("device {address} property changed: {device_property:?}");
                 }
             }
-            None
         }
     }
 }

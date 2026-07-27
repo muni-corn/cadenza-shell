@@ -103,7 +103,7 @@ impl Component for BluetoothTile {
             self.tile
                 .emit(TileMsg::SetIcon(Some(get_bluetooth_icon(&state))));
             sender.oneshot_command(async move {
-                let text = get_tooltip_text(&state).await;
+                let text = get_tooltip_text(&state);
                 BluetoothTileCommandOutput::TooltipText(text)
             });
         }
@@ -138,7 +138,11 @@ fn get_bluetooth_icon(state: &BluetoothState) -> String {
     .to_string()
 }
 
-async fn get_tooltip_text(state: &BluetoothState) -> String {
+// TODO: this no longer needs to be wrapped in a oneshot_command by its
+// caller now that device info is a synchronous snapshot; left as-is here to
+// keep this change scoped to the snapshot migration; see the tile's
+// update() for the async wrapper this feeds.
+fn get_tooltip_text(state: &BluetoothState) -> String {
     if !state.powered {
         return "Bluetooth disabled".to_string();
     }
@@ -146,10 +150,8 @@ async fn get_tooltip_text(state: &BluetoothState) -> String {
     let mut text = String::from("Bluetooth enabled");
 
     for device in state.devices() {
-        if device.is_connected().await.unwrap_or(false)
-            && let Ok(Some(name)) = device.name().await
-        {
-            text.push_str(&format!("\n{}", name));
+        if device.connected {
+            text.push_str(&format!("\n{}", device.alias));
         }
     }
 

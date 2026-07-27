@@ -1,9 +1,9 @@
-use bluer::{Address, Device};
+use bluer::Address;
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    bluetooth::{BLUETOOTH_STATE, BluetoothState},
+    bluetooth::{BLUETOOTH_STATE, BluetoothState, DeviceInfo},
     icon_names::{BLUETOOTH, BLUETOOTH_DOTS, BLUETOOTH_NO, BLUETOOTH_X},
 };
 
@@ -170,22 +170,28 @@ impl SimpleComponent for BluetoothMenu {
             BluetoothMenuMsg::ConnectToDevice(addr) => {
                 let state_clone = self.bluetooth_state.clone();
                 sender.oneshot_command(async move {
-                    if let Some(state) = state_clone
-                        && let Some(device) = state.get_device(&addr)
-                        && let Err(e) = device.connect().await
-                    {
-                        tracing::error!("failed to connect to device {}: {}", addr, e);
+                    let Some(state) = state_clone else { return };
+                    match state.device_handle(addr) {
+                        Ok(device) => {
+                            if let Err(e) = device.connect().await {
+                                tracing::error!("failed to connect to device {addr}: {e}");
+                            }
+                        }
+                        Err(e) => tracing::error!("couldn't build device handle for {addr}: {e}"),
                     }
                 });
             }
             BluetoothMenuMsg::DisconnectFromDevice(addr) => {
                 let state_clone = self.bluetooth_state.clone();
                 sender.oneshot_command(async move {
-                    if let Some(state) = state_clone
-                        && let Some(device) = state.get_device(&addr)
-                        && let Err(e) = device.disconnect().await
-                    {
-                        tracing::error!("failed to disconnect from device {}: {}", addr, e);
+                    let Some(state) = state_clone else { return };
+                    match state.device_handle(addr) {
+                        Ok(device) => {
+                            if let Err(e) = device.disconnect().await {
+                                tracing::error!("failed to disconnect from device {addr}: {e}");
+                            }
+                        }
+                        Err(e) => tracing::error!("couldn't build device handle for {addr}: {e}"),
                     }
                 });
             }
@@ -245,15 +251,12 @@ fn get_status_text(state: &Option<BluetoothState>) -> String {
 // factory for individual device items
 #[derive(Debug)]
 struct BluetoothDeviceWidget {
-    device: Device,
-    name: Option<String>,
-    is_connected: bool,
+    info: DeviceInfo,
 }
 
 #[derive(Debug)]
 pub enum BluetoothDeviceMsg {
     Toggle,
-    UpdateInfo(Option<String>, bool),
 }
 
 #[derive(Debug)]
@@ -269,8 +272,8 @@ pub struct BluetoothDeviceWidgetWidgets {
 }
 
 impl AsyncFactoryComponent for BluetoothDeviceWidget {
-    type CommandOutput = BluetoothDeviceMsg;
-    type Init = Device;
+    type CommandOutput = ();
+    type Init = DeviceInfo;
     type Input = BluetoothDeviceMsg;
     type Output = BluetoothDeviceOutput;
     type ParentWidget = gtk::Box;
@@ -280,37 +283,22 @@ impl AsyncFactoryComponent for BluetoothDeviceWidget {
     async fn init_model(
         init: Self::Init,
         _index: &DynamicIndex,
-        sender: AsyncFactorySender<Self>,
+        _sender: AsyncFactorySender<Self>,
     ) -> Self {
-        let device = init;
-
-        // fetch device info
-        let name = device.name().await.ok().flatten();
-        let is_connected = device.is_connected().await.unwrap_or(false);
-
-        // send update message to self
-        sender.input(BluetoothDeviceMsg::UpdateInfo(name.clone(), is_connected));
-
-        Self {
-            device,
-            name: None,
-            is_connected: false,
-        }
+        // no async fetch needed; the snapshot already carries everything we
+        // render
+        Self { info: init }
     }
 
     async fn update(&mut self, msg: Self::Input, sender: AsyncFactorySender<Self>) {
         match msg {
             BluetoothDeviceMsg::Toggle => {
-                let addr = self.device.address();
-                if self.is_connected {
+                let addr = self.info.address;
+                if self.info.connected {
                     let _ = sender.output(BluetoothDeviceOutput::Disconnect(addr));
                 } else {
                     let _ = sender.output(BluetoothDeviceOutput::Connect(addr));
                 }
-            }
-            BluetoothDeviceMsg::UpdateInfo(name, is_connected) => {
-                self.name = name;
-                self.is_connected = is_connected;
             }
         }
     }
@@ -338,13 +326,14 @@ impl AsyncFactoryComponent for BluetoothDeviceWidget {
         let device_label = gtk::Label::builder()
             .halign(gtk::Align::Start)
             .hexpand(true)
+            .label(&self.info.alias)
             .build();
 
         let status_label = gtk::Label::builder()
             .css_classes(["dim"])
             .halign(gtk::Align::End)
             .label("Connected")
-            .visible(self.is_connected)
+            .visible(self.info.connected)
             .build();
 
         main_box.append(&device_label);
@@ -360,13 +349,7 @@ impl AsyncFactoryComponent for BluetoothDeviceWidget {
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: AsyncFactorySender<Self>) {
-        let device_name = self
-            .name
-            .as_ref()
-            .map(String::from)
-            .unwrap_or(self.device.address().to_string());
-
-        widgets.device_label.set_label(&device_name);
-        widgets.status_label.set_visible(self.is_connected);
+        widgets.device_label.set_label(&self.info.alias);
+        widgets.status_label.set_visible(self.info.connected);
     }
 }
