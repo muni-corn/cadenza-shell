@@ -5,6 +5,41 @@ use relm4::SharedState;
 
 pub static BLUETOOTH_STATE: SharedState<Option<BluetoothState>> = SharedState::new();
 
+/// The pairing prompt currently awaiting a response from the user, if any.
+///
+/// Set by the pairing agent (`bluetooth::agent`) when BlueZ needs input or
+/// confirmation from us, and cleared once answered (via
+/// `agent::respond`/`agent::cancel`) or once BlueZ cancels the request.
+pub static PAIRING_PROMPT: SharedState<Option<PairingPrompt>> = SharedState::new();
+
+// fields aren't read yet; wired up when bluetooth_menu renders the prompt
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct PairingPrompt {
+    pub address: Address,
+    pub request: PairingRequest,
+}
+
+/// What BlueZ is asking us for, or asking us to show, during pairing.
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub enum PairingRequest {
+    /// The remote device needs a PIN code (legacy, pre-2.1 devices).
+    PinCode,
+    /// The remote device needs a numeric passkey (0-999999).
+    Passkey,
+    /// Confirm that this passkey matches what's displayed on the remote
+    /// device.
+    ConfirmPasskey(u32),
+    /// Authorize the pairing with no code exchange (just-works model).
+    Authorize,
+    /// Display this PIN code; the user types it on the *other* device.
+    DisplayPinCode(String),
+    /// Display this passkey; the user types it on the *other* device.
+    /// `entered` counts how many digits they've typed there so far.
+    DisplayPasskey { passkey: u32, entered: u16 },
+}
+
 /// A point-in-time snapshot of a remote device's properties.
 ///
 /// Devices themselves (`bluer::Device`) are cheap, synchronous handles that

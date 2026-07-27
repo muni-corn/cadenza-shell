@@ -8,7 +8,10 @@ use futures_lite::StreamExt;
 use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 use crate::{
-    bluetooth::state::{BLUETOOTH_STATE, BluetoothState, DeviceInfo},
+    bluetooth::{
+        agent,
+        state::{BLUETOOTH_STATE, BluetoothState, DeviceInfo},
+    },
     settings, sleep_monitor,
 };
 
@@ -34,6 +37,21 @@ pub async fn run_bluetooth_service() {
         .inspect_err(|e| tracing::error!("couldn't initialize bluetooth session: {e}"))
     else {
         return;
+    };
+
+    // register our pairing agent; the handle must be held for the agent to
+    // stay registered, so it's kept alive for the rest of this function
+    // (which runs for the life of the service)
+    let default_agent = settings::get_config().bluetooth.default_agent;
+    let _agent_handle = match agent::register_agent(&session, default_agent).await {
+        Ok(handle) => {
+            tracing::info!(default_agent, "bluetooth pairing agent registered");
+            Some(handle)
+        }
+        Err(e) => {
+            tracing::error!("couldn't register bluetooth pairing agent: {e}");
+            None
+        }
     };
 
     let (event_tx, mut event_rx) = unbounded_channel();
