@@ -80,7 +80,7 @@ impl SimpleComponent for RightGroup {
 
         let brightness = BrightnessTile::builder().launch(()).detach();
         let volume = PulseAudioTile::builder().launch(()).detach();
-        let bluetooth = BluetoothTile::builder().launch(()).detach();
+        let bluetooth = BluetoothTile::builder().launch(monitor.clone()).detach();
         let network = NetworkTile::builder().launch(monitor.clone()).detach();
         let battery = BatteryTile::builder().launch(()).detach();
         let notifications = NotificationsTile::builder().launch(()).forward(

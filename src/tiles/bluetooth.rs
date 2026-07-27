@@ -1,3 +1,4 @@
+use gdk4::Monitor;
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
@@ -5,36 +6,42 @@ use crate::{
     bluetooth::{BLUETOOTH_STATE, BluetoothState},
     bluetooth_menu::BluetoothMenu,
     icon_names::{BLUETOOTH, BLUETOOTH_DOTS, BLUETOOTH_NO, BLUETOOTH_X},
-    widgets::tile::{Tile, TileMsg, TileOutput},
+    widgets::{
+        menu_window::{MenuWindow, MenuWindowInit, MenuWindowMsg, MenuWindowOutput},
+        tile::{Tile, TileMsg, TileOutput},
+    },
 };
 
 #[derive(Debug)]
 pub struct BluetoothTile {
     tile: Controller<Tile>,
     bluetooth_info: Option<BluetoothState>,
+    menu_open: bool,
+    menu_window: Controller<MenuWindow>,
 }
 
 #[derive(Debug)]
 pub struct BluetoothWidgets {
-    _popover: gtk::Popover,
     _menu: Controller<BluetoothMenu>,
 }
 
 #[derive(Debug)]
 pub enum BluetoothTileMsg {
     Update(Option<BluetoothState>),
+    ToggleMenu,
+    MenuClosed,
 }
 
 impl Component for BluetoothTile {
     type CommandOutput = ();
-    type Init = ();
+    type Init = Monitor;
     type Input = BluetoothTileMsg;
     type Output = TileOutput;
     type Root = gtk::Box;
     type Widgets = BluetoothWidgets;
 
     fn init(
-        _init: Self::Init,
+        monitor: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
@@ -50,23 +57,25 @@ impl Component for BluetoothTile {
         // initialize the bluetooth menu component
         let bluetooth_menu = BluetoothMenu::builder().launch(()).detach();
 
-        // create the popover
-        let popover = gtk::Popover::builder()
-            .child(bluetooth_menu.widget())
-            .width_request(384)
-            .height_request(256)
-            .autohide(true)
-            .build();
-        popover.set_parent(tile.widget());
+        // present it in a keyboard-interactive layer-shell window instead of
+        // a gtk::Popover, since the bar itself never accepts keyboard focus
+        // (needed for typing a pairing PIN)
+        let menu_window = MenuWindow::builder()
+            .launch(MenuWindowInit {
+                namespace: "bluetooth-menu",
+                monitor: Some(monitor),
+                width: 384,
+                content: bluetooth_menu.widget().clone().upcast(),
+            })
+            .forward(sender.input_sender(), |output| match output {
+                MenuWindowOutput::Hidden => BluetoothTileMsg::MenuClosed,
+            });
 
-        // connect click handler to toggle popover
-        let popover_clone = popover.clone();
-        tile.widget().connect_clicked(move |_| {
-            if popover_clone.is_visible() {
-                popover_clone.popdown();
-            } else {
-                popover_clone.popup();
-            }
+        // toggle the menu window on click; authoritative for open/closed
+        // state so it doesn't depend on the window's own visibility
+        tile.widget().connect_clicked({
+            let sender = sender.clone();
+            move |_| sender.input(BluetoothTileMsg::ToggleMenu)
         });
 
         root.append(tile.widget());
@@ -75,28 +84,39 @@ impl Component for BluetoothTile {
             model: Self {
                 tile,
                 bluetooth_info: current_state,
+                menu_open: false,
+                menu_window,
             },
             widgets: BluetoothWidgets {
-                _popover: popover,
                 _menu: bluetooth_menu,
             },
         }
     }
 
-    fn update(
-        &mut self,
-        BluetoothTileMsg::Update(info): Self::Input,
-        _sender: ComponentSender<Self>,
-        root: &Self::Root,
-    ) {
-        root.set_visible(info.is_some());
-        self.bluetooth_info = info.clone();
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>, root: &Self::Root) {
+        match msg {
+            BluetoothTileMsg::Update(info) => {
+                root.set_visible(info.is_some());
+                self.bluetooth_info = info.clone();
 
-        if let Some(state) = info {
-            self.tile
-                .emit(TileMsg::SetIcon(Some(get_bluetooth_icon(&state))));
-            self.tile
-                .emit(TileMsg::SetTooltip(Some(get_tooltip_text(&state))));
+                if let Some(state) = info {
+                    self.tile
+                        .emit(TileMsg::SetIcon(Some(get_bluetooth_icon(&state))));
+                    self.tile
+                        .emit(TileMsg::SetTooltip(Some(get_tooltip_text(&state))));
+                }
+            }
+            BluetoothTileMsg::ToggleMenu => {
+                self.menu_open = !self.menu_open;
+                self.menu_window.emit(if self.menu_open {
+                    MenuWindowMsg::Show
+                } else {
+                    MenuWindowMsg::Hide
+                });
+            }
+            BluetoothTileMsg::MenuClosed => {
+                self.menu_open = false;
+            }
         }
     }
 
