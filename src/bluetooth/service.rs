@@ -56,7 +56,7 @@ pub async fn run_bluetooth_service() {
     *BLUETOOTH_STATE.write() = Some(state);
 
     // set up bluetooth monitoring
-    let Ok((event_tx, mut event_rx)) = start_event_listening(adapter)
+    let Ok((event_tx, mut event_rx, mut device_event_tasks)) = start_event_listening(adapter)
         .await
         .inspect_err(|e| tracing::error!("failed to setup bluetooth monitoring: {e}"))
     else {
@@ -83,7 +83,7 @@ pub async fn run_bluetooth_service() {
     });
 
     while let Some(event) = event_rx.recv().await {
-        update(event, &event_tx).await;
+        update(event, &event_tx, &mut device_event_tasks).await;
     }
     tracing::warn!("bluetooth service has stopped receiving events");
 }
@@ -93,6 +93,7 @@ async fn start_event_listening(
 ) -> anyhow::Result<(
     UnboundedSender<BluetoothEvent>,
     UnboundedReceiver<BluetoothEvent>,
+    HashMap<Address, tokio::task::AbortHandle>,
 )> {
     let (event_tx, event_rx) = unbounded_channel();
 
@@ -109,32 +110,24 @@ async fn start_event_listening(
     });
 
     // monitor existing devices for connection status changes
+    let mut device_event_tasks = HashMap::new();
     let devices = adapter.device_addresses().await.unwrap_or_default();
     for addr in devices {
         if let Ok(device) = adapter.device(addr)
-            && let Ok(mut device_events) = device.events().await
+            && let Some(handle) = subscribe_device_events(addr, device, &event_tx).await
         {
-            let event_tx_clone = event_tx.clone();
-            relm4::spawn(async move {
-                while let Some(event) = device_events.next().await {
-                    event_tx_clone
-                        .send(BluetoothEvent::Device(addr, event))
-                        .unwrap_or_else(|e| {
-                            tracing::error!("couldn't send device bluetooth event: {e}")
-                        });
-                }
-                tracing::warn!(
-                    "bluetooth service has stopped receiving events for device address {}",
-                    addr
-                );
-            });
+            device_event_tasks.insert(addr, handle);
         }
     }
 
-    Ok((event_tx, event_rx))
+    Ok((event_tx, event_rx, device_event_tasks))
 }
 
-async fn update(input: BluetoothEvent, event_tx: &UnboundedSender<BluetoothEvent>) {
+async fn update(
+    input: BluetoothEvent,
+    event_tx: &UnboundedSender<BluetoothEvent>,
+    device_event_tasks: &mut HashMap<Address, tokio::task::AbortHandle>,
+) {
     match input {
         BluetoothEvent::Wake => {
             refresh_state_after_wake().await;
@@ -143,7 +136,18 @@ async fn update(input: BluetoothEvent, event_tx: &UnboundedSender<BluetoothEvent
         // before it can be inserted, which requires an async round trip
         // that update_from_event's synchronous write-lock section can't do
         BluetoothEvent::Adapter(AdapterEvent::DeviceAdded(address)) => {
-            handle_device_added(address, event_tx).await;
+            handle_device_added(address, event_tx, device_event_tasks).await;
+        }
+        // abort the now-orphaned event subscription before applying the
+        // sync state removal; otherwise the task leaks and keeps forwarding
+        // events for a device that's no longer tracked
+        BluetoothEvent::Adapter(AdapterEvent::DeviceRemoved(address)) => {
+            if let Some(handle) = device_event_tasks.remove(&address) {
+                handle.abort();
+            }
+            update_from_event(BluetoothEvent::Adapter(AdapterEvent::DeviceRemoved(
+                address,
+            )));
         }
         other => {
             // sync, so the write lock is always released before any
@@ -156,7 +160,11 @@ async fn update(input: BluetoothEvent, event_tx: &UnboundedSender<BluetoothEvent
 /// Fetches a full property snapshot for a newly discovered device, inserts
 /// it into [`BLUETOOTH_STATE`], and subscribes to its future property
 /// changes.
-async fn handle_device_added(address: Address, event_tx: &UnboundedSender<BluetoothEvent>) {
+async fn handle_device_added(
+    address: Address,
+    event_tx: &UnboundedSender<BluetoothEvent>,
+    device_event_tasks: &mut HashMap<Address, tokio::task::AbortHandle>,
+) {
     let adapter = {
         let state = BLUETOOTH_STATE.read();
         let Some(ref state) = *state else {
@@ -177,7 +185,13 @@ async fn handle_device_added(address: Address, event_tx: &UnboundedSender<Blueto
         }
     }
 
-    subscribe_device_events(address, device, event_tx).await;
+    // replace any stale subscription for this address (e.g. it was
+    // previously removed and re-added) rather than leaking it
+    if let Some(handle) = subscribe_device_events(address, device, event_tx).await
+        && let Some(old_handle) = device_event_tasks.insert(address, handle)
+    {
+        old_handle.abort();
+    }
 }
 
 /// Fetches a full property snapshot for a device.
@@ -296,15 +310,20 @@ fn update_from_event(input: BluetoothEvent) {
 
 /// Subscribes to BlueZ property change events for a device and forwards them
 /// into the shared event channel.
+///
+/// Returns the spawned task's abort handle so the caller can cancel it once
+/// the device is removed, avoiding a task leak that would otherwise keep a
+/// dead subscription running (and, since bluer's BlueZ object paths can be
+/// reused, potentially forwarding events for a stale device instance).
 async fn subscribe_device_events(
     address: Address,
     device: Device,
     event_tx: &UnboundedSender<BluetoothEvent>,
-) {
+) -> Option<tokio::task::AbortHandle> {
     match device.events().await {
         Ok(mut device_events) => {
             let tx = event_tx.clone();
-            relm4::spawn(async move {
+            let handle = relm4::spawn(async move {
                 while let Some(event) = device_events.next().await {
                     tx.send(BluetoothEvent::Device(address, event))
                         .unwrap_or_else(|e| {
@@ -315,9 +334,11 @@ async fn subscribe_device_events(
                 }
                 tracing::warn!("bluetooth event stream ended for device {address}");
             });
+            Some(handle.abort_handle())
         }
         Err(e) => {
             tracing::warn!("couldn't subscribe to events for device {address}: {e}");
+            None
         }
     }
 }
