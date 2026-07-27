@@ -1,8 +1,11 @@
+pub mod commands;
 pub mod dbus;
 pub mod service;
 pub mod state;
 pub mod types;
-
+// not called from the UI yet; wired up in a following commit
+#[allow(unused_imports)]
+pub use commands::{connect, disconnect, forget, scan, set_wifi_enabled};
 pub use service::run_network_service;
 // WIFI_SCAN_STATE/WifiScanState: not consumed outside network:: yet; wired up
 // in a following commit
