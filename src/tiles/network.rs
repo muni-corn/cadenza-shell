@@ -4,7 +4,7 @@ use relm4::prelude::*;
 
 use crate::{
     network::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, get_icon, types::State},
-    network_menu::NetworkMenu,
+    network_menu::{NetworkMenu, NetworkMenuMsg},
     tiles::Attention,
     widgets::{
         menu_window::{MenuWindow, MenuWindowInit, MenuWindowMsg, MenuWindowOutput},
@@ -17,6 +17,10 @@ pub struct NetworkTile {
     current_state: NetworkInfo,
     menu_open: bool,
     menu_window: Controller<MenuWindow>,
+    // kept alive so the menu's component runtime (and its NETWORK_STATE
+    // subscription) isn't shut down; also notified when the menu window
+    // opens/closes so it can gate its periodic rescan
+    network_menu: Controller<NetworkMenu>,
 }
 
 #[derive(Debug)]
@@ -29,10 +33,6 @@ pub enum NetworkTileMsg {
 #[derive(Debug)]
 pub struct NetworkTileWidgets {
     tile: Controller<Tile>,
-    // kept alive so the menu's component runtime (and its NETWORK_STATE
-    // subscription) isn't shut down; dropping a Controller stops its
-    // runtime immediately
-    _network_menu: Controller<NetworkMenu>,
 }
 
 impl SimpleComponent for NetworkTile {
@@ -93,11 +93,9 @@ impl SimpleComponent for NetworkTile {
                 current_state,
                 menu_open: false,
                 menu_window,
+                network_menu,
             },
-            widgets: NetworkTileWidgets {
-                tile,
-                _network_menu: network_menu,
-            },
+            widgets: NetworkTileWidgets { tile },
         }
     }
 
@@ -114,9 +112,12 @@ impl SimpleComponent for NetworkTile {
                 } else {
                     MenuWindowMsg::Hide
                 });
+                self.network_menu
+                    .emit(NetworkMenuMsg::SetOpen(self.menu_open));
             }
             NetworkTileMsg::MenuClosed => {
                 self.menu_open = false;
+                self.network_menu.emit(NetworkMenuMsg::SetOpen(false));
             }
         }
     }

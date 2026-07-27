@@ -1,12 +1,15 @@
-use std::collections::HashSet;
+use std::{collections::HashSet, time::Duration};
 
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::network::{
-    self, AccessPointSummary, ConnectFailureReason, NETWORK_STATE, NetworkEvent, NetworkInfo,
-    WIFI_SCAN_STATE, WifiScanState, get_icon, get_strength_icon, subscribe_events,
-    types::ApSecurity,
+use crate::{
+    network::{
+        self, AccessPointSummary, ConnectFailureReason, NETWORK_STATE, NetworkEvent, NetworkInfo,
+        WIFI_SCAN_STATE, WifiScanState, get_icon, get_strength_icon, subscribe_events,
+        types::ApSecurity,
+    },
+    settings,
 };
 
 #[derive(Debug)]
@@ -16,6 +19,10 @@ pub struct NetworkMenu {
     access_points: FactoryVecDeque<AccessPointRow>,
     password_prompt: Option<PasswordPrompt>,
     connect_error: Option<String>,
+    /// Whether the menu's containing window is currently open, set by the
+    /// owning tile via [`NetworkMenuMsg::SetOpen`]. Gates the periodic
+    /// rescan so we don't poke the radio while nobody's looking.
+    is_open: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -36,6 +43,10 @@ pub enum NetworkMenuMsg {
     UpdateState(NetworkInfo),
     UpdateScanState(WifiScanState),
     ConnectionEvent(NetworkEvent),
+    /// Sent by the owning tile when its menu window opens or closes.
+    SetOpen(bool),
+    /// Internal: periodic tick requesting a rescan while open.
+    PeriodicRescan,
 }
 
 #[derive(Debug)]
@@ -111,6 +122,20 @@ impl SimpleComponent for NetworkMenu {
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                 }
+            }
+        });
+
+        // periodically request a rescan while the menu is open; RequestScan
+        // only starts a scan, it doesn't return fresh results itself, so
+        // this is what eventually surfaces them once LastScan advances
+        let sender_clone = sender.clone();
+        relm4::spawn(async move {
+            let interval_secs = settings::get_config().network.scan_interval;
+            let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
+            interval.tick().await; // skip the immediate first tick
+            loop {
+                interval.tick().await;
+                sender_clone.input(NetworkMenuMsg::PeriodicRescan);
             }
         });
 
@@ -297,6 +322,7 @@ impl SimpleComponent for NetworkMenu {
             access_points,
             password_prompt: None,
             connect_error: None,
+            is_open: false,
         };
         update_ap_rows(&mut model.access_points, &current_scan_state.access_points);
         model.scan_state = current_scan_state;
@@ -333,6 +359,19 @@ impl SimpleComponent for NetworkMenu {
             }
             NetworkMenuMsg::Rescan => {
                 network::scan();
+            }
+            NetworkMenuMsg::SetOpen(open) => {
+                self.is_open = open;
+                if open {
+                    // fetch fresh results right away instead of waiting for
+                    // the next periodic tick
+                    network::scan();
+                }
+            }
+            NetworkMenuMsg::PeriodicRescan => {
+                if self.is_open {
+                    network::scan();
+                }
             }
             NetworkMenuMsg::Disconnect => {
                 network::disconnect();
