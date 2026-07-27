@@ -8,8 +8,8 @@ pub mod types;
 #[allow(unused_imports)]
 pub use commands::{connect, disconnect, forget, scan, set_wifi_enabled};
 pub use service::run_network_service;
-// WIFI_SCAN_STATE/WifiScanState: not consumed outside network:: yet; wired up
-// in a following commit
+// WIFI_SCAN_STATE/WifiScanState: not consumed outside network:: yet; the
+// network_menu rewrite subscribes to them in a following commit
 #[allow(unused_imports)]
 pub use state::{
     NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE, WifiScanState, get_icon,

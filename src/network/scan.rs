@@ -1,6 +1,3 @@
-// temporary until run_network_service calls fetch_access_points
-#![allow(dead_code)]
-
 use std::collections::HashMap;
 
 use zbus::zvariant::OwnedObjectPath;

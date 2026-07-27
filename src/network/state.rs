@@ -16,12 +16,8 @@ pub static NETWORK_STATE: SharedState<NetworkInfo> = SharedState::new();
 /// Kept separate from [`NETWORK_STATE`] so the bar tile - which only cares
 /// about the active connection - doesn't get a fresh clone of the whole
 /// access point list on every scan; only the menu subscribes to this.
-///
-/// Not written to yet; wired up in a following commit.
-#[allow(dead_code)]
 pub static WIFI_SCAN_STATE: SharedState<WifiScanState> = SharedState::new();
 
-#[allow(dead_code)]
 #[derive(Debug, Clone, Default)]
 pub struct WifiScanState {
     /// Access points, deduplicated by SSID and sorted with the active
@@ -36,7 +32,6 @@ pub struct WifiScanState {
 
 /// A single wifi network as shown in the menu: one row per SSID, even if
 /// multiple access points (BSSIDs) are broadcasting it.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq)]
 pub struct AccessPointSummary {
     pub ssid: String,
@@ -52,6 +47,8 @@ pub struct AccessPointSummary {
     pub saved_connection: Option<OwnedObjectPath>,
 }
 
+// is_saved/needs_password aren't called yet; wired up when network_menu
+// renders the access point list
 #[allow(dead_code)]
 impl AccessPointSummary {
     pub fn is_saved(&self) -> bool {

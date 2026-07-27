@@ -1,5 +1,5 @@
-// temporary until run_network_service installs the sender and handles these
-// commands
+// temporary until network_menu calls these; the service already handles
+// every command variant
 #![allow(dead_code)]
 
 use std::sync::OnceLock;
@@ -7,23 +7,28 @@ use std::sync::OnceLock;
 use tokio::sync::mpsc::UnboundedSender;
 use zbus::zvariant::OwnedObjectPath;
 
+use crate::network::types::ApSecurity;
+
 /// Commands the UI can send to the network service.
 ///
 /// The service never touches D-Bus directly from UI code; every mutating
 /// operation goes through this channel and is handled on the service's own
 /// event loop, alongside the property-change and reconcile events it
 /// already processes.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub(crate) enum NetworkCommand {
     SetWifiEnabled(bool),
     /// Requests a rescan. A no-op if a scan is already in flight.
     Scan,
     /// Connects to a wifi network by SSID. If NetworkManager already has a
     /// saved connection profile for this SSID, `password` is ignored and the
-    /// saved secrets are used; otherwise a new profile is created, with
-    /// `password` if the network requires one.
+    /// saved secrets are used; otherwise a new profile is created. `security`
+    /// determines what key-mgmt scheme to configure if `password` is given
+    /// (ignored for `Open`/`Enterprise`, since those don't take an inline
+    /// password).
     Connect {
         ssid: String,
+        security: ApSecurity,
         password: Option<String>,
     },
     /// Deactivates the current primary connection, if any.
@@ -65,9 +70,14 @@ pub fn scan() {
 ///
 /// If NetworkManager already has a saved connection for this SSID,
 /// `password` is ignored. Otherwise a new connection profile is created,
-/// using `password` if the network requires one.
-pub fn connect(ssid: String, password: Option<String>) {
-    send(NetworkCommand::Connect { ssid, password });
+/// using `password` (and `security` to pick the key-mgmt scheme) if the
+/// network requires one.
+pub fn connect(ssid: String, security: ApSecurity, password: Option<String>) {
+    send(NetworkCommand::Connect {
+        ssid,
+        security,
+        password,
+    });
 }
 
 /// Disconnects the currently active connection, if any.

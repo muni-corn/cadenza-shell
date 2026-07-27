@@ -1,17 +1,19 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use futures_lite::StreamExt;
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
-use zbus::zvariant::OwnedObjectPath;
+use zbus::zvariant::{ObjectPath, OwnedObjectPath, Value};
 
 use crate::{
     network::{
+        commands::{self, NetworkCommand},
         dbus::{
             AccessPointProxy, ActiveConnectionProxy, NetworkDeviceProxy, NetworkManagerProxy,
-            WirelessDeviceProxy,
+            SettingsConnectionProxy, WirelessDeviceProxy,
         },
-        state::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo},
-        types::{DeviceType, State},
+        scan,
+        state::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE},
+        types::{ApSecurity, DeviceType, State},
     },
     settings, sleep_monitor,
 };
@@ -43,6 +45,8 @@ pub enum NetworkPropertyChange {
     /// unique name and go silent when it disappears, so they must be torn
     /// down and re-established against the new owner.
     NetworkManagerRestarted,
+    /// A command issued by the UI (via `network::commands`).
+    Command(NetworkCommand),
 }
 
 /// Tracks the abort handles for the top-level NetworkManager property
@@ -127,6 +131,24 @@ pub async fn run_network_service() {
         }
     });
 
+    // install the command sender so free functions in network::commands can
+    // push commands, and forward them into the same event channel as
+    // everything else
+    let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<NetworkCommand>();
+    if commands::install_command_sender(cmd_tx).is_err() {
+        tracing::warn!("network service started more than once; extra instance exiting");
+        return;
+    }
+    let event_tx_cmd = event_tx.clone();
+    relm4::spawn(async move {
+        while let Some(cmd) = cmd_rx.recv().await {
+            event_tx_cmd
+                .send(NetworkPropertyChange::Command(cmd))
+                .unwrap_or_else(|e| tracing::error!("couldn't forward network command: {e}"));
+        }
+        tracing::warn!("network command channel closed");
+    });
+
     // fetch initial state immediately so the tile is correct before any events
     // arrive
     let mut tasks = SubscriptionTasks::default();
@@ -209,9 +231,221 @@ pub async fn run_network_service() {
                     tracing::warn!("couldn't refetch network state after restart: {e}");
                 }
             }
+            NetworkPropertyChange::Command(cmd) => {
+                handle_command(&conn, cmd).await;
+            }
         }
     }
     tracing::warn!("network service has stopped receiving events");
+}
+
+/// Dispatches a single UI-issued command to its D-Bus handler, logging on
+/// failure. Failures are not fatal to the service; the user can simply
+/// retry from the menu.
+async fn handle_command(conn: &zbus::Connection, cmd: NetworkCommand) {
+    match cmd {
+        NetworkCommand::SetWifiEnabled(enabled) => {
+            if let Err(e) = handle_set_wifi_enabled(conn, enabled).await {
+                tracing::error!("couldn't set wifi enabled to {enabled}: {e}");
+            }
+        }
+        NetworkCommand::Scan => {
+            if let Err(e) = handle_scan(conn).await {
+                tracing::warn!("couldn't request wifi scan: {e}");
+            }
+        }
+        NetworkCommand::Connect {
+            ssid,
+            security,
+            password,
+        } => {
+            if let Err(e) = handle_connect(conn, &ssid, security, password.as_deref()).await {
+                tracing::error!("couldn't connect to {ssid}: {e}");
+            }
+        }
+        NetworkCommand::Disconnect => {
+            if let Err(e) = handle_disconnect(conn).await {
+                tracing::error!("couldn't disconnect: {e}");
+            }
+        }
+        NetworkCommand::Forget(connection_path) => {
+            if let Err(e) = handle_forget(conn, &connection_path).await {
+                tracing::error!("couldn't forget connection {connection_path}: {e}");
+            }
+        }
+    }
+}
+
+/// Finds the first wifi-capable network device, regardless of its current
+/// connection state (unlike the wireless device path tracked in
+/// `SubscriptionTasks`, which is only populated once a wifi connection is
+/// already active).
+async fn find_wireless_device(conn: &zbus::Connection) -> anyhow::Result<OwnedObjectPath> {
+    let nm_proxy = NetworkManagerProxy::new(conn).await?;
+    let device_paths = nm_proxy.get_devices().await?;
+
+    for path in device_paths {
+        let Ok(device_proxy) = NetworkDeviceProxy::builder(conn).path(&path)?.build().await else {
+            continue;
+        };
+        if let Ok(DeviceType::Wifi) = device_proxy.device_type().await {
+            return Ok(path);
+        }
+    }
+
+    anyhow::bail!("no wireless device found")
+}
+
+async fn handle_set_wifi_enabled(conn: &zbus::Connection, enabled: bool) -> anyhow::Result<()> {
+    let nm_proxy = NetworkManagerProxy::new(conn).await?;
+    nm_proxy.set_wireless_enabled(enabled).await?;
+    Ok(())
+}
+
+/// Requests a scan, then refetches and publishes the access point list.
+///
+/// `RequestScan` only asks NetworkManager to *start* scanning; it doesn't
+/// wait for completion, so the immediate refetch below will usually still
+/// show pre-scan results. The menu re-requests a scan periodically while
+/// open (see a following commit) to eventually pick up fresh results once
+/// `LastScan` advances.
+async fn handle_scan(conn: &zbus::Connection) -> anyhow::Result<()> {
+    WIFI_SCAN_STATE.write().scanning = true;
+
+    let device_path = find_wireless_device(conn).await?;
+    let wifi_proxy = WirelessDeviceProxy::builder(conn)
+        .path(&device_path)?
+        .build()
+        .await?;
+
+    let scan_result = wifi_proxy.request_scan(HashMap::new()).await;
+
+    if let Err(e) = &scan_result {
+        tracing::warn!("RequestScan failed: {e}");
+    }
+
+    if let Err(e) = refresh_access_points(conn, &device_path).await {
+        tracing::warn!("couldn't refresh access points after scan request: {e}");
+    }
+
+    WIFI_SCAN_STATE.write().scanning = false;
+
+    scan_result.map_err(anyhow::Error::from)
+}
+
+/// Refetches the access point list and `LastScan` timestamp for the given
+/// wireless device and publishes them to [`WIFI_SCAN_STATE`].
+async fn refresh_access_points(
+    conn: &zbus::Connection,
+    device_path: &OwnedObjectPath,
+) -> anyhow::Result<()> {
+    let active_ssid = NETWORK_STATE.read().wifi_ssid();
+    let access_points = scan::fetch_access_points(conn, device_path, active_ssid.as_deref())
+        .await
+        .inspect_err(|e| tracing::warn!("couldn't fetch access points: {e}"))
+        .unwrap_or_default();
+
+    let wifi_proxy = WirelessDeviceProxy::builder(conn)
+        .path(device_path)?
+        .build()
+        .await?;
+    let last_scan_ms = wifi_proxy.last_scan().await.unwrap_or(-1);
+
+    let mut state = WIFI_SCAN_STATE.write();
+    state.access_points = access_points;
+    state.last_scan_ms = last_scan_ms;
+
+    Ok(())
+}
+
+/// Connects to a wifi network by SSID, letting NetworkManager reuse a saved
+/// connection profile if one matches, or create a new one otherwise.
+///
+/// Passing a partial settings dict (just the SSID, plus security settings if
+/// a password was given) rather than a fully-specified connection is
+/// intentional: `AddAndActivateConnection` completes it against any existing
+/// matching profile, so this same call handles both "connect to a saved
+/// network" and "connect to a new one" without needing to track which case
+/// applies ourselves.
+async fn handle_connect(
+    conn: &zbus::Connection,
+    ssid: &str,
+    security: ApSecurity,
+    password: Option<&str>,
+) -> anyhow::Result<()> {
+    let device_path = find_wireless_device(conn).await?;
+    let nm_proxy = NetworkManagerProxy::new(conn).await?;
+
+    let mut wireless_settings: HashMap<String, Value<'_>> = HashMap::new();
+    wireless_settings.insert("ssid".to_string(), Value::new(ssid.as_bytes().to_vec()));
+
+    let mut connection_settings: HashMap<String, HashMap<String, Value<'_>>> = HashMap::new();
+    connection_settings.insert("802-11-wireless".to_string(), wireless_settings);
+
+    if let Some(password) = password {
+        connection_settings.insert(
+            "802-11-wireless-security".to_string(),
+            build_security_settings(security, password),
+        );
+    }
+
+    let no_specific_object = ObjectPath::try_from("/")?;
+    nm_proxy
+        .add_and_activate_connection(connection_settings, &device_path, &no_specific_object)
+        .await?;
+
+    Ok(())
+}
+
+/// Builds the `802-11-wireless-security` settings dict for a password-based
+/// connection attempt. Returns an empty map for security schemes that don't
+/// take an inline password (`Open`, `Enterprise`); callers are expected to
+/// have already excluded those via [`ApSecurity::requires_password`].
+fn build_security_settings(security: ApSecurity, password: &str) -> HashMap<String, Value<'_>> {
+    let mut settings = HashMap::new();
+
+    match security {
+        ApSecurity::Psk => {
+            settings.insert("key-mgmt".to_string(), Value::new("wpa-psk"));
+            settings.insert("psk".to_string(), Value::new(password.to_string()));
+        }
+        ApSecurity::Sae => {
+            settings.insert("key-mgmt".to_string(), Value::new("sae"));
+            settings.insert("psk".to_string(), Value::new(password.to_string()));
+        }
+        ApSecurity::Wep => {
+            // NM_WEP_KEY_TYPE_KEY; wep-key0 holds the passphrase/hex key
+            settings.insert("wep-key-type".to_string(), Value::new(1u32));
+            settings.insert("wep-key0".to_string(), Value::new(password.to_string()));
+        }
+        ApSecurity::Open | ApSecurity::Enterprise => {}
+    }
+
+    settings
+}
+
+async fn handle_disconnect(conn: &zbus::Connection) -> anyhow::Result<()> {
+    let nm_proxy = NetworkManagerProxy::new(conn).await?;
+    let primary_path = nm_proxy.primary_connection().await?;
+
+    if primary_path.as_str() == "/" {
+        anyhow::bail!("no active connection to disconnect");
+    }
+
+    nm_proxy.deactivate_connection(&primary_path).await?;
+    Ok(())
+}
+
+async fn handle_forget(
+    conn: &zbus::Connection,
+    connection_path: &OwnedObjectPath,
+) -> anyhow::Result<()> {
+    let connection_proxy = SettingsConnectionProxy::builder(conn)
+        .path(connection_path)?
+        .build()
+        .await?;
+    connection_proxy.delete().await?;
+    Ok(())
 }
 
 /// Fetches current NM state, updates [`NETWORK_STATE`], and (re)subscribes to
