@@ -44,6 +44,15 @@ pub enum MenuWindowMsg {
     Hide,
 }
 
+/// Emitted whenever the window transitions to hidden, whether requested
+/// externally or triggered internally (currently: pressing Escape), so the
+/// owning tile can keep its own open/closed tracking in sync without
+/// guessing at the window's actual visibility.
+#[derive(Debug)]
+pub enum MenuWindowOutput {
+    Hidden,
+}
+
 pub struct MenuWindowWidgets {
     window: gtk::Window,
 }
@@ -51,7 +60,7 @@ pub struct MenuWindowWidgets {
 impl SimpleComponent for MenuWindow {
     type Init = MenuWindowInit;
     type Input = MenuWindowMsg;
-    type Output = ();
+    type Output = MenuWindowOutput;
     type Root = gtk::Window;
     type Widgets = MenuWindowWidgets;
 
@@ -65,7 +74,7 @@ impl SimpleComponent for MenuWindow {
     fn init(
         init: Self::Init,
         window: Self::Root,
-        _sender: ComponentSender<Self>,
+        sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         // sit just below the bar, regardless of the configured bar height
         let top_margin = settings::get_config().bar.height + 4;
@@ -84,16 +93,37 @@ impl SimpleComponent for MenuWindow {
         window.set_width_request(init.width);
         window.set_child(Some(&init.content));
 
+        // dismiss on escape; deliberately not dismissing on focus loss here
+        // (e.g. via is-active) since that races against the owning tile's
+        // own click-to-toggle handler in a way that isn't reliably testable
+        // without a live compositor session
+        let key_controller = gtk::EventControllerKey::new();
+        let sender_clone = sender.clone();
+        key_controller.connect_key_pressed(move |_, key, _, _| {
+            if key == gdk4::Key::Escape {
+                sender_clone.input(MenuWindowMsg::Hide);
+                glib::Propagation::Stop
+            } else {
+                glib::Propagation::Proceed
+            }
+        });
+        window.add_controller(key_controller);
+
         ComponentParts {
             model: MenuWindow { visible: false },
             widgets: MenuWindowWidgets { window },
         }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             MenuWindowMsg::Show => self.visible = true,
-            MenuWindowMsg::Hide => self.visible = false,
+            MenuWindowMsg::Hide => {
+                if self.visible {
+                    self.visible = false;
+                    let _ = sender.output(MenuWindowOutput::Hidden);
+                }
+            }
         }
     }
 
