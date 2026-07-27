@@ -389,6 +389,7 @@ impl SimpleComponent for BluetoothMenu {
             .spacing(16)
             .vexpand(true)
             .width_request(320)
+            .height_request(512)
             .build()
     }
 }
