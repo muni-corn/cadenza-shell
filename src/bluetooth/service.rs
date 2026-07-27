@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use bluer::{
     Adapter, AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, DeviceProperty, Session,
@@ -8,7 +8,7 @@ use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 
 use crate::{
     bluetooth::state::{BLUETOOTH_STATE, BluetoothState, DeviceInfo},
-    sleep_monitor,
+    settings, sleep_monitor,
 };
 
 #[derive(Debug)]
@@ -17,6 +17,10 @@ pub enum BluetoothEvent {
     Device(Address, DeviceEvent),
     /// The system has just woken from sleep; triggers a full state refresh.
     Wake,
+    /// Periodic full refetch, independent of any BlueZ event. Self-heals
+    /// state that a missed event would otherwise leave stale forever, the
+    /// same way battery::watcher's poll interval does.
+    Reconcile,
 }
 
 pub async fn run_bluetooth_service() {
@@ -82,6 +86,23 @@ pub async fn run_bluetooth_service() {
         }
     });
 
+    // periodically reconcile full state so a missed BlueZ event never
+    // leaves the tile stale indefinitely
+    let event_tx_reconcile = event_tx.clone();
+    relm4::spawn(async move {
+        let interval_secs = settings::get_config().bluetooth.reconcile_interval;
+        let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
+        // skip the first tick, which fires immediately; initial state is
+        // already fetched separately above
+        interval.tick().await;
+        loop {
+            interval.tick().await;
+            event_tx_reconcile
+                .send(BluetoothEvent::Reconcile)
+                .unwrap_or_else(|e| tracing::error!("couldn't send reconcile tick: {e}"));
+        }
+    });
+
     while let Some(event) = event_rx.recv().await {
         update(event, &event_tx, &mut device_event_tasks).await;
     }
@@ -130,7 +151,12 @@ async fn update(
 ) {
     match input {
         BluetoothEvent::Wake => {
-            refresh_state_after_wake().await;
+            tracing::debug!("system wake: refreshing bluetooth state");
+            reconcile_state().await;
+        }
+        BluetoothEvent::Reconcile => {
+            tracing::debug!("periodic reconcile: refreshing bluetooth state");
+            reconcile_state().await;
         }
         // a newly added device needs its full property snapshot fetched
         // before it can be inserted, which requires an async round trip
@@ -212,11 +238,10 @@ async fn build_device_info(device: &Device) -> DeviceInfo {
 }
 
 /// Re-polls adapter powered/discovering state and refreshes every device's
-/// property snapshot after a system wake, since D-Bus events may have been
-/// missed during sleep.
-async fn refresh_state_after_wake() {
-    tracing::debug!("system wake: refreshing bluetooth state");
-
+/// property snapshot, self-healing anything a missed BlueZ event would
+/// otherwise have left stale. Used both after a system wake and on the
+/// periodic reconcile tick.
+async fn reconcile_state() {
     // clone the adapter and known addresses without holding the write lock
     // across the async re-fetch below
     let (adapter, addresses) = {
@@ -275,8 +300,8 @@ fn update_from_event(input: BluetoothEvent) {
                 p => tracing::warn!("unhandled AdapterProperty event: {p:?}"),
             },
         },
-        // wake is handled before this function is called
-        BluetoothEvent::Wake => {}
+        // wake and reconcile are handled before this function is called
+        BluetoothEvent::Wake | BluetoothEvent::Reconcile => {}
         BluetoothEvent::Device(address, device_event) => {
             let Some(info) = state.devices.get_mut(&address) else {
                 tracing::debug!("property change for untracked device {address}, ignoring");
