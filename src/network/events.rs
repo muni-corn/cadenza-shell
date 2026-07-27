@@ -1,6 +1,3 @@
-// temporary until network_menu subscribes to these events
-#![allow(dead_code)]
-
 use std::sync::OnceLock;
 
 use tokio::sync::broadcast;

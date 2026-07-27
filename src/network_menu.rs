@@ -1,28 +1,41 @@
-// temporary until we figure things out
-#![allow(dead_code)]
+use std::collections::HashSet;
 
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::network::{NETWORK_STATE, NetworkInfo, dbus::AccessPointProxy, get_icon};
+use crate::network::{
+    self, AccessPointSummary, ConnectFailureReason, NETWORK_STATE, NetworkEvent, NetworkInfo,
+    WIFI_SCAN_STATE, WifiScanState, get_icon, get_strength_icon, subscribe_events,
+    types::ApSecurity,
+};
 
 #[derive(Debug)]
 pub struct NetworkMenu {
     network_state: NetworkInfo,
-    show_password_dialog: Option<String>, // SSID requiring password
-    access_points: AsyncFactoryVecDeque<AccessPointWidget>,
-    scanning: bool,
+    scan_state: WifiScanState,
+    access_points: FactoryVecDeque<AccessPointRow>,
+    password_prompt: Option<PasswordPrompt>,
+    connect_error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+struct PasswordPrompt {
+    ssid: String,
+    security: ApSecurity,
 }
 
 #[derive(Debug)]
 pub enum NetworkMenuMsg {
     ToggleWifi(bool),
-    ScanNetworks,
-    ConnectToNetwork(String),   // SSID
-    ShowPasswordDialog(String), // SSID
-    HidePasswordDialog,
-    ConnectWithPassword(String, String), // SSID, Password
+    Rescan,
+    Disconnect,
+    ApClicked(AccessPointSummary),
+    ForgetClicked(AccessPointSummary),
+    PasswordSubmitted(String),
+    CancelPassword,
     UpdateState(NetworkInfo),
+    UpdateScanState(WifiScanState),
+    ConnectionEvent(NetworkEvent),
 }
 
 #[derive(Debug)]
@@ -32,10 +45,13 @@ pub struct NetworkMenuWidgets {
     ssid_label: gtk::Label,
     connectivity_label: gtk::Label,
     connection_state_label: gtk::Label,
-    password_dialog_box: gtk::Box,
-    password_dialog_label: gtk::Label,
+    disconnect_button: gtk::Button,
+    rescan_button: gtk::Button,
+    scanning_label: gtk::Label,
+    error_label: gtk::Label,
+    password_box: gtk::Box,
+    password_label: gtk::Label,
     password_entry: gtk::Entry,
-    connect_button: gtk::Button,
 }
 
 impl SimpleComponent for NetworkMenu {
@@ -50,7 +66,7 @@ impl SimpleComponent for NetworkMenu {
             .orientation(gtk::Orientation::Vertical)
             .spacing(16)
             .vexpand(true)
-            .width_request(256)
+            .width_request(320)
             .build()
     }
 
@@ -59,20 +75,47 @@ impl SimpleComponent for NetworkMenu {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let access_points = AsyncFactoryVecDeque::builder()
-            .launch(gtk::Box::default())
+        let access_points = FactoryVecDeque::builder()
+            .launch(
+                gtk::Box::builder()
+                    .orientation(gtk::Orientation::Vertical)
+                    .spacing(4)
+                    .build(),
+            )
             .forward(sender.input_sender(), |output| match output {
-                AccessPointOutput::Connect(ssid) => NetworkMenuMsg::ConnectToNetwork(ssid),
-                AccessPointOutput::RequestPassword(ssid) => {
-                    NetworkMenuMsg::ShowPasswordDialog(ssid)
+                AccessPointRowOutput::Clicked(summary) => NetworkMenuMsg::ApClicked(summary),
+                AccessPointRowOutput::ForgetClicked(summary) => {
+                    NetworkMenuMsg::ForgetClicked(summary)
                 }
             });
 
         NETWORK_STATE.subscribe(sender.input_sender(), |state| {
             NetworkMenuMsg::UpdateState(state.clone())
         });
+        WIFI_SCAN_STATE.subscribe(sender.input_sender(), |state| {
+            NetworkMenuMsg::UpdateScanState(state.clone())
+        });
+
+        // forward connection attempt outcomes into our own input channel
+        let sender_clone = sender.clone();
+        relm4::spawn(async move {
+            let mut rx = subscribe_events();
+            loop {
+                match rx.recv().await {
+                    Ok(event) => sender_clone.input(NetworkMenuMsg::ConnectionEvent(event)),
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                        tracing::warn!(
+                            "network menu lagged on connection event broadcast, missed {n} \
+                             event(s)"
+                        );
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                }
+            }
+        });
 
         let current_state = NETWORK_STATE.read().clone();
+        let current_scan_state = WIFI_SCAN_STATE.read().clone();
 
         // header with wifi toggle
         let header_box = gtk::Box::builder()
@@ -124,16 +167,31 @@ impl SimpleComponent for NetworkMenu {
             .spacing(4)
             .build();
 
+        let ssid_row = gtk::Box::builder().spacing(8).build();
+
         let ssid_label = gtk::Label::builder()
             .halign(gtk::Align::Start)
+            .hexpand(true)
             .visible(current_state.wifi_ssid().is_some())
             .label(
                 current_state
                     .wifi_ssid()
-                    .map(|ssid| format!("Connected to {}", ssid))
+                    .map(|ssid| format!("Connected to {ssid}"))
                     .unwrap_or_default(),
             )
             .build();
+
+        let disconnect_button = gtk::Button::builder()
+            .label("Disconnect")
+            .visible(current_state.wifi_ssid().is_some())
+            .build();
+        disconnect_button.connect_clicked({
+            let sender = sender.clone();
+            move |_| sender.input(NetworkMenuMsg::Disconnect)
+        });
+
+        ssid_row.append(&ssid_label);
+        ssid_row.append(&disconnect_button);
 
         let connectivity_label = gtk::Label::builder()
             .halign(gtk::Align::Start)
@@ -145,22 +203,50 @@ impl SimpleComponent for NetworkMenu {
             .label(current_state.connection_state.to_string())
             .build();
 
-        status_box.append(&ssid_label);
+        status_box.append(&ssid_row);
         status_box.append(&connectivity_label);
         status_box.append(&connection_state_label);
 
-        // password dialog box (initially hidden)
-        let password_dialog_box = gtk::Box::builder()
+        // rescan row
+        let rescan_row = gtk::Box::builder().spacing(8).build();
+
+        let rescan_button = gtk::Button::builder().label("Rescan").build();
+        rescan_button.connect_clicked({
+            let sender = sender.clone();
+            move |_| sender.input(NetworkMenuMsg::Rescan)
+        });
+
+        let scanning_label = gtk::Label::builder()
+            .label("Scanning...")
+            .css_classes(["dim"])
+            .visible(current_scan_state.scanning)
+            .build();
+
+        rescan_row.append(&rescan_button);
+        rescan_row.append(&scanning_label);
+
+        // connection error banner (covers both the "retry password" case and
+        // a plain failed connect to a saved/open network)
+        let error_label = gtk::Label::builder()
+            .halign(gtk::Align::Start)
+            .css_classes(["warning"])
+            .visible(false)
+            .wrap(true)
+            .build();
+
+        // password prompt (initially hidden)
+        let password_box = gtk::Box::builder()
             .orientation(gtk::Orientation::Vertical)
             .spacing(8)
             .visible(false)
             .build();
 
-        let password_dialog_label = gtk::Label::new(None);
+        let password_label = gtk::Label::builder().halign(gtk::Align::Start).build();
 
         let password_entry = gtk::Entry::builder()
             .visibility(false)
             .placeholder_text("Password")
+            .activates_default(true)
             .build();
 
         let dialog_buttons_box = gtk::Box::builder().spacing(8).build();
@@ -168,46 +254,52 @@ impl SimpleComponent for NetworkMenu {
         let cancel_button = gtk::Button::builder().label("Cancel").build();
         cancel_button.connect_clicked({
             let sender = sender.clone();
-            move |_| {
-                sender.input(NetworkMenuMsg::HidePasswordDialog);
-            }
+            move |_| sender.input(NetworkMenuMsg::CancelPassword)
         });
 
         let connect_button = gtk::Button::builder().label("Connect").build();
-        connect_button.connect_clicked({
+        let submit = {
             let sender = sender.clone();
             let password_entry = password_entry.clone();
-            move |_| {
-                let password = password_entry.text().to_string();
-                // TODO: need to get SSID from model state
-                sender.input(NetworkMenuMsg::ConnectWithPassword(
-                    "current_ssid".to_string(),
-                    password,
+            move || {
+                sender.input(NetworkMenuMsg::PasswordSubmitted(
+                    password_entry.text().to_string(),
                 ));
             }
+        };
+        connect_button.connect_clicked({
+            let submit = submit.clone();
+            move |_| submit()
         });
+        password_entry.connect_activate(move |_| submit());
 
         dialog_buttons_box.append(&cancel_button);
         dialog_buttons_box.append(&connect_button);
 
-        password_dialog_box.append(&password_dialog_label);
-        password_dialog_box.append(&password_entry);
-        password_dialog_box.append(&dialog_buttons_box);
+        password_box.append(&password_label);
+        password_box.append(&password_entry);
+        password_box.append(&dialog_buttons_box);
 
         content_box.append(&status_box);
-        content_box.append(&password_dialog_box);
+        content_box.append(&rescan_row);
+        content_box.append(&error_label);
+        content_box.append(&password_box);
+        content_box.append(access_points.widget());
 
         scrolled_window.set_child(Some(&content_box));
 
         root.append(&header_box);
         root.append(&scrolled_window);
 
-        let model = NetworkMenu {
+        let mut model = NetworkMenu {
             network_state: current_state,
-            show_password_dialog: None,
+            scan_state: WifiScanState::default(),
             access_points,
-            scanning: false,
+            password_prompt: None,
+            connect_error: None,
         };
+        update_ap_rows(&mut model.access_points, &current_scan_state.access_points);
+        model.scan_state = current_scan_state;
 
         let widgets = NetworkMenuWidgets {
             wifi_icon,
@@ -215,10 +307,13 @@ impl SimpleComponent for NetworkMenu {
             ssid_label,
             connectivity_label,
             connection_state_label,
-            password_dialog_box,
-            password_dialog_label,
+            disconnect_button,
+            rescan_button,
+            scanning_label,
+            error_label,
+            password_box,
+            password_label,
             password_entry,
-            connect_button,
         };
 
         ComponentParts { model, widgets }
@@ -229,29 +324,77 @@ impl SimpleComponent for NetworkMenu {
             NetworkMenuMsg::UpdateState(state) => {
                 self.network_state = state;
             }
+            NetworkMenuMsg::UpdateScanState(state) => {
+                update_ap_rows(&mut self.access_points, &state.access_points);
+                self.scan_state = state;
+            }
             NetworkMenuMsg::ToggleWifi(enabled) => {
-                // TODO: implement actual wifi toggle
-                todo!("toggle wifi: {}", enabled);
+                network::set_wifi_enabled(enabled);
             }
-            NetworkMenuMsg::ScanNetworks => {
-                // TODO: implement network scan
-                todo!("scanning for networks");
+            NetworkMenuMsg::Rescan => {
+                network::scan();
             }
-            NetworkMenuMsg::ConnectToNetwork(ssid) => {
-                // TODO: implement connection logic
-                todo!("connecting to network: {}", ssid);
+            NetworkMenuMsg::Disconnect => {
+                network::disconnect();
             }
-            NetworkMenuMsg::ShowPasswordDialog(ssid) => {
-                self.show_password_dialog = Some(ssid);
+            NetworkMenuMsg::ApClicked(summary) => {
+                self.connect_error = None;
+                if summary.is_active {
+                    // already connected to this network; nothing to do here,
+                    // the Disconnect button handles leaving it
+                } else if summary.needs_password() {
+                    self.password_prompt = Some(PasswordPrompt {
+                        ssid: summary.ssid,
+                        security: summary.security,
+                    });
+                } else {
+                    network::connect(summary.ssid, summary.security, None);
+                }
             }
-            NetworkMenuMsg::HidePasswordDialog => {
-                self.show_password_dialog = None;
+            NetworkMenuMsg::ForgetClicked(summary) => {
+                if let Some(connection_path) = summary.saved_connection {
+                    network::forget(connection_path);
+                }
             }
-            NetworkMenuMsg::ConnectWithPassword(ssid, _password) => {
-                // TODO: implement password connection
-                self.show_password_dialog = None;
-                todo!("connecting to {} with password", ssid);
+            NetworkMenuMsg::PasswordSubmitted(password) => {
+                if let Some(prompt) = self.password_prompt.take() {
+                    network::connect(prompt.ssid, prompt.security, Some(password));
+                }
             }
+            NetworkMenuMsg::CancelPassword => {
+                self.password_prompt = None;
+                self.connect_error = None;
+            }
+            NetworkMenuMsg::ConnectionEvent(event) => match event {
+                NetworkEvent::ConnectionSucceeded { ssid } => {
+                    tracing::debug!("connected to {ssid}");
+                    self.password_prompt = None;
+                    self.connect_error = None;
+                }
+                NetworkEvent::ConnectionFailed { ssid, reason } => {
+                    self.connect_error = Some(match reason {
+                        ConnectFailureReason::WrongPassword => {
+                            format!("Wrong password for {ssid}")
+                        }
+                        ConnectFailureReason::Other => format!("Couldn't connect to {ssid}"),
+                    });
+
+                    // reopen the password prompt so the user can retry,
+                    // rather than leaving them nowhere after a wrong
+                    // password
+                    if reason == ConnectFailureReason::WrongPassword {
+                        let security = self
+                            .scan_state
+                            .access_points
+                            .iter()
+                            .find(|ap| ap.ssid == ssid)
+                            .map(|ap| ap.security);
+                        if let Some(security) = security {
+                            self.password_prompt = Some(PasswordPrompt { ssid, security });
+                        }
+                    }
+                }
+            },
         }
     }
 
@@ -263,14 +406,12 @@ impl SimpleComponent for NetworkMenu {
             .wifi_switch
             .set_active(self.network_state.wifi_enabled);
 
-        widgets
-            .ssid_label
-            .set_visible(self.network_state.wifi_ssid().is_some());
+        let ssid = self.network_state.wifi_ssid();
+        widgets.ssid_label.set_visible(ssid.is_some());
+        widgets.disconnect_button.set_visible(ssid.is_some());
         widgets.ssid_label.set_label(
-            &self
-                .network_state
-                .wifi_ssid()
-                .map(|ssid| format!("Connected to {}", ssid))
+            &ssid
+                .map(|ssid| format!("Connected to {ssid}"))
                 .unwrap_or_default(),
         );
 
@@ -281,75 +422,110 @@ impl SimpleComponent for NetworkMenu {
             .connection_state_label
             .set_label(&self.network_state.connection_state.to_string());
 
-        // update password dialog visibility
-        if let Some(ssid) = &self.show_password_dialog {
-            widgets.password_dialog_box.set_visible(true);
+        widgets
+            .rescan_button
+            .set_sensitive(!self.scan_state.scanning);
+        widgets.scanning_label.set_visible(self.scan_state.scanning);
+
+        widgets
+            .error_label
+            .set_visible(self.connect_error.is_some());
+        widgets
+            .error_label
+            .set_label(self.connect_error.as_deref().unwrap_or_default());
+
+        if let Some(prompt) = &self.password_prompt {
+            widgets.password_box.set_visible(true);
             widgets
-                .password_dialog_label
-                .set_label(&format!("Enter password for {}", ssid));
+                .password_label
+                .set_label(&format!("Enter password for {}", prompt.ssid));
         } else {
-            widgets.password_dialog_box.set_visible(false);
+            widgets.password_box.set_visible(false);
             widgets.password_entry.set_text("");
         }
     }
 }
 
-// factory for individual access point items
-#[derive(Debug)]
-struct AccessPointWidget {
-    access_point_proxy: AccessPointProxy<'static>,
-}
+/// Diffs the factory's current rows against the latest scan results: removes
+/// rows for networks no longer in range, updates existing rows in place, and
+/// inserts new ones - instead of clearing and rebuilding the whole list on
+/// every scan (which would destroy and recreate every row's widgets even
+/// when nothing about them changed).
+///
+/// Doesn't reorder existing rows to match a changed sort order (e.g. if a
+/// network's signal strength overtakes another between scans); this is a
+/// minor, self-correcting staleness rather than a correctness issue.
+fn update_ap_rows(rows: &mut FactoryVecDeque<AccessPointRow>, summaries: &[AccessPointSummary]) {
+    let new_ssids: HashSet<&str> = summaries.iter().map(|s| s.ssid.as_str()).collect();
 
-#[derive(Debug)]
-pub enum AccessPointMsg {
-    Connect,
-}
-
-#[derive(Debug)]
-pub enum AccessPointOutput {
-    Connect(String),         // SSID
-    RequestPassword(String), // SSID
-}
-
-pub struct AccessPointWidgetWidgets {
-    main_box: gtk::Box,
-    strength_icon: gtk::Image,
-    ssid_label: gtk::Label,
-    frequency_label: gtk::Label,
-}
-
-impl AsyncFactoryComponent for AccessPointWidget {
-    type CommandOutput = ();
-    type Init = AccessPointProxy<'static>;
-    type Input = AccessPointMsg;
-    type Output = AccessPointOutput;
-    type ParentWidget = gtk::Box;
-    type Root = gtk::Button;
-    type Widgets = AccessPointWidgetWidgets;
-
-    async fn init_model(
-        init: Self::Init,
-        _index: &DynamicIndex,
-        _sender: AsyncFactorySender<Self>,
-    ) -> Self {
-        Self {
-            access_point_proxy: init,
-        }
-    }
-
-    async fn update(&mut self, msg: Self::Input, sender: AsyncFactorySender<Self>) {
-        match msg {
-            AccessPointMsg::Connect => {
-                if let Ok(ssid_bytes) = self.access_point_proxy.ssid().await {
-                    let ssid = String::from_utf8_lossy(&ssid_bytes).to_string();
-                    let _ = sender.output(AccessPointOutput::RequestPassword(ssid));
-                }
+    let current_ssids: Vec<String> = rows.iter().map(|r| r.summary.ssid.clone()).collect();
+    {
+        let mut guard = rows.guard();
+        for (index, ssid) in current_ssids.iter().enumerate().rev() {
+            if !new_ssids.contains(ssid.as_str()) {
+                guard.remove(index);
             }
         }
     }
 
-    fn init_root() -> Self::Root {
-        gtk::Button::builder().build()
+    for summary in summaries {
+        let existing_index = rows.iter().position(|r| r.summary.ssid == summary.ssid);
+        match existing_index {
+            Some(index) => rows.send(index, AccessPointRowMsg::UpdateSummary(summary.clone())),
+            None => {
+                rows.guard().push_back(summary.clone());
+            }
+        }
+    }
+}
+
+// factory for individual access point rows
+#[derive(Debug)]
+struct AccessPointRow {
+    summary: AccessPointSummary,
+}
+
+#[derive(Debug)]
+enum AccessPointRowMsg {
+    Clicked,
+    ForgetClicked,
+    UpdateSummary(AccessPointSummary),
+}
+
+#[derive(Debug)]
+enum AccessPointRowOutput {
+    Clicked(AccessPointSummary),
+    ForgetClicked(AccessPointSummary),
+}
+
+struct AccessPointRowWidgets {
+    _main_box: gtk::Box,
+    strength_icon: gtk::Image,
+    ssid_label: gtk::Label,
+    status_label: gtk::Label,
+    forget_button: gtk::Button,
+}
+
+impl FactoryComponent for AccessPointRow {
+    type CommandOutput = ();
+    type Index = DynamicIndex;
+    type Init = AccessPointSummary;
+    type Input = AccessPointRowMsg;
+    type Output = AccessPointRowOutput;
+    type ParentWidget = gtk::Box;
+    type Root = gtk::Box;
+    type Widgets = AccessPointRowWidgets;
+
+    fn init_model(
+        summary: Self::Init,
+        _index: &DynamicIndex,
+        _sender: FactorySender<Self>,
+    ) -> Self {
+        Self { summary }
+    }
+
+    fn init_root(&self) -> Self::Root {
+        gtk::Box::builder().spacing(4).build()
     }
 
     fn init_widgets(
@@ -357,9 +533,13 @@ impl AsyncFactoryComponent for AccessPointWidget {
         _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as relm4::factory::FactoryView>::ReturnedWidget,
-        sender: AsyncFactorySender<Self>,
+        sender: FactorySender<Self>,
     ) -> Self::Widgets {
-        root.connect_clicked(move |_| sender.input(AccessPointMsg::Connect));
+        let select_button = gtk::Button::builder().hexpand(true).build();
+        select_button.connect_clicked({
+            let sender = sender.clone();
+            move |_| sender.input(AccessPointRowMsg::Clicked)
+        });
 
         let main_box = gtk::Box::builder()
             .spacing(8)
@@ -367,23 +547,81 @@ impl AsyncFactoryComponent for AccessPointWidget {
             .hexpand(true)
             .build();
 
-        let strength_icon = gtk::Image::builder().width_request(32).build();
-
-        let ssid_label = gtk::Label::new(None);
-
-        let frequency_label = gtk::Label::builder()
-            .css_classes(["dim", "access-point-frequency"])
+        let strength_icon = gtk::Image::builder().width_request(24).build();
+        let ssid_label = gtk::Label::builder()
+            .halign(gtk::Align::Start)
+            .hexpand(true)
+            .build();
+        let status_label = gtk::Label::builder()
+            .css_classes(["dim"])
+            .halign(gtk::Align::End)
             .build();
 
         main_box.append(&strength_icon);
         main_box.append(&ssid_label);
-        main_box.append(&frequency_label);
+        main_box.append(&status_label);
 
-        AccessPointWidgetWidgets {
-            main_box,
+        select_button.set_child(Some(&main_box));
+
+        let forget_button = gtk::Button::builder()
+            .icon_name("user-trash-symbolic")
+            .tooltip_text("Forget this network")
+            .visible(self.summary.is_saved())
+            .build();
+        forget_button.connect_clicked(move |_| sender.input(AccessPointRowMsg::ForgetClicked));
+
+        root.append(&select_button);
+        root.append(&forget_button);
+
+        let widgets = AccessPointRowWidgets {
+            _main_box: main_box,
             strength_icon,
             ssid_label,
-            frequency_label,
+            status_label,
+            forget_button,
+        };
+        self.render(&widgets);
+        widgets
+    }
+
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
+        match msg {
+            AccessPointRowMsg::Clicked => {
+                let _ = sender.output(AccessPointRowOutput::Clicked(self.summary.clone()));
+            }
+            AccessPointRowMsg::ForgetClicked => {
+                let _ = sender.output(AccessPointRowOutput::ForgetClicked(self.summary.clone()));
+            }
+            AccessPointRowMsg::UpdateSummary(summary) => {
+                self.summary = summary;
+            }
         }
+    }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: FactorySender<Self>) {
+        self.render(widgets);
+    }
+}
+
+impl AccessPointRow {
+    fn render(&self, widgets: &AccessPointRowWidgets) {
+        widgets
+            .strength_icon
+            .set_icon_name(Some(get_strength_icon(self.summary.strength)));
+        widgets.ssid_label.set_label(&self.summary.ssid);
+
+        let status = if self.summary.is_active {
+            "Connected"
+        } else if self.summary.is_saved() {
+            "Saved"
+        } else if !self.summary.security.is_open() {
+            "Secured"
+        } else {
+            ""
+        };
+        widgets.status_label.set_visible(!status.is_empty());
+        widgets.status_label.set_label(status);
+
+        widgets.forget_button.set_visible(self.summary.is_saved());
     }
 }

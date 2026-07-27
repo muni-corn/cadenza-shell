@@ -47,9 +47,6 @@ pub struct AccessPointSummary {
     pub saved_connection: Option<OwnedObjectPath>,
 }
 
-// is_saved/needs_password aren't called yet; wired up when network_menu
-// renders the access point list
-#[allow(dead_code)]
 impl AccessPointSummary {
     pub fn is_saved(&self) -> bool {
         self.saved_connection.is_some()

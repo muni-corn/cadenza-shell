@@ -1,7 +1,3 @@
-// temporary until network_menu calls these; the service already handles
-// every command variant
-#![allow(dead_code)]
-
 use std::sync::OnceLock;
 
 use tokio::sync::mpsc::UnboundedSender;
