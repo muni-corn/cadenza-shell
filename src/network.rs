@@ -4,4 +4,9 @@ pub mod state;
 pub mod types;
 
 pub use service::run_network_service;
-pub use state::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, get_icon};
+// WIFI_SCAN_STATE/WifiScanState: not consumed outside network:: yet; wired up
+// in a following commit
+#[allow(unused_imports)]
+pub use state::{
+    NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE, WifiScanState, get_icon,
+};
