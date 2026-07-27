@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use bluer::Address;
 use gtk4::prelude::*;
 use relm4::prelude::*;
@@ -145,17 +147,8 @@ impl SimpleComponent for BluetoothMenu {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         match msg {
             BluetoothMenuMsg::UpdateState(state) => {
-                self.bluetooth_state = state.clone();
-
-                // update device list
-                let mut devices_guard = self.devices.guard();
-                devices_guard.clear();
-
-                if let Some(ref state) = state {
-                    for device in state.devices() {
-                        devices_guard.push_back(device.clone());
-                    }
-                }
+                update_device_rows(&mut self.devices, state.as_ref());
+                self.bluetooth_state = state;
             }
             BluetoothMenuMsg::ToggleBluetooth(enabled) => {
                 let state_clone = self.bluetooth_state.clone();
@@ -248,6 +241,52 @@ fn get_status_text(state: &Option<BluetoothState>) -> String {
     }
 }
 
+/// Diffs the factory's current rows against the latest device snapshots:
+/// removes rows for devices that disappeared, updates existing rows in
+/// place, and inserts new ones - instead of clearing and rebuilding the
+/// whole list on every state update. Since that update fires as often as
+/// every reconcile tick, a clear-and-rebuild would destroy and recreate
+/// every row's widgets on a timer even when nothing about them changed.
+fn update_device_rows(
+    devices: &mut AsyncFactoryVecDeque<BluetoothDeviceWidget>,
+    state: Option<&BluetoothState>,
+) {
+    let Some(state) = state else {
+        devices.guard().clear();
+        return;
+    };
+
+    let new_addresses: HashSet<Address> = state.devices().map(|d| d.address).collect();
+
+    // remove rows whose device disappeared; walk in reverse so removing a
+    // later index doesn't invalidate earlier ones still to be checked
+    let current_addresses: Vec<Option<Address>> =
+        devices.iter().map(|w| w.map(|w| w.info.address)).collect();
+    {
+        let mut guard = devices.guard();
+        for (index, address) in current_addresses.iter().enumerate().rev() {
+            let is_stale = address.is_some_and(|addr| !new_addresses.contains(&addr));
+            if is_stale {
+                guard.remove(index);
+            }
+        }
+    }
+
+    // update rows that still exist, insert ones that are new
+    for info in state.devices() {
+        let existing_index = devices
+            .iter()
+            .position(|w| w.map(|w| w.info.address) == Some(info.address));
+
+        match existing_index {
+            Some(index) => devices.send(index, BluetoothDeviceMsg::UpdateInfo(info.clone())),
+            None => {
+                devices.guard().push_back(info.clone());
+            }
+        }
+    }
+}
+
 // factory for individual device items
 #[derive(Debug)]
 struct BluetoothDeviceWidget {
@@ -257,6 +296,7 @@ struct BluetoothDeviceWidget {
 #[derive(Debug)]
 pub enum BluetoothDeviceMsg {
     Toggle,
+    UpdateInfo(DeviceInfo),
 }
 
 #[derive(Debug)]
@@ -299,6 +339,9 @@ impl AsyncFactoryComponent for BluetoothDeviceWidget {
                 } else {
                     let _ = sender.output(BluetoothDeviceOutput::Connect(addr));
                 }
+            }
+            BluetoothDeviceMsg::UpdateInfo(info) => {
+                self.info = info;
             }
         }
     }
