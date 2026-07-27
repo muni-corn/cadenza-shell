@@ -11,9 +11,10 @@ use crate::{
             AccessPointProxy, ActiveConnectionProxy, NetworkDeviceProxy, NetworkManagerProxy,
             SettingsConnectionProxy, WirelessDeviceProxy,
         },
+        events::{self, ConnectFailureReason, NetworkEvent},
         scan,
         state::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE},
-        types::{ApSecurity, DeviceType, State},
+        types::{ApSecurity, DeviceState, DeviceStateReason, DeviceType, State},
     },
     settings, sleep_monitor,
 };
@@ -394,7 +395,98 @@ async fn handle_connect(
         .add_and_activate_connection(connection_settings, &device_path, &no_specific_object)
         .await?;
 
+    // report the outcome once NetworkManager finishes trying, so the menu
+    // can show something more useful than a connect button that silently
+    // does nothing on a wrong password
+    let conn_clone = conn.clone();
+    let ssid_owned = ssid.to_string();
+    relm4::spawn(async move {
+        watch_connect_outcome(conn_clone, device_path, ssid_owned).await;
+    });
+
     Ok(())
+}
+
+/// Watches a wireless device's `StateChanged` signal until it reaches
+/// `Activated` or `Failed` (or a timeout elapses), then broadcasts the
+/// outcome as a [`NetworkEvent`].
+///
+/// A `Failed` transition with reason `NoSecrets` specifically means the
+/// password was missing, wrong, or otherwise rejected; anything else is
+/// reported as a generic failure.
+async fn watch_connect_outcome(conn: zbus::Connection, device_path: OwnedObjectPath, ssid: String) {
+    const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+
+    let builder = match NetworkDeviceProxy::builder(&conn).path(&device_path) {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::warn!("invalid device path {device_path} while watching connect outcome: {e}");
+            return;
+        }
+    };
+    let device_proxy = match builder.build().await {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!("couldn't build device proxy to watch connect outcome: {e}");
+            return;
+        }
+    };
+
+    let mut stream = match device_proxy.receive_device_state_changed().await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!("couldn't subscribe to device state changes for {ssid}: {e}");
+            return;
+        }
+    };
+
+    let outcome = tokio::time::timeout(CONNECT_TIMEOUT, async {
+        while let Some(signal) = stream.next().await {
+            let Ok(args) = signal.args() else {
+                continue;
+            };
+
+            match DeviceState::from(args.new_state) {
+                DeviceState::Activated => {
+                    return Some(NetworkEvent::ConnectionSucceeded { ssid: ssid.clone() });
+                }
+                DeviceState::Failed => {
+                    let reason =
+                        if DeviceStateReason::from(args.reason) == DeviceStateReason::NoSecrets {
+                            ConnectFailureReason::WrongPassword
+                        } else {
+                            ConnectFailureReason::Other
+                        };
+                    return Some(NetworkEvent::ConnectionFailed {
+                        ssid: ssid.clone(),
+                        reason,
+                    });
+                }
+                // still working through intermediate states (Prepare,
+                // Config, NeedAuth, IpConfig, ...)
+                _ => continue,
+            }
+        }
+        None
+    })
+    .await;
+
+    let event = match outcome {
+        Ok(Some(event)) => event,
+        Ok(None) => {
+            tracing::debug!("connect outcome stream for {ssid} ended without a definitive result");
+            return;
+        }
+        Err(_) => {
+            tracing::debug!("timed out waiting for a connect outcome for {ssid}");
+            NetworkEvent::ConnectionFailed {
+                ssid,
+                reason: ConnectFailureReason::Other,
+            }
+        }
+    };
+
+    let _ = events::event_tx().send(event);
 }
 
 /// Builds the `802-11-wireless-security` settings dict for a password-based
