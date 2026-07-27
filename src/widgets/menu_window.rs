@@ -89,6 +89,14 @@ impl SimpleComponent for MenuWindow {
         window.set_margin(Edge::Top, top_margin);
         window.set_margin(Edge::Right, 8);
         window.set_width_request(init.width);
+
+        // a bare layer-shell surface has no default chrome at all (unlike
+        // the gtk::Popover this replaces, which got Adwaita's popover
+        // styling for free); "background" is GTK's builtin class for the
+        // theme's solid background color, and "menu-window" adds our own
+        // padding/rounding/shadow (see style.scss)
+        init.content.add_css_class("background");
+        init.content.add_css_class("menu-window");
         window.set_child(Some(&init.content));
 
         // dismiss on escape; deliberately not dismissing on focus loss here

@@ -10,3 +10,13 @@ pub fn compile_styles() -> Result<String, rsass::Error> {
     })
     .map(|vec| String::from_utf8_lossy(&vec).into_owned())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn styles_compile() {
+        compile_styles().expect("style.scss should compile without errors");
+    }
+}

@@ -248,6 +248,13 @@ revealer {
   }
 }
 
+// content wrapper for MenuWindow (the wifi/bluetooth dropdowns)
+.menu-window {
+  padding: 16px;
+  border-radius: 16px;
+  box-shadow: 0px 4px 8px gtkalpha(black, 0.5);
+}
+
 .content-title {
   margin-top: 32px;
   font-weight: 700;
