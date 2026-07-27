@@ -7,7 +7,6 @@ mod battery;
 mod bluetooth;
 mod bluetooth_menu;
 mod brightness;
-mod commands;
 mod mpris;
 mod network;
 mod network_menu;
