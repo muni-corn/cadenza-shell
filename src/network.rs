@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod dbus;
+pub mod scan;
 pub mod service;
 pub mod state;
 pub mod types;
