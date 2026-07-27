@@ -10,6 +10,7 @@ use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 use crate::{
     bluetooth::{
         agent,
+        commands::{self, BluetoothCommand},
         state::{BLUETOOTH_STATE, BluetoothState, DeviceInfo},
     },
     settings, sleep_monitor,
@@ -29,6 +30,8 @@ pub enum BluetoothEvent {
     /// state that a missed event would otherwise leave stale forever, the
     /// same way battery::watcher's poll interval does.
     Reconcile,
+    /// A command issued by the UI (via `bluetooth::commands`).
+    Command(BluetoothCommand),
 }
 
 pub async fn run_bluetooth_service() {
@@ -98,8 +101,27 @@ pub async fn run_bluetooth_service() {
         }
     });
 
+    // install the command sender so free functions in bluetooth::commands
+    // can push commands, and forward them into the same event channel as
+    // everything else
+    let (cmd_tx, mut cmd_rx) = unbounded_channel::<BluetoothCommand>();
+    if commands::install_command_sender(cmd_tx).is_err() {
+        tracing::warn!("bluetooth service started more than once; extra instance exiting");
+        return;
+    }
+    let event_tx_cmd = event_tx.clone();
+    relm4::spawn(async move {
+        while let Some(cmd) = cmd_rx.recv().await {
+            event_tx_cmd
+                .send(BluetoothEvent::Command(cmd))
+                .unwrap_or_else(|e| tracing::error!("couldn't forward bluetooth command: {e}"));
+        }
+        tracing::warn!("bluetooth command channel closed");
+    });
+
     let mut adapter_events_task: Option<tokio::task::AbortHandle> = None;
     let mut device_event_tasks: HashMap<Address, tokio::task::AbortHandle> = HashMap::new();
+    let mut discovery_task: Option<tokio::task::AbortHandle> = None;
 
     reinitialize_adapter(
         &session,
@@ -124,6 +146,9 @@ pub async fn run_bluetooth_service() {
                     for (_, handle) in device_event_tasks.drain() {
                         handle.abort();
                     }
+                    if let Some(handle) = discovery_task.take() {
+                        handle.abort();
+                    }
                     *BLUETOOTH_STATE.write() = None;
                 }
             }
@@ -140,10 +165,178 @@ pub async fn run_bluetooth_service() {
                     .await;
                 }
             }
+            BluetoothEvent::Command(cmd) => {
+                handle_command(cmd, &mut discovery_task).await;
+            }
             other => update(other, &event_tx, &mut device_event_tasks).await,
         }
     }
     tracing::warn!("bluetooth service has stopped receiving events");
+}
+
+/// Dispatches a single UI-issued command to its `bluer` handler, logging on
+/// failure. Failures are not fatal to the service; the user can simply
+/// retry from the menu.
+async fn handle_command(
+    cmd: BluetoothCommand,
+    discovery_task: &mut Option<tokio::task::AbortHandle>,
+) {
+    match cmd {
+        BluetoothCommand::StartDiscovery => {
+            handle_start_discovery(discovery_task).await;
+        }
+        BluetoothCommand::StopDiscovery => {
+            if let Some(handle) = discovery_task.take() {
+                handle.abort();
+            }
+        }
+        BluetoothCommand::Pair(address) => {
+            handle_pair(address);
+        }
+        BluetoothCommand::SetTrusted(address, trusted) => {
+            if let Err(e) = handle_set_trusted(address, trusted).await {
+                tracing::warn!("couldn't set trusted={trusted} for {address}: {e}");
+            }
+        }
+        BluetoothCommand::Remove(address) => {
+            if let Err(e) = handle_remove(address).await {
+                tracing::warn!("couldn't remove device {address}: {e}");
+            }
+        }
+        BluetoothCommand::PairingReply(reply) => {
+            agent::respond(reply);
+        }
+        BluetoothCommand::CancelPairing => {
+            agent::cancel();
+        }
+    }
+}
+
+/// Starts a discovery session, holding it open (and thus BlueZ's
+/// `Discovering` state true) until `bluetooth.discovery_timeout` elapses or
+/// it's cancelled by a `StopDiscovery` command. A no-op if one is already
+/// running.
+///
+/// `Adapter::discover_devices`'s returned stream doesn't need to be read for
+/// us to learn about discovered devices - the adapter-wide event
+/// subscription already established in `start_event_listening` picks those
+/// up via the normal `DeviceAdded` path - but the stream (and the discovery
+/// session token it holds internally) must stay alive for discovery to
+/// remain active, so this task exists purely to hold and eventually drop it.
+async fn handle_start_discovery(discovery_task: &mut Option<tokio::task::AbortHandle>) {
+    if discovery_task.is_some() {
+        tracing::debug!("discovery already in progress, ignoring StartDiscovery");
+        return;
+    }
+
+    let adapter = {
+        let state = BLUETOOTH_STATE.read();
+        let Some(ref state) = *state else {
+            tracing::warn!("can't start discovery: no bluetooth adapter available");
+            return;
+        };
+        state.adapter.clone()
+    };
+
+    let timeout_secs = settings::get_config().bluetooth.discovery_timeout;
+
+    let mut stream = match adapter.discover_devices().await {
+        Ok(s) => s,
+        Err(e) => {
+            tracing::warn!("couldn't start bluetooth discovery: {e}");
+            return;
+        }
+    };
+
+    let handle = relm4::spawn(async move {
+        let sleep = tokio::time::sleep(Duration::from_secs(timeout_secs));
+        tokio::pin!(sleep);
+
+        loop {
+            tokio::select! {
+                () = &mut sleep => {
+                    tracing::debug!("discovery timeout elapsed");
+                    break;
+                }
+                event = stream.next() => {
+                    if event.is_none() {
+                        tracing::debug!("discovery stream ended");
+                        break;
+                    }
+                }
+            }
+        }
+        // dropping `stream` here (end of scope) drops its internal
+        // discovery session token, which is what actually stops discovery
+    })
+    .abort_handle();
+
+    *discovery_task = Some(handle);
+}
+
+/// Initiates pairing with a device, spawned rather than awaited inline:
+/// pairing can take many seconds while it waits on the user to answer a PIN
+/// or passkey prompt, and awaiting it directly in the command loop would
+/// block every other bluetooth event (property updates, discovery, etc.)
+/// for that whole duration.
+fn handle_pair(address: Address) {
+    let adapter = {
+        let state = BLUETOOTH_STATE.read();
+        let Some(ref state) = *state else {
+            tracing::warn!("can't pair with {address}: no bluetooth adapter available");
+            return;
+        };
+        state.adapter.clone()
+    };
+
+    relm4::spawn(async move {
+        let device = match adapter.device(address) {
+            Ok(d) => d,
+            Err(e) => {
+                tracing::warn!("couldn't build device handle for {address}: {e}");
+                return;
+            }
+        };
+
+        match device.pair().await {
+            Ok(()) => {
+                tracing::info!("paired with {address}");
+                // trusting a device we just paired with is the common
+                // convention (lets it reconnect without re-authorizing)
+                if let Err(e) = device.set_trusted(true).await {
+                    tracing::warn!("paired with {address} but couldn't set it trusted: {e}");
+                }
+            }
+            Err(e) => tracing::warn!("pairing with {address} failed: {e}"),
+        }
+    });
+}
+
+async fn handle_set_trusted(address: Address, trusted: bool) -> anyhow::Result<()> {
+    let adapter = {
+        let state = BLUETOOTH_STATE.read();
+        let Some(ref state) = *state else {
+            anyhow::bail!("no bluetooth adapter available");
+        };
+        state.adapter.clone()
+    };
+
+    let device = adapter.device(address)?;
+    device.set_trusted(trusted).await?;
+    Ok(())
+}
+
+async fn handle_remove(address: Address) -> anyhow::Result<()> {
+    let adapter = {
+        let state = BLUETOOTH_STATE.read();
+        let Some(ref state) = *state else {
+            anyhow::bail!("no bluetooth adapter available");
+        };
+        state.adapter.clone()
+    };
+
+    adapter.remove_device(address).await?;
+    Ok(())
 }
 
 /// Watches for adapters appearing or disappearing and forwards them as
@@ -413,9 +606,12 @@ fn update_from_event(input: BluetoothEvent) {
                 p => tracing::warn!("unhandled AdapterProperty event: {p:?}"),
             },
         },
-        // wake, reconcile, and session events are all handled before this
-        // function is called
-        BluetoothEvent::Wake | BluetoothEvent::Reconcile | BluetoothEvent::Session(_) => {}
+        // wake, reconcile, session, and command events are all handled
+        // before this function is called
+        BluetoothEvent::Wake
+        | BluetoothEvent::Reconcile
+        | BluetoothEvent::Session(_)
+        | BluetoothEvent::Command(_) => {}
         BluetoothEvent::Device(address, device_event) => {
             let Some(info) = state.devices.get_mut(&address) else {
                 tracing::debug!("property change for untracked device {address}, ignoring");

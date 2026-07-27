@@ -1,5 +1,5 @@
-// temporary until run_bluetooth_service installs the sender and handles
-// these commands, and bluetooth_menu calls the free functions
+// temporary until bluetooth_menu calls these free functions; the service
+// already handles every command variant
 #![allow(dead_code)]
 
 use std::sync::OnceLock;
