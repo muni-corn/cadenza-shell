@@ -823,6 +823,36 @@ async fn fetch_network_info(
     ))
 }
 
+/// Resolves the network device backing an active connection and its type.
+///
+/// Returns `None` if the connection has no associated device yet (e.g. it's
+/// still being set up, or is a VPN with no hardware device of its own).
+async fn resolve_active_device(
+    conn: &zbus::Connection,
+    connection_path: &OwnedObjectPath,
+) -> anyhow::Result<Option<(OwnedObjectPath, DeviceType)>> {
+    let active_conn_proxy = ActiveConnectionProxy::builder(conn)
+        .path(connection_path)?
+        .build()
+        .await?;
+
+    let active_device_paths = active_conn_proxy.devices().await?;
+    tracing::debug!("active network device paths: {:?}", active_device_paths);
+
+    let Some(device_path) = active_device_paths.first() else {
+        return Ok(None);
+    };
+
+    let device_proxy = NetworkDeviceProxy::builder(conn)
+        .path(device_path)?
+        .build()
+        .await?;
+
+    let device_type = device_proxy.device_type().await?;
+
+    Ok(Some((device_path.clone(), device_type)))
+}
+
 /// Fetches the connected device's type-specific info (wired or wifi).
 ///
 /// Returns `Ok((None, None, None))` when the primary connection has no
@@ -838,42 +868,31 @@ async fn fetch_specific_info(
     Option<OwnedObjectPath>,
     Option<OwnedObjectPath>,
 )> {
-    let active_conn_proxy = ActiveConnectionProxy::builder(conn)
-        .path(primary_connection_path)?
-        .build()
-        .await?;
-
-    let active_device_paths = active_conn_proxy.devices().await?;
-    tracing::debug!("active network device paths: {:?}", active_device_paths);
-
-    let Some(device_path) = active_device_paths.first() else {
+    let Some((device_path, device_type)) =
+        resolve_active_device(conn, primary_connection_path).await?
+    else {
         return Ok((None, None, None));
     };
 
-    let device_proxy = NetworkDeviceProxy::builder(conn)
-        .path(device_path)?
-        .build()
-        .await?;
-
-    match device_proxy.device_type().await? {
+    match device_type {
         DeviceType::Ethernet => Ok((Some(SpecificNetworkInfo::Wired), None, None)),
         DeviceType::Wifi => {
             // always report the wifi device path so the caller can subscribe
             // to ActiveAccessPoint changes even if there's no access point to
             // read yet (e.g. mid-association); otherwise we'd never notice
             // once one becomes available until an unrelated event fires
-            match get_wifi_info(conn, device_path).await {
+            match get_wifi_info(conn, &device_path).await {
                 Ok((ssid, strength, ap_path)) => Ok((
                     Some(SpecificNetworkInfo::WiFi {
                         wifi_ssid: ssid,
                         wifi_strength: strength,
                     }),
                     Some(ap_path),
-                    Some(device_path.clone()),
+                    Some(device_path),
                 )),
                 Err(e) => {
                     tracing::debug!("couldn't fetch wifi access point info: {e}");
-                    Ok((None, None, Some(device_path.clone())))
+                    Ok((None, None, Some(device_path)))
                 }
             }
         }
