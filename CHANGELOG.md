@@ -83,7 +83,7 @@
 - **charging:** add ChargingSession and ChargingPhase types
 - **charging:** add ChargeProfile struct with persistence
 - add ReadingRecord for more reliable csv tracking
-- add conversion utility functions to `BatteryCapcity`
+- add conversion utility functions to `BatteryCapacity`
 - **history:** give more info when history fails to save
 - **sysfs:** add time of reading to SysfsReading
 - **battery:** add serde support to ChargingStatus
@@ -396,7 +396,7 @@
 - **tray:** fix icons
 - **hyprland:** use connector name for monitors, not model
 - fix button styling for hyprland workspaces
-- **notifications:** fix notifcations being replaced
+- **notifications:** fix notifications being replaced
 - **tray:** update module with updated libraries
 - **bluetooth:** hide module properly when unavailable
 - fix crash when wifi is null, maybe
