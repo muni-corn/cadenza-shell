@@ -13,7 +13,7 @@ use crate::{
         },
         events::{self, ConnectFailureReason, NetworkEvent},
         scan,
-        state::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE},
+        state::{DeviceKind, NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE},
         types::{ApSecurity, DeviceState, DeviceStateReason, DeviceType, State},
     },
     settings, sleep_monitor,
@@ -161,6 +161,17 @@ pub async fn run_network_service() {
         match event {
             NetworkPropertyChange::State(state) => {
                 NETWORK_STATE.write().connection_state = state;
+
+                // refetch as soon as a connection starts activating, so
+                // device_kind (and thus the wifi/wired acquiring icon) is
+                // known right away - ActivatingConnection has no dedicated
+                // watcher of its own, unlike PrimaryConnection
+                if state == State::Connecting {
+                    tracing::debug!("connecting: refetching network state for device kind");
+                    if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
+                        tracing::warn!("couldn't refetch network state while connecting: {e}");
+                    }
+                }
 
                 // if we just transitioned to a connected state but specific_info
                 // is still None (e.g. the wake refetch ran before NM finished
@@ -795,20 +806,45 @@ async fn fetch_network_info(
         .inspect_err(|e| tracing::warn!("couldn't read wireless enabled state: {e}"))
         .unwrap_or(true);
 
+    // resolve whichever connection is primary or, if none is yet, being
+    // activated - so device_kind is known as soon as NetworkManager picks a
+    // device, well before is_connected below can be true
+    let connection_path = if primary_connection_path.as_str() != "/" {
+        Some(primary_connection_path.clone())
+    } else {
+        nm_proxy
+            .activating_connection()
+            .await
+            .ok()
+            .filter(|path| path.as_str() != "/")
+    };
+    let resolved_device = match connection_path {
+        Some(path) => resolve_active_device(conn, &path)
+            .await
+            .inspect_err(|e| tracing::debug!("couldn't resolve active device: {e}"))
+            .ok()
+            .flatten(),
+        None => None,
+    };
+    let device_kind = resolved_device
+        .as_ref()
+        .and_then(|(_, device_type)| DeviceKind::from_device_type(*device_type));
+
     let is_connected = matches!(
         connection_state,
         State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal
     );
 
-    let (specific_info, ap_path, wifi_device_path) = if is_connected {
-        fetch_specific_info(conn, &primary_connection_path)
-            .await
-            .unwrap_or_else(|e| {
-                tracing::debug!("couldn't fetch device-specific network info: {e}");
-                (None, None, None)
-            })
-    } else {
-        (None, None, None)
+    let (specific_info, ap_path, wifi_device_path) = match (is_connected, resolved_device) {
+        (true, Some((device_path, device_type))) => {
+            fetch_specific_info(conn, device_path, device_type)
+                .await
+                .unwrap_or_else(|e| {
+                    tracing::debug!("couldn't fetch device-specific network info: {e}");
+                    (None, None, None)
+                })
+        }
+        _ => (None, None, None),
     };
 
     Ok((
@@ -817,6 +853,7 @@ async fn fetch_network_info(
             connectivity,
             specific_info,
             wifi_enabled,
+            device_kind,
         },
         ap_path,
         wifi_device_path,
@@ -853,27 +890,22 @@ async fn resolve_active_device(
     Ok(Some((device_path.clone(), device_type)))
 }
 
-/// Fetches the connected device's type-specific info (wired or wifi).
+/// Builds the connected device's type-specific info (wired or wifi) for an
+/// already-resolved device.
 ///
-/// Returns `Ok((None, None, None))` when the primary connection has no
-/// associated device yet, or the device is of a type we don't render
+/// Returns `Ok((None, None, None))` for a device type we don't render
 /// distinctly (e.g. mobile broadband). The third element is the wireless
 /// device's own object path, present whenever the connected device is wifi
 /// regardless of whether an access point could be read.
 async fn fetch_specific_info(
     conn: &zbus::Connection,
-    primary_connection_path: &OwnedObjectPath,
+    device_path: OwnedObjectPath,
+    device_type: DeviceType,
 ) -> anyhow::Result<(
     Option<SpecificNetworkInfo>,
     Option<OwnedObjectPath>,
     Option<OwnedObjectPath>,
 )> {
-    let Some((device_path, device_type)) =
-        resolve_active_device(conn, primary_connection_path).await?
-    else {
-        return Ok((None, None, None));
-    };
-
     match device_type {
         DeviceType::Ethernet => Ok((Some(SpecificNetworkInfo::Wired), None, None)),
         DeviceType::Wifi => {

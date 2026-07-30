@@ -2,11 +2,11 @@ use relm4::SharedState;
 use zbus::zvariant::OwnedObjectPath;
 
 use crate::{
-    network::types::{ApSecurity, ConnectivityState, State},
+    network::types::{ApSecurity, ConnectivityState, DeviceType, State},
     utils::icons::{
-        NETWORK_WIFI_DISABLED, NETWORK_WIFI_DISCONNECTED, NETWORK_WIFI_ICON_NAMES,
-        NETWORK_WIFI_NO_ROUTE, NETWORK_WIRED_CONNECTED, NETWORK_WIRED_NO_ROUTE,
-        percentage_to_icon_from_list,
+        NETWORK_WIFI_CONNECTING, NETWORK_WIFI_DISABLED, NETWORK_WIFI_DISCONNECTED,
+        NETWORK_WIFI_ICON_NAMES, NETWORK_WIFI_NO_ROUTE, NETWORK_WIRED_CONNECTED,
+        NETWORK_WIRED_CONNECTING, NETWORK_WIRED_NO_ROUTE, percentage_to_icon_from_list,
     },
 };
 
@@ -60,6 +60,31 @@ impl AccessPointSummary {
     }
 }
 
+/// The kind of device backing the active or in-progress connection.
+///
+/// Unlike [`SpecificNetworkInfo`], which only populates once a connection is
+/// fully activated, this is known as soon as NetworkManager picks a device
+/// to activate - which is what lets [`get_icon`] show a wifi- or
+/// ethernet-specific "acquiring" icon while still connecting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DeviceKind {
+    Wired,
+    WiFi,
+}
+
+impl DeviceKind {
+    /// Maps a NetworkManager device type to a `DeviceKind`, or `None` for
+    /// device types this shell doesn't render distinctly (e.g. mobile
+    /// broadband).
+    pub fn from_device_type(device_type: DeviceType) -> Option<Self> {
+        match device_type {
+            DeviceType::Ethernet => Some(Self::Wired),
+            DeviceType::Wifi => Some(Self::WiFi),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct NetworkInfo {
     pub connection_state: State,
@@ -71,6 +96,9 @@ pub struct NetworkInfo {
     /// connection, not the radio, and can be `Asleep` for reasons other than
     /// wifi being switched off.
     pub wifi_enabled: bool,
+    /// The device kind backing the active or in-progress connection. See
+    /// [`DeviceKind`] for how this differs from `specific_info`.
+    pub device_kind: Option<DeviceKind>,
 }
 
 impl Default for NetworkInfo {
@@ -80,6 +108,7 @@ impl Default for NetworkInfo {
             connectivity: ConnectivityState::Unknown,
             specific_info: None,
             wifi_enabled: true,
+            device_kind: None,
         }
     }
 }
@@ -119,6 +148,13 @@ pub enum SpecificNetworkInfo {
 
 /// Returns an appropriate icon name for the current networking state.
 pub fn get_icon(info: &NetworkInfo) -> &'static str {
+    if info.connection_state == State::Connecting {
+        return match info.device_kind {
+            Some(DeviceKind::Wired) => NETWORK_WIRED_CONNECTING,
+            Some(DeviceKind::WiFi) | None => NETWORK_WIFI_CONNECTING,
+        };
+    }
+
     if let State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown =
         info.connection_state
     {
@@ -187,6 +223,7 @@ mod get_icon_tests {
                 wifi_strength: strength,
             }),
             wifi_enabled: true,
+            device_kind: Some(DeviceKind::WiFi),
         }
     }
 
@@ -196,6 +233,7 @@ mod get_icon_tests {
             connectivity,
             specific_info: Some(SpecificNetworkInfo::Wired),
             wifi_enabled: true,
+            device_kind: Some(DeviceKind::Wired),
         }
     }
 
@@ -263,5 +301,35 @@ mod get_icon_tests {
             get_icon(&wired_info(ConnectivityState::Limited)),
             NETWORK_WIRED_NO_ROUTE
         );
+    }
+
+    #[test]
+    fn connecting_over_wifi_shows_the_wifi_acquiring_icon() {
+        let info = NetworkInfo {
+            connection_state: State::Connecting,
+            device_kind: Some(DeviceKind::WiFi),
+            ..Default::default()
+        };
+        assert_eq!(get_icon(&info), NETWORK_WIFI_CONNECTING);
+    }
+
+    #[test]
+    fn connecting_over_wired_shows_the_wired_acquiring_icon() {
+        let info = NetworkInfo {
+            connection_state: State::Connecting,
+            device_kind: Some(DeviceKind::Wired),
+            ..Default::default()
+        };
+        assert_eq!(get_icon(&info), NETWORK_WIRED_CONNECTING);
+    }
+
+    #[test]
+    fn connecting_with_unknown_device_kind_falls_back_to_wifi_acquiring_icon() {
+        let info = NetworkInfo {
+            connection_state: State::Connecting,
+            device_kind: None,
+            ..Default::default()
+        };
+        assert_eq!(get_icon(&info), NETWORK_WIFI_CONNECTING);
     }
 }

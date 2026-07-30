@@ -52,6 +52,10 @@ pub const NETWORK_WIRED_CONNECTED: &str = LAN;
 /// Connected over ethernet, but the connectivity check found no (or only a
 /// limited/captive-portal) route to the internet.
 pub const NETWORK_WIRED_NO_ROUTE: &str = LAN_QUESTION;
+/// A wifi connection (or one of unknown kind) is being established.
+pub const NETWORK_WIFI_CONNECTING: &str = RADIOWAVES_DOTS;
+/// An ethernet connection is being established.
+pub const NETWORK_WIRED_CONNECTING: &str = LAN_DOTS;
 
 /// Get an icon from a list based on a percentage value from 0.0 to 1.0.
 pub fn percentage_to_icon_from_list<'a>(percentage: f64, icons: &'a [&'a str]) -> &'a str {

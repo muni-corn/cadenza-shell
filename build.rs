@@ -65,9 +65,11 @@ fn main() {
             "radiowaves-no",
             "radiowaves-x",
             "radiowaves-question",
+            "radiowaves-dots",
             // network misc
             "lan",
             "lan-question",
+            "lan-dots",
             // bluetooth
             "bluetooth",
             "bluetooth-dots",
