@@ -4,8 +4,9 @@ use zbus::zvariant::OwnedObjectPath;
 use crate::{
     network::types::{ApSecurity, ConnectivityState, State},
     utils::icons::{
-        NETWORK_WIFI_DISABLED, NETWORK_WIFI_ICON_NAMES, NETWORK_WIRED_CONNECTED,
-        NETWORK_WIRED_DISABLED, percentage_to_icon_from_list,
+        NETWORK_WIFI_DISABLED, NETWORK_WIFI_DISCONNECTED, NETWORK_WIFI_ICON_NAMES,
+        NETWORK_WIFI_NO_ROUTE, NETWORK_WIRED_CONNECTED, NETWORK_WIRED_NO_ROUTE,
+        percentage_to_icon_from_list,
     },
 };
 
@@ -91,6 +92,20 @@ impl NetworkInfo {
             None
         }
     }
+
+    /// Whether the connectivity check indicates a full route to the
+    /// internet.
+    ///
+    /// `Unknown` counts as fine: the connectivity check is disabled on
+    /// plenty of systems (e.g. `connectivity.uri` unset in NetworkManager's
+    /// config), and treating that as a problem would render a permanent
+    /// false warning.
+    pub fn has_full_route(&self) -> bool {
+        matches!(
+            self.connectivity,
+            ConnectivityState::Full | ConnectivityState::Unknown
+        )
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -103,16 +118,35 @@ pub enum SpecificNetworkInfo {
 }
 
 /// Returns an appropriate icon name for the current networking state.
-pub fn get_icon(info: &NetworkInfo) -> &str {
+pub fn get_icon(info: &NetworkInfo) -> &'static str {
     if let State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown =
         info.connection_state
     {
-        return NETWORK_WIRED_DISABLED;
+        return if info.wifi_enabled {
+            NETWORK_WIFI_DISCONNECTED
+        } else {
+            NETWORK_WIFI_DISABLED
+        };
     }
 
     match info.specific_info {
-        Some(SpecificNetworkInfo::WiFi { wifi_strength, .. }) => get_strength_icon(wifi_strength),
-        Some(_) => NETWORK_WIRED_CONNECTED,
+        Some(SpecificNetworkInfo::WiFi { wifi_strength, .. }) => {
+            if info.has_full_route() {
+                get_strength_icon(wifi_strength)
+            } else {
+                NETWORK_WIFI_NO_ROUTE
+            }
+        }
+        Some(SpecificNetworkInfo::Wired) => {
+            if info.has_full_route() {
+                NETWORK_WIRED_CONNECTED
+            } else {
+                NETWORK_WIRED_NO_ROUTE
+            }
+        }
+        // connected, but to a device type we don't distinguish (e.g. mobile
+        // broadband); there's no generic "connected" icon bundled, so this
+        // falls back to the same icon as the wifi radio being off
         None => NETWORK_WIFI_DISABLED,
     }
 }
@@ -136,5 +170,98 @@ mod strength_icon_tests {
     #[test]
     fn no_strength_uses_the_weakest_icon() {
         assert_eq!(get_strength_icon(0), RADIOWAVES_4);
+    }
+}
+
+#[cfg(test)]
+mod get_icon_tests {
+    use super::*;
+    use crate::utils::icons::{NETWORK_WIFI_DISABLED, NETWORK_WIFI_DISCONNECTED};
+
+    fn wifi_info(connectivity: ConnectivityState, strength: u8) -> NetworkInfo {
+        NetworkInfo {
+            connection_state: State::ConnectedGlobal,
+            connectivity,
+            specific_info: Some(SpecificNetworkInfo::WiFi {
+                wifi_ssid: "test".to_string(),
+                wifi_strength: strength,
+            }),
+            wifi_enabled: true,
+        }
+    }
+
+    fn wired_info(connectivity: ConnectivityState) -> NetworkInfo {
+        NetworkInfo {
+            connection_state: State::ConnectedGlobal,
+            connectivity,
+            specific_info: Some(SpecificNetworkInfo::Wired),
+            wifi_enabled: true,
+        }
+    }
+
+    #[test]
+    fn disconnected_with_radio_on_shows_the_offline_icon() {
+        let info = NetworkInfo {
+            connection_state: State::Disconnected,
+            wifi_enabled: true,
+            ..Default::default()
+        };
+        assert_eq!(get_icon(&info), NETWORK_WIFI_DISCONNECTED);
+    }
+
+    #[test]
+    fn disconnected_with_radio_off_shows_the_disabled_icon() {
+        let info = NetworkInfo {
+            connection_state: State::Disconnected,
+            wifi_enabled: false,
+            ..Default::default()
+        };
+        assert_eq!(get_icon(&info), NETWORK_WIFI_DISABLED);
+    }
+
+    #[test]
+    fn wifi_with_full_route_shows_the_strength_icon() {
+        assert_eq!(
+            get_icon(&wifi_info(ConnectivityState::Full, 100)),
+            get_strength_icon(100)
+        );
+    }
+
+    #[test]
+    fn wifi_with_unknown_connectivity_still_shows_the_strength_icon() {
+        assert_eq!(
+            get_icon(&wifi_info(ConnectivityState::Unknown, 100)),
+            get_strength_icon(100)
+        );
+    }
+
+    #[test]
+    fn wifi_without_a_full_route_shows_the_no_route_icon() {
+        for connectivity in [
+            ConnectivityState::None,
+            ConnectivityState::Portal,
+            ConnectivityState::Limited,
+        ] {
+            assert_eq!(
+                get_icon(&wifi_info(connectivity, 100)),
+                NETWORK_WIFI_NO_ROUTE
+            );
+        }
+    }
+
+    #[test]
+    fn wired_with_full_route_shows_the_connected_icon() {
+        assert_eq!(
+            get_icon(&wired_info(ConnectivityState::Full)),
+            NETWORK_WIRED_CONNECTED
+        );
+    }
+
+    #[test]
+    fn wired_without_a_full_route_shows_the_no_route_icon() {
+        assert_eq!(
+            get_icon(&wired_info(ConnectivityState::Limited)),
+            NETWORK_WIRED_NO_ROUTE
+        );
     }
 }

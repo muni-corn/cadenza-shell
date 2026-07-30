@@ -41,9 +41,17 @@ pub const BATTERY_CHARGING_ICON_NAMES: &[&str] = &[
 // percentage_to_icon_from_list's low-to-high indexing
 pub const NETWORK_WIFI_ICON_NAMES: &[&str] =
     &[RADIOWAVES_4, RADIOWAVES_3, RADIOWAVES_2, RADIOWAVES_1];
+/// The wifi radio itself is switched off.
 pub const NETWORK_WIFI_DISABLED: &str = RADIOWAVES_NO;
-pub const NETWORK_WIRED_DISABLED: &str = RADIOWAVES_NO;
+/// The wifi radio is on, but nothing is connected.
+pub const NETWORK_WIFI_DISCONNECTED: &str = RADIOWAVES_X;
+/// Connected to wifi, but the connectivity check found no (or only a
+/// limited/captive-portal) route to the internet.
+pub const NETWORK_WIFI_NO_ROUTE: &str = RADIOWAVES_QUESTION;
 pub const NETWORK_WIRED_CONNECTED: &str = LAN;
+/// Connected over ethernet, but the connectivity check found no (or only a
+/// limited/captive-portal) route to the internet.
+pub const NETWORK_WIRED_NO_ROUTE: &str = LAN_QUESTION;
 
 /// Get an icon from a list based on a percentage value from 0.0 to 1.0.
 pub fn percentage_to_icon_from_list<'a>(percentage: f64, icons: &'a [&'a str]) -> &'a str {
