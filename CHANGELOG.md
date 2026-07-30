@@ -1,0 +1,463 @@
+# Changelog
+
+## **v0.1.0**
+
+### **Breaking changes**
+
+- muse-shell is now cadenza-shell
+
+### Features
+
+- **tiles/network:** warn when connected without a full route
+- **network:** show an acquiring icon while connecting
+- **network:** distinguish no-route connectivity in tile icon
+- **bluetooth_menu:** add discovery, pairing prompts, and remove
+- **bluetooth:** handle discovery, pair, trust, and remove commands
+- **bluetooth/commands:** add a command channel for bluetooth operations
+- **bluetooth:** register a pairing agent with pending prompt state
+- **network:** rescan periodically while the menu is open
+- **network_menu:** rewrite as an access point browser
+- **network:** report connection attempt outcomes
+- **network:** handle wifi enable, scan, connect, disconnect, and forget
+- **network/scan:** collect and deduplicate access points
+- **network/commands:** add a command channel for network operations
+- **network/state:** add access point and saved connection types
+- **widgets/menu_window:** dismiss on escape
+- **widgets:** add a layer-shell menu window
+- **bluetooth:** recover from adapter and bluetoothd restarts
+- **bluetooth:** reconcile full state on a periodic tick
+- **bluetooth/state:** snapshot device properties into shared state
+- **network:** re-initialize when networkmanager restarts
+- **network:** reconcile full state on a periodic tick
+- **network:** track active ap and wifi enabled state
+- **network/types:** add access point security flags
+- **network/dbus:** add access point list and settings interfaces
+- **settings:** add network and bluetooth config sections
+- **notifications:** add trace instrumentation to card and panel
+- **tiles/notifications:** instrument tile event loop with tracing
+- **fresh:** instrument fresh-popup lifecycle with tracing
+- **daemon:** instrument D-Bus notify and close_notification
+- **notifications:** instrument service lifecycle with tracing
+- **battery:** replace charging time prediction module with "good for" predictions
+- **panel:** add digital clock and date display
+- **notifications:** add analog clock widget to notification center
+- **bar:** wire up ToggleNotificationCenter to the notification center
+- **app:** start run_notifications_service from app.rs
+- **notifications:** implement run_notifications_service entry point
+- **notifications:** add command channel and free-function command API
+- **notifications:** add event broadcast channel and subscribe_events()
+- **notifications:** add NotificationsState and NotificationEvent types
+- **battery:** add low battery alert system
+- **battery:** integrate alert system into watcher
+- **sound:** add XDG sound theme event playback
+- **charging:** litter module with debug logs
+- **battery:** migrate single-exponential model to double-exponential model
+- **cv_fit:** add double-exponential fitting module
+- **sysfs:** add BatteryIdentity for per-device profile keying
+- **charging:** add temp functionality to record median readings during charging
+- **charging:** replace `ChargeStatistics` with module median stats
+- **network:** subscribe to access point strength changes
+- **sleep_monitor:** add logind PrepareForSleep wake broadcast
+- update relm4 icons and switch to adwaita icons
+- **battery:** cap maximum readings used for `alpha`
+- **discharging:** add "most useless harmonic" to debug stats
+- **discharging:** replace `LEARNING_RATE` with alpha determined by `sample_count`
+- **discharging:** increase HARMONICS to 28 to capture 6-hour intervals
+- **charging:** adjust consts for charging phase detection
+- **discharging:** fix and enrich statistics debug output
+- **discharging:** add observed TTE range tracking to DischargingStatistics
+- **discharging:** add deviation_ema bias tracking to DischargingStatistics
+- **discharging:** add n_updates prediction counter to DischargingStatistics
+- **discharging:** change state file to `discharge_profile.json`
+- **charging:** switch back to microamperes for statistics
+- **charging:** replace percentage with time for statistics
+- **charging:** add `initialized` boolean to statistics
+- **history:** make learning rate less aggressive
+- **battery:** improve statistics output
+- **charging:** add statistics to monitor during battery charging
+- **battery:** add discharging statistics as well
+- **charging:** implement session lifecycle and ChargeProfile EMA updates
+- **charging:** implement CC+CV time-to-full prediction
+- **charging:** implement incremental CV exponential fitting (log-space OLS)
+- **charging:** implement CC plateau tracking and phase detection
+- **charging:** add ChargingSession and ChargingPhase types
+- **charging:** add ChargeProfile struct with persistence
+- add ReadingRecord for more reliable csv tracking
+- add conversion utility functions to `BatteryCapcity`
+- **history:** give more info when history fails to save
+- **sysfs:** add time of reading to SysfsReading
+- **battery:** add serde support to ChargingStatus
+- **history:** persist all battery readings to disk
+- **battery:** add lots of logs for udev debugging
+- **battery:** add serde support to BatteryCapacity
+- **history:** add complete charge history fields to HistoricalPowerUsage
+- **battery:** add udev module
+- **battery:** use udev for battery state monitoring
+- **tile:** truncate primary labels to 64 characters
+- **history:** only save state every 5 minutes
+- **battery:** add historical power usage tracking
+- **history:** add full time prediction functions to `HistoricalPowerUsage`
+- **sysfs:** add utility functions for getting battery stats in Wh
+- **history:** impl Default for HistoricalPowerUsage
+- **history:** add state persistence
+- **battery:** add battery history module for a simpler method of prediction
+- **battery:** add extra handling for long time predictions in tile
+- **battery:** display smart predictions in battery tile
+- **battery:** add sysfs direct battery reader
+- **bluetooth:** add bluetooth popover menu
+- **bluetooth:** add `get_device` method to `BluetoothState`
+- **style:** set default tile font weight to 600
+- **style:** remove most custom styling in favor of gtk theme
+- **network:** implement full NetworkManager interface
+- **tray_item:** reduce verbose logging to debug, not info
+- set max logging level on releases to info
+- **network:** set attention of tile depending on state
+- **network:** implement simple network menu popover
+- **icons:** add network connectivity icon constants
+- **network:** add is_asleep and wifi_ssid methods to NetworkInfo
+- **build:** add wifi-off, wifi-warning and globe-error icons to build
+- **network:** add remaining dbus properties to AccessPoint proxy
+- **tiles:** make bluetooth tile async and add tooltip for devices
+- **bluetooth:** add devices convenience method to BluetoothState
+- **network:** add more logs to service for debugging
+- **tiles:** add tooltip to network tile
+- **tile:** add tooltip support to Tile
+- **bluetooth:** add more logging to service to improve debugging
+- replace treefmt and git-hooks with musicaloft-style flake module
+- add globe-off-regular icon to build configuration
+- **niri:** add focused output tracking to show window title only on active monitor
+- enhance NetworkManager D-Bus interfaces with more comprehensive types
+- **tray:** update styling and default to not expanded
+- remove legacy TypeScript/Astal/AGS implementation
+- implement pixmap icon rendering for system tray items
+- implement comprehensive tray item update and menu handling
+- **app:** add tray item output handling with activate request support
+- add dprint formatter for SCSS files with malva plugin configuration
+- add Debug trait to structs for improved debugging capabilities
+- **app:** add system tray client integration with event subscription
+- **right:** add proper tray support with event handling and error recovery
+- add tray service integration to application services
+- add system tray widget to right bar group
+- **tray:** implement expandable tray widget with individual item display
+- remove default features from zbus
+- add tray service module with D-Bus StatusNotifierWatcher implementation
+- **niri:** add workspace filtering by monitor to display only relevant workspaces
+- **tray:** add StatusNotifier D-Bus interface implementations for system tray
+- **tray:** implement TrayItem factory component with D-Bus integration
+- add notification center component
+- integrate notification center with bar and rename open to toggle
+- give fresh notifications the "notifications" namespace
+- add bluetooth icons to build
+- add notification center output to notifications tile component
+- add notification action handling with D-Bus interface
+- restore margins to style.scss
+- add media icons for MPRIS functionality
+- add mpris service for media player integration
+- add notification tile to bar
+- add MPRIS tile with service integration and use Tile component
+- **pulseaudio:** convert tile to ProgressTile
+- add ProgressTile
+- **style:** add styles for workspace indicators
+- **brightness:** convert tile to ProgressTile
+- add niri tile to left bar widget
+- add niri window manager integration for workspaces and windows
+- add bluetooth icons to build
+- switch relm4-icons to my own fork for more fluent icons
+- implement BluetoothService using bluer crate
+- set Tile's icon size to 20 pixels
+- **battery:** add file system watcher for real-time battery status updates
+- add earth-regular icon to network misc section
+- reimplement audio service as pulseaudio service
+- add Service trait
+- replace old volume icons with relm4 icons
+- make app window visible on activate only in debug builds
+- **brightness:** implement logarithmic brightness scaling
+- add battery, brightness, and wifi icons to build configuration
+- add reqwest dependency with rustls-tls and json features
+- add weather module to tiles
+- **bar:** add weather tile to bar widget alongside existing clock tile
+- increase default bar spacing between tiles to 16 pixels
+- add more icons and fix clock tile icon
+- **widgets:** set bar window namespace to "bar"
+- add RUST_LOG environment variable with info and debug levels
+- bundle icons with app
+- **clock:** add clock icon to clock tile UI component
+- consolidate legacy files with Relm4 implementations
+- implement comprehensive settings/configuration management
+- integrate Relm4 analog clock into notification center
+- implement Relm4 command pattern for user interactions
+- implement comprehensive multi-monitor testing for Relm4
+- convert notifications tile to Relm4 SimpleComponent
+- implement WiFi menu as Relm4 component (migrated from TypeScript)
+- implement notification center with Relm4 factory pattern
+- implement MPRIS, tray, and weather tiles with Relm4 components
+- refactor notification components to use Relm4 factory pattern
+- implement full Relm4 application and bar architecture (WIP)
+- implement comprehensive Relm4 tile components (WIP)
+- implement battery worker with Relm4 async architecture
+- implement Relm4 message system for component communication
+- implement remaining system Relm4 tile components (WIP)
+- implement simple bar widget with Relm4 and layer shell
+- integrate Relm4 modules and add runtime selection
+- add Relm4 tile module organization
+- implement simple Relm4 application entry point
+- implement simple battery tile with Relm4
+- **clock:** update time format and remove unused formatting methods
+- **widgets:** add tile widget with attention states and builder pattern
+- migrate flake.nix to use flake-parts and rust-flake
+- add cargo-outdated package to default dev shell
+- implement notification popup and center UI components
+- add weather widget with wttr.in API integration
+- implement MPRIS media player widget with playback controls
+- implement D-Bus notification service with client integration
+- add system tray widget with StatusNotifierItem support
+- implement Hyprland IPC service for workspace management
+- implement comprehensive CSS theming system
+- add network widget with connection status
+- implement NetworkManager D-Bus service integration
+- implement clock service with timezone support
+- add clock widget with time display in center section
+- implement battery service with system monitoring
+- add battery widget with charging indicators
+- implement brightness service and widget
+- initialize Rust project structure
+- add wifi menu for easy network management
+- **tiles:** remove text from network tile
+- **notifications:** add do not disturb mode support to notification tile
+- **notifications:** filter out transient notifications from unread count
+- **style:** make empty state in notification center less opaque
+- **analog-clock:** add radius prop and remove hour markers for minimalist design
+- **notifications:** add digital clock display and redesign header
+- make calendar's today styling more bold
+- remove notification history feature for now
+- **analog-clock:** add fractional minutes for smoother movement
+- simplify analog clock and calendar design
+- add analog clock and calendar widgets to notification center header
+- reduce content-title font-weight from 900 to 700
+- **notifications:** add auto-dismiss for fresh notifications
+- **notification-center:** add bottom anchor and remove fixed height
+- add notification tile component to display unread count in bar
+- add notification center widget with history and clear functionality
+- add hexpand property to notification title and body labels
+- **notifications:** add ellipsize and width constraints to notifications
+- **weather:** fetch weather asynchronously
+- add styling to revealer and popover menus
+- **tray:** replace with button to expand
+- upgrade to gtk4
+- **notification-card:** don't use "Unknown" as fallback for app name
+- **notification-card:** let summary be 2 lines and stop body at 6
+- **mpris:** truncate songs and artist names
+- **notifications:** remove `onHoverLost`
+- **notification-card:** wrap body in button only if actionable
+- **notifications:** dismiss cards when actioned from cmd line
+- **app:** put notifications on last monitor
+- add namespaces to windows
+- add notifications
+- simplify bluetooth tile for now
+- **network:** improve status reporting
+- **clock:** set greeting as default
+- add animated progress bars to volume and brightness
+- add ProgressBar widget
+- **utils:** add `unreachable` utility
+- translate all modules to ags 2.0
+- update style from dotfiles
+- start from ags init
+
+### Bug fixes
+
+- **network/service:** stop active-AP watcher from looping forever
+- restore descending order for wifi strength icons
+- set fixed height for bluetooth and network menus
+- **tiles/bluetooth:** show a discovering icon
+- **bluetooth:** unsubscribe device events on removal
+- **bluetooth:** derive connected device count from snapshots
+- **network:** publish state on partial fetch failures
+- **network/dbus:** correct the RequestScan method signature
+- **icons:** correct wifi strength icon ordering
+- **tiles/network:** retain the network menu controller
+- **settings:** default missing fields when deserializing config
+- **battery:** improve full battery detection logic
+- **bar:** explicitly close layer-shell window on bar shutdown
+- self-destruct bar when its monitor is invalidated
+- **app:** replace existing bar when monitor reconnects with same connector
+- **app:** track previous monitor connectors to correctly detect removed monitors
+- disable app window visibility on startup
+- **niri:** fix ordering issues with niri workspaces
+- **network:** refetch when connected with no device info
+- **alerts:** fix critical battery threshold
+- **alerts:** swap critical and normal alert level messages
+- **battery:** handle duration conversion errors gracefully
+- **battery:** simplify cv duration upper bound to 48 hours
+- **battery:** set cv duration bisection upper bound to 48 hours
+- **charging:** fix charging stats table display
+- **battery:** fix how tau is updated and stored
+- **battery:** update cc/cv transition detection algorithm and tau calculation
+- **charging:** improve charging prediction logic
+- **discharging:** fix alpha values for learning
+- **bluetooth:** refresh adapter and device state on system wake
+- **bluetooth:** stop initiating passive device discovery on startup
+- **bluetooth:** remove per-event connected device count polling
+- **bluetooth:** handle device connected/disconnected property events
+- **bluetooth:** subscribe to events for newly added devices
+- **network:** refresh full state on system wake
+- **network:** fetch initial network state on startup
+- **network:** reuse D-Bus connection across fetch calls
+- **discharging:** use instant timestamp in optismistic/pessimistic prediction
+- **discharging:** remove clamp on power and only limit it to 0.0
+- **discharging:** use bisection fallback in Newton TTE solver
+- **discharging:** clamp power prediction and use numerical energy integral
+- **discharging:** mean-subtract signal in Fourier coefficient updates
+- **discharging:** correctly call an ema an ema
+- **discharging:** fix misleading log message
+- **discharging:** fix critical bug where discharge profile would never save
+- **battery:** evade divide-by-zero potentials
+- **watcher:** only update power history when discharging
+- **charging:** guard sigma log lines against zero variance
+- **history:** replace unbounded Vec with EMA in DischargingStatistics
+- **charging:** fall back to profile cc_current_ua when plateau is zero
+- **charging:** enforce cc_current_ua > 0 in is_ready()
+- **history:** fix predict_time_to_full coefficient cancellation bug
+- **history:** load reading_history.csv with history data
+- **history:** push new readings to `all_readings` vector to be saved
+- **history:** guard from NaN error with charging_coefficient is zero
+- **history:** make `read_from_disk` public
+- **battery:** fix event feedback loop on sysfs by draining events before recv
+- **battery:** restructure conditional logic for watcher
+- **bluetooth:** hide root of tile if info is not available
+- **bluetooth:** initialize state for tile
+- **notifications:** fix notification tile position and init
+- **battery:** initialize and show immediately
+- **tray_item:** fix `Option` debug display in tooltips
+- **notifications:** make notifications tile visible in bar
+- **tray_item:** handle empty icon_name strings in tray icons
+- remove unused modules
+- **flake:** use github for musicaloft-style and remove duplicate devenv module
+- **tile:** initialize tile widgets with correct data by calling update_view
+- **flake:** fix path of devenv-root
+- **network:** add icon and secondary text initialization to network tile
+- **tray_item:** change log level from info to debug for menu view updates
+- fix module organization and imports
+- **tiles:** add initialization input to brightness tile to ensure proper setup
+- **niri:** sort workspaces by id to ensure consistent ordering
+- **weather:** fix request spam
+- **tray:** replace existing tray items on `Add` event
+- **weather:** reduce initial backoff delay from 60 to 1 second
+- **notifications:** set notification tile root container to invisible by default
+- replace dbg! macro with log::debug! for proper logging
+- **notifications:** implement actions and action execution correctly
+- **bar:** set monitors for bars
+- **battery:** fix non-instant status changes
+- **style:** replace bright class with active and use dim-color variable
+- **icons:** correct percentage_to_icon_from_list implementation
+- replace tokio::spawn with thread::spawn for background tasks
+- update Rust edition from 2021 to 2024
+- **icons:** pad battery icons for more accurate display
+- **tile:** increase tile icon width from 16 to 24 pixels
+- **style:** fix styles
+- hide empty app window on startup
+- **icons:** improve percentage to icon mapping
+- **flake:** add style to conventional commit types list
+- add missing settings module
+- add missing messages module declaration
+- resolve Relm4 compilation issues with visibility pattern
+- resolve simple app return type and begin file replacement
+- resolve Relm4 component visibility issues and simplify structure
+- **icons:** fix brightness icons
+- complete flake.nix migration to rust-flake
+- resolve clippy warnings for collapsible match and snake_case
+- resolve RefCell held across await points
+- apply automatic clippy fixes
+- add missing widget imports in bar
+- add missing imports and fix mutability issues
+- add missing module declarations for utils and widgets
+- prefix unused variables with underscore
+- resolve lifetime issues in system tray implementation
+- resolve remaining clippy errors and compilation issues
+- resolve clippy errors and warnings
+- resolve compilation errors
+- **tray:** add width request property to tray menu buttons
+- remove padding from bar buttons completely
+- increase background opacity from 0.5 to 0.75 for better contrast
+- remove max-width, which doesn't exist in gtk4
+- don't add transient notifications to notification center
+- **notifications:** don't add transient notifications to history
+- **notifications:** hide notifications when notification center is open
+- **notifications:** remove useMarkup property from notification card body label
+- **bar:** add spacing between centerbox groups
+- **notifications:** fix notifs not showing at all
+- **volume:** clamp volume values
+- **bar:** fix centerbox display
+- **hyprland:** don't proceed if hyprland isn't running
+- **hyprland:** fix `f.monitor is null` bug
+- **notifications:** fix lingering last notification
+- **tray:** fix popover menus for all items
+- **notifications:** fix notification card styling
+- **notifications:** fix weird destruction bug again
+- **tray:** fix icons
+- **hyprland:** use connector name for monitors, not model
+- fix button styling for hyprland workspaces
+- **notifications:** fix notifcations being replaced
+- **tray:** update module with updated libraries
+- **bluetooth:** hide module properly when unavailable
+- fix crash when wifi is null, maybe
+- **bluetooth:** fix return type of component
+- **network:** fix offline status
+- **utils:** fix possible null issues
+- **mpris:** fix mpris tile
+- **brightness:** fix `[object Object]` when brightness is unavailable
+- **brightness:** fix crash from unavailable brightness interface
+- **volume:** fix updating issues
+- **network:** attempt to fix network tile update issues
+- **hyprland:** fix client name appearing as `null`
+
+### Performance
+
+- **tiles/bluetooth:** build tooltip from cached snapshots
+- **bluetooth_menu:** update device rows in place instead of rebuilding
+- remove temporary `all_readings` field with csv persistence
+- increase relm4 thread pool size to 16 threads
+
+### Tests
+
+- **battery:** remove unnecessary power clamping test
+- **discharging:** add unit tests for discharge model
+- **charging:** add unit tests for phase detection and CV fitting
+
+### Build system
+
+- fix build by fixing relm4-icons-build directory
+- **devenv:** switch back to mold linker with simplified rust config
+- **devenv:** switch from mold to wild linker
+- **deps:** add levenberg-marquardt and nalgebra
+- switch to my fork of devenv for building with rust nightly
+- fix nix build with custom cargoNix implementation
+- **flake:** build with `crate2nix` via devenv
+- switch relm4 dependency to async-reducible branch from git
+- add system-tray dependency for system tray functionality
+- add `serde_repr` dependency
+- add niri-ipc dependency version 25.8.0
+- add `mpris` crate
+- update GTK4 and Relm4 dependencies to latest stable versions
+- update dependencies to latest versions and remove unneeded libraries
+- add Rust support alongside existing TypeScript build system
+- update entry point path and fix package list in flake
+
+### Documentation
+
+- **agents:** remove outdated view! macro note
+- **battery:** document train_constant helper implementation details
+- **charging:** fix stale doc comment on CvFit::i0_ua
+- **history:** document average bucket fields
+- remove outdated documents
+- format documentation files with mdformat
+- simplify AGENTS.md
+- add lowercase comment style guideline to coding standards
+- update component implementation guidelines
+- add comprehensive Relm4 migration plan
+- update AGENTS.md for Rust implementation
+- add comments to clarify digital and analog clock sections
+- update AGENTS.md for timeout usage and expand docs scope
+- add requirement to git add new files before nix build
+- update AGENTS.md
+
+---
