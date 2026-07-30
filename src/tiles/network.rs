@@ -165,12 +165,63 @@ fn get_tooltip_text(info: &NetworkInfo) -> String {
 }
 
 fn get_attention(info: &NetworkInfo) -> Attention {
-    if matches!(
-        info.connection_state,
-        State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown
-    ) {
-        Attention::Dim
-    } else {
-        Attention::Normal
+    match info.connection_state {
+        State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown => {
+            Attention::Dim
+        }
+        // connected, but the connectivity check found no (or only a
+        // limited/captive-portal) route to the internet
+        State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal
+            if !info.has_full_route() =>
+        {
+            Attention::Warning
+        }
+        _ => Attention::Normal,
+    }
+}
+
+#[cfg(test)]
+mod get_attention_tests {
+    use super::*;
+    use crate::network::types::ConnectivityState;
+
+    fn info(connection_state: State, connectivity: ConnectivityState) -> NetworkInfo {
+        NetworkInfo {
+            connection_state,
+            connectivity,
+            ..Default::default()
+        }
+    }
+
+    #[test]
+    fn disconnected_is_dimmed() {
+        assert_eq!(
+            get_attention(&info(State::Disconnected, ConnectivityState::Unknown)),
+            Attention::Dim
+        );
+    }
+
+    #[test]
+    fn connected_with_full_route_is_normal() {
+        assert_eq!(
+            get_attention(&info(State::ConnectedGlobal, ConnectivityState::Full)),
+            Attention::Normal
+        );
+    }
+
+    #[test]
+    fn connected_without_a_full_route_warns() {
+        assert_eq!(
+            get_attention(&info(State::ConnectedGlobal, ConnectivityState::Limited)),
+            Attention::Warning
+        );
+    }
+
+    #[test]
+    fn connecting_with_unknown_connectivity_is_normal() {
+        assert_eq!(
+            get_attention(&info(State::Connecting, ConnectivityState::Unknown)),
+            Attention::Normal
+        );
     }
 }
