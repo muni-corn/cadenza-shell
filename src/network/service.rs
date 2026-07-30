@@ -1001,6 +1001,12 @@ async fn subscribe_ap_strength(
     let mut stream = ap_proxy.receive_strength_changed().await;
     tracing::debug!("subscribed to strength changes for access point {ap_path}");
 
+    // receive_strength_changed() yields the current cached value once
+    // immediately on subscribe, before any real change occurs (this is
+    // documented zbus PropertyStream behavior); we already have that value
+    // from the fetch that led to this subscription, so discard it
+    stream.next().await;
+
     while let Some(change) = stream.next().await {
         if let Ok(strength) = change
             .get()
@@ -1046,6 +1052,14 @@ async fn subscribe_active_ap(
 
     let mut stream = wifi_proxy.receive_active_access_point_changed().await;
     tracing::debug!("subscribed to active access point changes for device {device_path}");
+
+    // receive_active_access_point_changed() yields the current cached value
+    // once immediately on subscribe, before any real change occurs (see
+    // subscribe_ap_strength above). Forwarding that synthetic first item is
+    // actively dangerous here: the handler for ActiveApChanged calls
+    // handle_primary_change(), which tears down and re-spawns this very
+    // subscription - which would immediately fire again, forever.
+    stream.next().await;
 
     while stream.next().await.is_some() {
         tx.send(NetworkPropertyChange::ActiveApChanged)
