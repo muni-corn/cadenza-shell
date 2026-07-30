@@ -17,10 +17,14 @@ use crate::{
 /// The global weather state that can be subscribed to.
 pub static WEATHER_STATE: SharedState<Option<WeatherState>> = SharedState::new();
 
+#[tracing::instrument]
 pub async fn start_weather_polling() {
     let mut backoff: Option<u64> = None; // None => 600s normal cadence
     loop {
         let result = fetch_wttr().await;
+
+        tracing::debug!(?result, "got weather result");
+
         if result.is_ok() {
             backoff = None;
         } else {
