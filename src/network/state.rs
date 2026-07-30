@@ -120,3 +120,21 @@ pub fn get_icon(info: &NetworkInfo) -> &str {
 pub fn get_strength_icon(strength: u8) -> &'static str {
     percentage_to_icon_from_list(strength as f64 / 100.0, NETWORK_WIFI_ICON_NAMES)
 }
+
+#[cfg(test)]
+mod strength_icon_tests {
+    use super::*;
+    use crate::icon_names::{RADIOWAVES_1, RADIOWAVES_4};
+
+    // radiowaves-1 is full signal and radiowaves-4 is empty; this pins that
+    // relationship so the ordering doesn't get flipped again
+    #[test]
+    fn full_strength_uses_the_strongest_icon() {
+        assert_eq!(get_strength_icon(100), RADIOWAVES_1);
+    }
+
+    #[test]
+    fn no_strength_uses_the_weakest_icon() {
+        assert_eq!(get_strength_icon(0), RADIOWAVES_4);
+    }
+}

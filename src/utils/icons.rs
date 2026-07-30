@@ -35,8 +35,12 @@ pub const BATTERY_CHARGING_ICON_NAMES: &[&str] = &[
     BATTERY_100_CH,
 ];
 
+// the radiowaves-N icons are named strongest-to-weakest (radiowaves-1 is
+// full signal, radiowaves-4 is empty), not low-to-high like the battery and
+// volume lists below, so this order must stay descending to match
+// percentage_to_icon_from_list's low-to-high indexing
 pub const NETWORK_WIFI_ICON_NAMES: &[&str] =
-    &[RADIOWAVES_1, RADIOWAVES_2, RADIOWAVES_3, RADIOWAVES_4];
+    &[RADIOWAVES_4, RADIOWAVES_3, RADIOWAVES_2, RADIOWAVES_1];
 pub const NETWORK_WIFI_DISABLED: &str = RADIOWAVES_NO;
 pub const NETWORK_WIRED_DISABLED: &str = RADIOWAVES_NO;
 pub const NETWORK_WIRED_CONNECTED: &str = LAN;
