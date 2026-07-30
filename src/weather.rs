@@ -22,9 +22,6 @@ pub async fn start_weather_polling() {
     let mut backoff: Option<u64> = None; // None => 600s normal cadence
     loop {
         let result = fetch_wttr().await;
-
-        tracing::debug!(?result, "got weather result");
-
         if result.is_ok() {
             backoff = None;
         } else {
@@ -86,6 +83,7 @@ fn map_icon(code: &str, dark: bool) -> &'static str {
     }
 }
 
+#[tracing::instrument]
 async fn fetch_wttr() -> anyhow::Result<WeatherState> {
     // for some reason, the protocol used here must be http; reqwest doesn't like
     // https in this case
@@ -94,6 +92,9 @@ async fn fetch_wttr() -> anyhow::Result<WeatherState> {
         .text()
         .await?;
     let parsed: WttrReport = serde_json::from_str(&body)?;
+
+    tracing::debug!(report = ?parsed, "parsed weather report");
+
     let current = parsed
         .current_condition
         .first()
