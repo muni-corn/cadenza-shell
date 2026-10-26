@@ -11,7 +11,6 @@ bluer = { version = "0.17", features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
 csv = "1.4.0"
 dirs = "6.0.0"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 futures-lite = { version = "2", default-features = false }
 gdk4 = { version = "0.11", features = ["v4_14"] }
 gio = "0.22"
@@ -19,11 +18,10 @@ glib = "0.22"
 gtk4 = { version = "0.11", features = ["v4_14"] }
 gtk4-layer-shell = "0.8"
 inotify = "0.11"
-tracing = { version = "0.1", features = ["release_max_level_info"] }
 mpris = "2.0.1"
 niri-ipc = "26.4"
 pango = "0.22"
-pulse = { version = "2.30", package = "libpulse-binding" }
+pulse = { package = "libpulse-binding", version = "2.30" }
 relm4 = { version = "0.11" }
 relm4-components = "0.11"
 relm4-icons = "0.11"
@@ -37,6 +35,8 @@ system-tray = "0.8.3"
 systemstat = "0.2"
 thiserror = "2"
 tokio = { version = "1", features = ["full"] }
+tracing = { version = "0.1", features = ["release_max_level_info"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 udev = { version = "0.9.3", features = ["send", "sync"] }
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 
