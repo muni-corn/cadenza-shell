@@ -1,5 +1,3 @@
-#![feature(never_type)]
-
 mod analog_clock;
 mod app;
 mod battery;
