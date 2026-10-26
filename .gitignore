@@ -17,6 +17,7 @@ devenv.local.yaml
 .oxfmtrc.json
 .pre-commit-config.yaml
 .rustfmt.toml
+.tombi.toml
 
 # cargo-mutants
 mutants.out.old/
