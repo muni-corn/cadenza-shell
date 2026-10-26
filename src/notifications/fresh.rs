@@ -152,8 +152,9 @@ impl SimpleComponent for FreshNotifications {
                         guard.remove(index);
                     }
                     None => {
-                        // this can happen when a removal races a previous removal or
-                        // when a notification was never shown as a popup
+                        // this can happen when a removal races a previous
+                        // removal or when a notification was never shown as a
+                        // popup
                         tracing::warn!(
                             notification.id = id,
                             "removal requested for a notification not in fresh cards (state \

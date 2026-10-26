@@ -41,7 +41,8 @@ pub async fn start_brightness_watcher() {
         match inotify.read_events_blocking(&mut buffer) {
             Ok(events) => {
                 for _ in events {
-                    // when the brightness file is closed after writing, read the new value
+                    // when the brightness file is closed after writing, read
+                    // the new value
                     match read_current_brightness_percentage(&interface_clone, max_val) {
                         Ok(percentage) => *BRIGHTNESS_STATE.write() = Some(percentage),
                         Err(e) => tracing::error!("couldn't update brightness info: {}", e),

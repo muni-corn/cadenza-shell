@@ -162,8 +162,8 @@ pub struct NotificationHints {
 /// subscribes to the state or issues commands.
 #[tracing::instrument(level = "debug", skip_all)]
 pub async fn run_notifications_service() {
-    // initialize the broadcast sender so subscribers can call subscribe_events()
-    // before the first event arrives
+    // initialize the broadcast sender so subscribers can call
+    // subscribe_events() before the first event arrives
     let _ = event_tx();
 
     let connection = match initialize_notifications_daemon().await {

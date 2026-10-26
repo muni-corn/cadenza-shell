@@ -90,8 +90,8 @@ pub fn read_battery_sysfs(battery_path: &Path) -> Option<SysfsReading> {
         current_now,
         status,
 
-        // prefer watt-hours over amp-hours. if we only have amp-hours, we can calculate watt-hours
-        // with our voltage.
+        // prefer watt-hours over amp-hours. if we only have amp-hours, we can
+        // calculate watt-hours with our voltage.
         capacity_now: energy_now.or(charge_now)?,
         capacity_full: energy_full.or(charge_full)?,
     })

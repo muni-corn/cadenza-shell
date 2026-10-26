@@ -251,9 +251,10 @@ impl AsyncComponent for CadenzaShellModel {
                 added
             );
 
-            // read removed connector names from our tracked list before mutating
-            // it; after the signal fires the model has already changed, so
-            // monitors.item(i) for removed indices would return the wrong item
+            // read removed connector names from our tracked list before
+            // mutating it; after the signal fires the model has already
+            // changed, so monitors.item(i) for removed indices would return the
+            // wrong item
             let removed_connectors: Vec<String> = {
                 let tracked = tracked.borrow();
                 let start = position as usize;
@@ -317,9 +318,10 @@ impl AsyncComponent for CadenzaShellModel {
 
                 let connector_str = connector.to_string();
 
-                // replace any existing (now-stale) bar for this connector so the
-                // new Monitor object is used; this handles disconnect→reconnect
-                // cycles where the compositor reuses the same connector name
+                // replace any existing (now-stale) bar for this connector so
+                // the new Monitor object is used; this handles
+                // disconnect→reconnect cycles where the compositor reuses the
+                // same connector name
                 if self.bars.contains_key(&connector_str) {
                     tracing::warn!(
                         "bar already exists for connector '{}' — replacing with fresh monitor",

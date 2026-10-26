@@ -181,9 +181,9 @@ impl SimpleAsyncComponent for Bar {
     fn update_view(&self, _widgets: &mut Self::Widgets, _sender: AsyncComponentSender<Self>) {}
 
     fn shutdown(&mut self, _widgets: &mut Self::Widgets, _output: relm4::Sender<Self::Output>) {
-        // explicitly close the layer-shell window so the compositor destroys the
-        // surface immediately; without this, GTK may finalize the GtkWindow while
-        // the layer surface is still alive, which causes wlr-layer-shell
+        // explicitly close the layer-shell window so the compositor destroys
+        // the surface immediately; without this, GTK may finalize the GtkWindow
+        // while the layer surface is still alive, which causes wlr-layer-shell
         // compositors (including Niri) to move the surface to another output
         tracing::debug!(
             "shutting down bar for monitor: {:?}",

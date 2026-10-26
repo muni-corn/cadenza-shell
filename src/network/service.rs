@@ -173,11 +173,11 @@ pub async fn run_network_service() {
                     }
                 }
 
-                // if we just transitioned to a connected state but specific_info
-                // is still None (e.g. the wake refetch ran before NM finished
-                // reconnecting and no PrimaryConnection change will fire since
-                // we reconnected to the same network), do a full refetch now to
-                // populate the missing device details
+                // if we just transitioned to a connected state but
+                // specific_info is still None (e.g. the wake refetch ran before
+                // NM finished reconnecting and no PrimaryConnection change will
+                // fire since we reconnected to the same network), do a full
+                // refetch now to populate the missing device details
                 if let State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal = state
                     && NETWORK_STATE.read().specific_info.is_none()
                 {

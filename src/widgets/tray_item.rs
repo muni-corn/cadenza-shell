@@ -267,9 +267,10 @@ impl AsMenuWithActions for TrayMenu {
 fn clean_menu_label(label: &str) -> String {
     // handle underscore escaping: "__" becomes "_", single "_" are accelerator
     // markers
-    label.replace("__", "\x01") // temporary replacement
-         .replace('_', "") // remove single underscores (accelerator markers)
-         .replace('\x01', "_") // restore double underscores as single
+    label
+        .replace("__", "\x01") // temporary replacement
+        .replace('_', "") // remove single underscores (accelerator markers)
+        .replace('\x01', "_") // restore double underscores as single
 }
 
 fn create_menu_from_items(

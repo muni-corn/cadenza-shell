@@ -37,14 +37,15 @@ pub async fn run_mpris_service() {
                                         *MPRIS_STATE.write() = new_state;
                                     }
 
-                                    // if player shuts down, break out of event loop to find
-                                    // a new player
+                                    // if player shuts down, break out of event
+                                    // loop to find a new player
                                     if matches!(event, Event::PlayerShutDown) {
                                         break;
                                     }
                                 }
                                 Err(e) => {
-                                    // error getting event - player may have disconnected
+                                    // error getting event - player may have
+                                    // disconnected
                                     tracing::error!(
                                         "error receiving event for mpris player: {}",
                                         e
@@ -55,15 +56,17 @@ pub async fn run_mpris_service() {
                         }
                     }
                     Err(e) => {
-                        // failed to get events - player may not support it or be
-                        // disconnected; wait a bit before trying to find another player
+                        // failed to get events - player may not support it or
+                        // be disconnected; wait a bit before trying to find
+                        // another player
                         tracing::error!("error starting event stream for mpris player: {}", e);
                         std::thread::sleep(std::time::Duration::from_secs(2));
                     }
                 }
             }
             Err(_) => {
-                // no players found - silently emit no-player state and wait before retrying
+                // no players found - silently emit no-player state and wait
+                // before retrying
                 if MPRIS_STATE.read().is_some() {
                     *MPRIS_STATE.write() = None;
                 }
@@ -115,7 +118,8 @@ fn handle_player_event(event: &Event, mut current_state: Option<MprisState>) -> 
                 }
                 Event::PlayerShutDown => return None,
 
-                // for other events that don't affect our displayed state, return current state
+                // for other events that don't affect our displayed state,
+                // return current state
                 _ => (),
             }
 

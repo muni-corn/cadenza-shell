@@ -45,7 +45,8 @@ impl AlertState {
     pub async fn check(&mut self, percentage: f32) {
         // critical alert (10%)
         if percentage <= BATTERY_THRESHOLD_CRITICAL && !self.critical_triggered {
-            // automatically set warn_triggered to true here, because it's implied
+            // automatically set warn_triggered to true here, because it's
+            // implied
             self.warn_triggered = true;
             self.critical_triggered = true;
             tracing::info!("battery critical alert ({:.0}%)", percentage * 100.0);

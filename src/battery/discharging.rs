@@ -122,11 +122,12 @@ impl DischargeProfile {
         }
 
         // update Fourier coefficients via online EMA using the mean-subtracted
-        // deviation signal. projecting the raw power_now onto each harmonic would
-        // introduce DC leakage: coefficients pick up the level of ema_power and
-        // constructively interfere at prediction time, producing over-predictions.
-        // subtracting the mean before projection keeps coefficients zero-mean and
-        // unbiased regardless of the sampling distribution.
+        // deviation signal. projecting the raw power_now onto each harmonic
+        // would introduce DC leakage: coefficients pick up the level of
+        // ema_power and constructively interfere at prediction time, producing
+        // over-predictions. subtracting the mean before projection keeps
+        // coefficients zero-mean and unbiased regardless of the sampling
+        // distribution.
         //
         //   aₖ ← (1 - α) · aₖ + 2α · (P − P̄) · cos(ωₖ t)
         //   bₖ ← (1 - α) · bₖ + 2α · (P − P̄) · sin(ωₖ t)
@@ -230,19 +231,20 @@ impl DischargeProfile {
         // initial guess: linear estimate from overall EMA power draw
         let mut delta = (ws_remaining / self.ema_power).min(max_secs);
 
-        // bisection bounds: lo is always under-estimate, hi is always over-estimate.
-        // start with the tightest bracket we can establish cheaply.
+        // bisection bounds: lo is always under-estimate, hi is always
+        // over-estimate. start with the tightest bracket we can establish
+        // cheaply.
         let mut lo = 0f64;
         let mut hi = max_secs;
 
         // hybrid Newton / bisection: find Δt such that
         //   f(Δt) = energy_integral(from, Δt) - ws_remaining = 0
         //
-        // at each step we prefer the Newton update (fast, quadratic convergence),
-        // but fall back to the bisection midpoint when Newton would step outside
-        // the known bracket or when f'(Δt) is zero (zero-power night-time region).
-        // this prevents the original code from halting prematurely when the
-        // predicted power at the endpoint is zero.
+        // at each step we prefer the Newton update (fast, quadratic
+        // convergence), but fall back to the bisection midpoint when Newton
+        // would step outside the known bracket or when f'(Δt) is zero
+        // (zero-power night-time region). this prevents the original code from
+        // halting prematurely when the predicted power at the endpoint is zero.
         for _ in 0..40 {
             let f = self.energy_integral(from_when, delta) - ws_remaining;
 
@@ -495,7 +497,7 @@ mod tests {
 
     use super::*;
 
-    // ── helpers ───────────────────────────────────────────────────────────────
+    // # helpers
 
     /// Return a [`DischargeProfile`] whose EMA power is `power_watts` and
     /// whose Fourier coefficients are all zero (i.e., constant-power model).
@@ -546,11 +548,12 @@ mod tests {
         profile
     }
 
-    // ── predict_discharging_power_at ──────────────────────────────────────────
+    // # predict_discharging_power_at
 
     #[test]
     fn predict_power_zero_coefficients_returns_ema() {
-        // when all Fourier coefficients are zero the series collapses to a₀ = ema_power
+        // when all Fourier coefficients are zero the series collapses to a₀ =
+        // ema_power
         let power = 12.5;
         let profile = constant_power_profile(power);
         let when = Local::now();
@@ -563,7 +566,8 @@ mod tests {
 
     #[test]
     fn predict_power_clamped_to_zero_minimum() {
-        // even with wildly negative coefficients the prediction must be non-negative
+        // even with wildly negative coefficients the prediction must be
+        // non-negative
         let mut profile = constant_power_profile(1.0);
         // force a large negative perturbation into the first coefficient
         profile.cosine_coeffs[0] = -1000.0;
@@ -571,7 +575,7 @@ mod tests {
         assert!(predicted >= 0.0, "prediction was negative: {predicted}");
     }
 
-    // ── energy_integral ───────────────────────────────────────────────────────
+    // # energy_integral
 
     #[test]
     fn energy_integral_constant_power_matches_analytic() {
@@ -596,7 +600,7 @@ mod tests {
         assert_eq!(energy, 0.0);
     }
 
-    // ── predict_time_to_empty ─────────────────────────────────────────────────
+    // # predict_time_to_empty
 
     #[test]
     fn tte_zero_wh_returns_zero_duration() {

@@ -114,8 +114,8 @@ impl SimpleComponent for NiriTile {
             }
         }
 
-        // then, update existing workspaces; any workspaces not found in the existing
-        // collection are returned as new workspaces
+        // then, update existing workspaces; any workspaces not found in the
+        // existing collection are returned as new workspaces
         let new_workspaces: Vec<_> = {
             let guard = self.workspaces.guard();
             monitor_workspaces

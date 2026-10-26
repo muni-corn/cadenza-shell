@@ -137,9 +137,9 @@ impl BatteryTile {
     }
 
     fn get_text(&self) -> String {
-        // sometimes, systems report "not charging" instead of "full" or "charging" when
-        // the battery is full while plugged in. so we'll just report "full" as long as
-        // the battery isn't *actively* discharging.
+        // sometimes, systems report "not charging" instead of "full" or
+        // "charging" when the battery is full while plugged in. so we'll just
+        // report "full" as long as the battery isn't *actively* discharging.
         if self.status != ChargingStatus::Discharging && self.current_percentage >= 0.995 {
             "Full".to_string()
         } else {

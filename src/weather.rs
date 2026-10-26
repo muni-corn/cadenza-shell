@@ -85,8 +85,8 @@ fn map_icon(code: &str, dark: bool) -> &'static str {
 
 #[tracing::instrument]
 async fn fetch_wttr() -> anyhow::Result<WeatherState> {
-    // for some reason, the protocol used here must be http; reqwest doesn't like
-    // https in this case
+    // for some reason, the protocol used here must be http; reqwest doesn't
+    // like https in this case
     let body = reqwest::get("http://v2.wttr.in/?format=j1")
         .await?
         .text()

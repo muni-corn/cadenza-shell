@@ -25,7 +25,8 @@ pub struct Notification {
     pub summary: String,
     pub body: String,
     pub urgency: NotificationUrgency,
-    // part of the freedesktop spec; retained for completeness even if not currently used
+    // part of the freedesktop spec; retained for completeness even if not
+    // currently used
     #[allow(dead_code)]
     pub timeout: i32,
     pub timestamp: i64,

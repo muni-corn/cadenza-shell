@@ -75,8 +75,8 @@ impl SimpleComponent for ActionPanel {
         window: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // subscribe to the global notifications state; payload ignored — update_view
-        // reads directly from the global on each notification
+        // subscribe to the global notifications state; payload ignored —
+        // update_view reads directly from the global on each notification
         NOTIFICATIONS_STATE.subscribe(sender.input_sender(), |_| ActionPanelMsg::StateUpdate);
 
         let model = ActionPanel {
@@ -125,14 +125,16 @@ impl SimpleComponent for ActionPanel {
                 .build(),
         };
 
-        // horizontal row holding both the analog clock and the digital clock/date
+        // horizontal row holding both the analog clock and the digital
+        // clock/date
         let clock_row = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Horizontal)
             .spacing(16)
             .margin_bottom(12)
             .build();
 
-        // vertical stack for the digital time and date, anchored to the start (top)
+        // vertical stack for the digital time and date, anchored to the start
+        // (top)
         let clock_text_box = gtk4::Box::builder()
             .orientation(gtk4::Orientation::Vertical)
             .valign(gtk4::Align::Center)
