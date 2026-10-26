@@ -1,11 +1,12 @@
+# yaml-language-server: $schema=https://devenv.sh/devenv.schema.json
 inputs:
   cocoa:
     url: github:muni-corn/cocoa
     inputs:
       nixpkgs:
         follows: nixpkgs
-  crate2nix:
-    url: github:nix-community/crate2nix
+  crane:
+    url: github:ipetkov/crane
     inputs:
       nixpkgs:
         follows: nixpkgs
