@@ -38,17 +38,7 @@ in
     mold.enable = true;
   };
 
-  packages =
-    with pkgs;
-    [
-      bacon
-      cargo-outdated
-      cargo-tarpaulin
-
-      secretspec
-    ]
-    ++ buildInputs
-    ++ nativeBuildInputs;
+  packages = buildInputs ++ nativeBuildInputs;
 
   outputs.default =
     let
