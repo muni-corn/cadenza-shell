@@ -35,7 +35,7 @@ in
   languages.rust = {
     enable = true;
     channel = "nightly";
-    mold.enable = true;
+    wild.enable = true;
   };
 
   packages = buildInputs ++ nativeBuildInputs;
