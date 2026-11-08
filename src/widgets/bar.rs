@@ -71,7 +71,8 @@ impl SimpleAsyncComponent for Bar {
         gtk::Window::builder()
             .title("cadenza-shell")
             .default_height(32)
-            .visible(true)
+            // stays unrealized until layer shell is configured in init
+            .visible(false)
             .build()
     }
 
@@ -127,10 +128,8 @@ impl SimpleAsyncComponent for Bar {
             .end_widget(model.right.widget())
             .build();
 
-        // init layer shell
-        if !window.is_layer_window() {
-            window.init_layer_shell();
-        }
+        // gtk4-layer-shell must be initialized before the window is realized
+        window.init_layer_shell();
 
         window.set_monitor(Some(&model.monitor));
         window.set_namespace(Some("bar"));
@@ -163,6 +162,8 @@ impl SimpleAsyncComponent for Bar {
                 tracing::error!("failed to send MonitorInvalidated: receiver already dropped");
             }
         });
+
+        window.present();
 
         AsyncComponentParts { model, widgets: () }
     }
