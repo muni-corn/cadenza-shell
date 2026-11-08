@@ -24,7 +24,7 @@ pub(super) struct AlertState {
 }
 
 impl AlertState {
-    /// Reset alert flags at the start of a new discharging session.
+    /// Re-arms the alerts once the battery is charging again.
     pub fn reset(&mut self) {
         self.warn_triggered = false;
         self.critical_triggered = false;
@@ -33,9 +33,9 @@ impl AlertState {
     /// Fire any pending low-battery alerts based on the current percentage.
     ///
     /// Each alert is sent at most once per discharging session. Critical takes
-    /// priority: if we cross 10% without having seen 20% first (e.g. the shell
-    /// started with the battery already below 20%), both would fire
-    /// independently.
+    /// priority: if the level is already at or below 10% (e.g. the shell
+    /// started with a nearly empty battery), only the critical alert fires,
+    /// and the low alert is considered sent.
     pub async fn check(&mut self, percentage: f32) {
         // critical alert (10%)
         if percentage <= BATTERY_THRESHOLD_CRITICAL && !self.critical_triggered {

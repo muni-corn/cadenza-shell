@@ -161,10 +161,12 @@ async fn update_battery_state(
         discharging_time_remaining,
     });
 
-    // check alerts only while discharging; reset flags when we leave that state
+    // check alerts only while discharging, and re-arm them only once the
+    // battery actually charges; brief unknown or not-charging readings
+    // would otherwise make them fire again
     if status == ChargingStatus::Discharging {
         alert_state.check(percentage).await;
-    } else {
+    } else if status.is_charging() {
         alert_state.reset();
     }
 }
