@@ -18,11 +18,11 @@ use pulse::{
 };
 use relm4::SharedState;
 
-use crate::utils::backoff::Backoff;
+use crate::utils::{backoff::Backoff, shared_state::set_if_changed};
 
 pub static VOLUME_STATE: SharedState<PulseAudioData> = SharedState::new();
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct PulseAudioData {
     pub volume: f64,
     pub muted: bool,
@@ -56,7 +56,7 @@ pub async fn run_pulseaudio_loop() {
         }
 
         // hide the volume tile until we're connected again
-        *VOLUME_STATE.write() = PulseAudioData::default();
+        set_if_changed(&VOLUME_STATE, PulseAudioData::default());
 
         if started.elapsed() >= STABLE_SESSION {
             backoff.reset();
@@ -151,12 +151,20 @@ fn on_state_change(context: &SharedContext) {
     // subscribe to changes
     let subscribe_callback = Box::new({
         let context = context.clone();
-        move |facility, op, _i| on_event(&context, facility, op)
+        move |facility, op, index| on_event(&context, facility, op, index)
     });
 
     let mut context = context.borrow_mut();
     context.set_subscribe_callback(Some(subscribe_callback));
     context.subscribe(InterestMaskSet::SERVER | InterestMaskSet::SINK, |_| ());
+}
+
+/// Applies `update` to a copy of the volume state and publishes it only if
+/// something changed, so unrelated sink events don't wake the tile.
+fn update_volume_state(update: impl FnOnce(&mut PulseAudioData)) {
+    let mut data = VOLUME_STATE.read().clone();
+    update(&mut data);
+    set_if_changed(&VOLUME_STATE, data);
 }
 
 fn on_server_info(server_info: &ServerInfo, context: &SharedContext) {
@@ -165,10 +173,7 @@ fn on_server_info(server_info: &ServerInfo, context: &SharedContext) {
         .as_ref()
         .map(ToString::to_string);
 
-    {
-        let mut data_guard = VOLUME_STATE.write();
-        data_guard.default_sink_name = default_sink_name.clone();
-    }
+    update_volume_state(|data| data.default_sink_name = default_sink_name.clone());
 
     // get sink info for the default sink
     if let Some(ref sink_name) = default_sink_name {
@@ -182,52 +187,52 @@ fn on_sink_info(sink_info: ListResult<&SinkInfo>) {
         return;
     };
 
-    let volume_percent = volume_to_percent(&info.volume);
+    // events arrive for every sink; only the default one drives the tile
+    let is_default = VOLUME_STATE.read().default_sink_name.as_deref() == info.name.as_deref();
+    if !is_default {
+        return;
+    }
 
-    let mut data_guard = VOLUME_STATE.write();
-    data_guard.volume = volume_percent;
-    data_guard.muted = info.mute;
+    let volume = volume_to_percent(&info.volume);
+    update_volume_state(|data| {
+        data.volume = volume;
+        data.muted = info.mute;
+    });
 }
 
-fn on_event(context: &SharedContext, facility: Option<Facility>, _op: Option<Operation>) {
-    let Some(facility) = facility else {
-        return;
-    };
-
+fn on_event(
+    context: &SharedContext,
+    facility: Option<Facility>,
+    operation: Option<Operation>,
+    index: u32,
+) {
     match facility {
-        Facility::Server => {
+        Some(Facility::Server) => {
             let introspect = context.borrow().introspect();
             introspect.get_server_info({
                 let context = context.clone();
-
                 move |server_info| on_server_info(server_info, &context)
             });
         }
-        Facility::Sink => {
-            // update default sink info
-            if let Some(sink_name) = VOLUME_STATE.read().default_sink_name.clone() {
-                let introspect = context.borrow().introspect();
-                introspect.get_sink_info_by_name(&sink_name, {
-                    move |sink_info| on_sink_info(sink_info)
-                });
-            }
+        // removed sinks can't be queried; a removed default sink is followed
+        // by a server event announcing the new default
+        Some(Facility::Sink) if operation != Some(Operation::Removed) => {
+            let introspect = context.borrow().introspect();
+            introspect.get_sink_info_by_index(index, on_sink_info);
         }
         _ => {}
     }
 }
 
+/// Converts a sink's channel volumes into a percentage of normal volume.
 fn volume_to_percent(channel_volumes: &ChannelVolumes) -> f64 {
     if channel_volumes.len() == 0 {
         return 0.0;
     }
 
-    let avg: u32 =
-        channel_volumes.get().iter().map(|v| v.0).sum::<u32>() / channel_volumes.len() as u32;
-    let base_delta = (Volume::NORMAL.0 - Volume::MUTED.0) as f64 / 100.0;
-
-    ((avg - Volume::MUTED.0) as f64 / base_delta)
-        .round()
-        .max(0.0)
+    let avg = f64::from(channel_volumes.avg().0);
+    let normal = f64::from(Volume::NORMAL.0);
+    (avg * 100.0 / normal).round()
 }
 
 fn _percent_to_volume(target_percent: f64) -> u32 {
@@ -243,5 +248,30 @@ fn _percent_to_volume(target_percent: f64) -> u32 {
         Volume::MUTED.0 + (target_percent * base_delta as f64) as u32
     } else {
         Volume::NORMAL.0 + ((target_percent - 100.0) * base_delta as f64) as u32
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normal_volume_is_one_hundred_percent() {
+        let mut volumes = ChannelVolumes::default();
+        volumes.set(2, Volume::NORMAL);
+        assert_eq!(volume_to_percent(&volumes), 100.0);
+    }
+
+    #[test]
+    fn averages_channels() {
+        let mut volumes = ChannelVolumes::default();
+        volumes.set(2, Volume::NORMAL);
+        volumes.get_mut()[1] = Volume::MUTED;
+        assert_eq!(volume_to_percent(&volumes), 50.0);
+    }
+
+    #[test]
+    fn no_channels_is_zero() {
+        assert_eq!(volume_to_percent(&ChannelVolumes::default()), 0.0);
     }
 }
