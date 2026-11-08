@@ -209,7 +209,7 @@ async fn handle_command(
 
 /// Starts a discovery session, holding it open (and thus BlueZ's
 /// `Discovering` state true) until `bluetooth.discovery_timeout` elapses or
-/// it's cancelled by a `StopDiscovery` command. A no-op if one is already
+/// it's cancelled by a `StopDiscovery` command. A no-op if one is still
 /// running.
 ///
 /// `Adapter::discover_devices`'s returned stream doesn't need to be read for
@@ -219,7 +219,12 @@ async fn handle_command(
 /// session token it holds internally) must stay alive for discovery to
 /// remain active, so this task exists purely to hold and eventually drop it.
 async fn handle_start_discovery(discovery_task: &mut Option<tokio::task::AbortHandle>) {
-    if discovery_task.is_some() {
+    // the task ends on its own after the timeout, so a finished handle
+    // doesn't count as an active session
+    if discovery_task
+        .as_ref()
+        .is_some_and(|handle| !handle.is_finished())
+    {
         tracing::debug!("discovery already in progress, ignoring StartDiscovery");
         return;
     }
