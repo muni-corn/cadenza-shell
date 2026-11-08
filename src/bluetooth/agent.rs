@@ -188,28 +188,38 @@ async fn handle_request_authorization(req: RequestAuthorization) -> ReqResult<()
 /// pairing without a keyboard on their end). There's nothing for us to
 /// collect back; we just display it until BlueZ tells us to stop.
 async fn handle_display_pin_code(req: DisplayPinCode) -> ReqResult<()> {
-    let _guard = PromptGuard::show(PairingPrompt {
+    let guard = PromptGuard::show(PairingPrompt {
         address: req.device,
         request: PairingRequest::DisplayPinCode(req.pincode),
     });
-
-    let _ = req.cancel.await;
+    hide_when_cancelled(guard, req.cancel);
     Ok(())
 }
 
 /// Shows a passkey the user needs to type on the *other* device, updating
 /// as they type it (`entered` counts digits typed so far there).
 async fn handle_display_passkey(req: DisplayPasskey) -> ReqResult<()> {
-    let _guard = PromptGuard::show(PairingPrompt {
+    let guard = PromptGuard::show(PairingPrompt {
         address: req.device,
         request: PairingRequest::DisplayPasskey {
             passkey: req.passkey,
             entered: req.entered,
         },
     });
-
-    let _ = req.cancel.await;
+    hide_when_cancelled(guard, req.cancel);
     Ok(())
+}
+
+/// Keeps a display-only prompt up until BlueZ cancels it.
+///
+/// BlueZ waits for the reply before it continues pairing, so display
+/// requests are answered right away and the prompt is cleared from a
+/// separate task once `cancel` resolves.
+fn hide_when_cancelled(guard: PromptGuard, cancel: oneshot::Receiver<()>) {
+    relm4::spawn(async move {
+        let _ = cancel.await;
+        drop(guard);
+    });
 }
 
 /// Responds to the current pairing prompt, if any.
