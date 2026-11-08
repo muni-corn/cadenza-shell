@@ -82,7 +82,7 @@ impl DischargeProfile {
     /// Updates historical records based on a current reading of the device's
     /// power state.
     pub fn update(&mut self, reading: &SysfsReading) {
-        let power_now = reading.power_watts();
+        let power_now = reading.power_watts;
 
         match reading.status {
             ChargingStatus::Discharging => {

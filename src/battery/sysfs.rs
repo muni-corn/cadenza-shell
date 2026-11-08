@@ -11,8 +11,9 @@ pub struct SysfsReading {
     /// Current voltage in microvolts (µV).
     pub voltage_now: u64,
 
-    /// Current draw in microamperes (µA).
-    pub current_now: i64,
+    /// Current power draw in watts, from `power_now` when the battery
+    /// reports it, otherwise from voltage times `current_now`.
+    pub power_watts: f64,
 
     /// Current capacity in either milliwatt-hours (µWh) or milliampere-hours
     /// (µAh).
@@ -27,16 +28,6 @@ pub struct SysfsReading {
 }
 
 impl SysfsReading {
-    /// Calculate current power draw in watts.
-    pub fn power_watts(&self) -> f64 {
-        let voltage = self.voltage_now;
-        let current = self.current_now.unsigned_abs();
-
-        // convert µV × µA = pW (picowatts), then to watts
-        let power_picowatts = voltage as f64 * current as f64;
-        power_picowatts / 1_000_000_000_000.0
-    }
-
     /// Returns the remaining capacity in this reading, in Wh.
     pub fn remaining_wh(&self) -> f64 {
         match self.capacity_now {
@@ -58,13 +49,22 @@ impl SysfsReading {
 
 /// Read battery data from sysfs at the given battery path.
 ///
-/// Returns `None` if `current_now` or `voltage_now` are unavailable, as these
-/// are critical for power calculation.
+/// Returns `None` if the voltage or the power draw (`power_now`, or
+/// `current_now` to derive it) is unavailable, as these are critical for
+/// power calculation.
 pub fn read_battery_sysfs(battery_path: &Path) -> Option<SysfsReading> {
-    // current_now and voltage_now are critical for power calculation - if
-    // unavailable, return None
-    let current_now = read_sysfs_i64(battery_path, "current_now")?;
     let voltage_now = read_sysfs_u64(battery_path, "voltage_now")?;
+
+    // energy-reporting batteries (most thinkpads and amd laptops) expose
+    // power_now in µW and often no current_now at all
+    let power_watts = match read_sysfs_u64(battery_path, "power_now") {
+        Some(power_uw) => power_uw as f64 / 1_000_000.0,
+        None => {
+            let current_ua = read_sysfs_i64(battery_path, "current_now")?.unsigned_abs();
+            // µV × µA = pW
+            voltage_now as f64 * current_ua as f64 / 1_000_000_000_000.0
+        }
+    };
 
     // read other values, allowing them to be missing
     let charge_now =
@@ -80,7 +80,7 @@ pub fn read_battery_sysfs(battery_path: &Path) -> Option<SysfsReading> {
 
     Some(SysfsReading {
         voltage_now,
-        current_now,
+        power_watts,
         status,
 
         // prefer watt-hours over amp-hours. if we only have amp-hours, we can
@@ -148,24 +148,23 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_power_calculation() {
+    fn remaining_wh_converts_charge_with_voltage() {
         let reading = SysfsReading {
-            current_now: 1_500_000,                                      // 1.5 A
-            voltage_now: 12_000_000,                                     // 12 V
-            capacity_now: BatteryCapacity::MicroAmpereHours(5_000_000),  // 5 Ah
-            capacity_full: BatteryCapacity::MicroAmpereHours(6_000_000), // 6 Ah
+            power_watts: 18.0,
+            voltage_now: 12_000_000,
+            capacity_now: BatteryCapacity::MicroAmpereHours(5_000_000),
+            capacity_full: BatteryCapacity::MicroAmpereHours(6_000_000),
             status: ChargingStatus::Discharging,
         };
 
-        // 12V × 1.5A = 18W
-        let power = reading.power_watts();
-        assert!((power - 18.0).abs() < 0.01);
+        // 12 V × 5 Ah = 60 Wh
+        assert!((reading.remaining_wh() - 60.0).abs() < 0.01);
     }
 
     #[test]
     fn test_percentage() {
         let reading = SysfsReading {
-            current_now: 1_000_000,
+            power_watts: 1.0,
             voltage_now: 1_000_000,
             capacity_now: BatteryCapacity::MicroAmpereHours(3_250_000), // 3.25 Ah
             capacity_full: BatteryCapacity::MicroAmpereHours(6_500_000), // 6.5 Ah

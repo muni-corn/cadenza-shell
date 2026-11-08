@@ -35,6 +35,10 @@ pub async fn start_battery_service() {
 
     // read initial battery properties
     let Some(reading) = read_battery_sysfs(&battery_path) else {
+        tracing::error!(
+            "couldn't read {}; does it expose voltage_now and power_now or current_now?",
+            battery_path.display()
+        );
         return;
     };
 
