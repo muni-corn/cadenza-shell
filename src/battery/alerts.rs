@@ -14,6 +14,7 @@ const SOUND_BATTERY_CRITICAL: &str = "battery-critical";
 
 /// Tracks which low-battery alerts have already fired in the current
 /// discharging session, so each is only triggered once.
+#[derive(Default)]
 pub(super) struct AlertState {
     /// Whether the "battery low" (20%) alert has fired this session.
     warn_triggered: bool,
@@ -23,13 +24,6 @@ pub(super) struct AlertState {
 }
 
 impl AlertState {
-    pub fn new() -> Self {
-        Self {
-            warn_triggered: false,
-            critical_triggered: false,
-        }
-    }
-
     /// Reset alert flags at the start of a new discharging session.
     pub fn reset(&mut self) {
         self.warn_triggered = false;

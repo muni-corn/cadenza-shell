@@ -8,7 +8,7 @@ use crate::battery::{
     READ_INTERVAL_SECONDS,
     alerts::AlertState,
     discharging::DischargeProfile,
-    sysfs::{detect_battery_path, read_battery_identity, read_battery_sysfs},
+    sysfs::{detect_battery_path, read_battery_sysfs},
     udev::{create_battery_monitor, is_battery_change},
 };
 
@@ -19,13 +19,7 @@ pub async fn start_battery_service() {
         return;
     };
 
-    // read device identity for per-device profile keying
-    let identity = read_battery_identity(&battery_path);
-    let device_key = identity.device_key();
-    tracing::info!(
-        "battery device: '{}' (key: '{device_key}')",
-        identity.sysfs_name,
-    );
+    tracing::info!("battery device: {}", battery_path.display());
 
     // load or create power usage history
     let mut power_history = match DischargeProfile::read_from_disk() {
@@ -71,7 +65,7 @@ pub async fn start_battery_service() {
         }
     };
 
-    let mut alert_state = AlertState::new();
+    let mut alert_state = AlertState::default();
 
     watch_battery(
         &battery_path,

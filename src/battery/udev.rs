@@ -1,27 +1,17 @@
 //! Udev monitoring for battery status changes.
 //!
 //! This module provides helpers for creating a udev monitor on the
-//! `power_supply` subsystem and extracting charging status from events.
+//! `power_supply` subsystem and parsing charging status strings.
 
-use udev::{Enumerator, MonitorSocket};
+use udev::MonitorSocket;
 
 use crate::battery::ChargingStatus;
 
 /// Creates a udev monitor socket filtered to the `power_supply` subsystem.
 pub fn create_battery_monitor() -> anyhow::Result<MonitorSocket> {
-    tracing::debug!("getting power_supply devices for monitor...");
-
-    let mut enumerator = Enumerator::new()?;
-    enumerator.match_subsystem("power_supply")?;
-    for dev in enumerator.scan_devices()? {
-        tracing::debug!("found power_supply device: {dev:?}")
-    }
-
     let socket = udev::MonitorBuilder::new()?
         .match_subsystem("power_supply")?
         .listen()?;
-
-    tracing::debug!("done. returning socket");
     Ok(socket)
 }
 
@@ -35,14 +25,6 @@ pub fn is_battery_change(event: &udev::Event) -> bool {
     });
 
     is_change && is_battery
-}
-
-/// Reads and parses the charging status from a udev event's
-/// `POWER_SUPPLY_STATUS` property.
-#[allow(dead_code)]
-pub fn read_status_from_event(event: &udev::Event) -> Option<ChargingStatus> {
-    let value = event.property_value("POWER_SUPPLY_STATUS")?;
-    Some(parse_charging_status(value.to_str()?))
 }
 
 /// Parses a charging status string into a [`ChargingStatus`] variant.

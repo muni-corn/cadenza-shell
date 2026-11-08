@@ -3,17 +3,11 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use chrono::{DateTime, Local};
-use serde::{Deserialize, Serialize};
-
 use crate::battery::{BatteryCapacity, ChargingStatus};
 
 /// Raw reading from sysfs battery interface.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone)]
 pub struct SysfsReading {
-    /// The time of the reading.
-    pub when: DateTime<Local>,
-
     /// Current voltage in microvolts (µV).
     pub voltage_now: u64,
 
@@ -58,7 +52,7 @@ impl SysfsReading {
     /// Calculate precise percentage remaining.
     /// Returns None if charge values are unavailable or incompatible.
     pub fn percentage(&self) -> Option<f64> {
-        self.capacity_now.div(self.capacity_full)
+        self.capacity_now.ratio(self.capacity_full)
     }
 }
 
@@ -85,7 +79,6 @@ pub fn read_battery_sysfs(battery_path: &Path) -> Option<SysfsReading> {
     let status = read_charging_status(battery_path);
 
     Some(SysfsReading {
-        when: Local::now(),
         voltage_now,
         current_now,
         status,
@@ -95,101 +88,6 @@ pub fn read_battery_sysfs(battery_path: &Path) -> Option<SysfsReading> {
         capacity_now: energy_now.or(charge_now)?,
         capacity_full: energy_full.or(charge_full)?,
     })
-}
-
-/// Stable identity for a battery device, used to key per-device learned
-/// parameters across reboots.
-#[derive(Debug, Clone)]
-pub struct BatteryIdentity {
-    /// Value of the sysfs `serial_number` file, if present.
-    pub serial_number: Option<String>,
-    /// Value of the sysfs `model_name` file, if present.
-    pub model_name: Option<String>,
-    /// Value of the sysfs `manufacturer` file, if present.
-    pub manufacturer: Option<String>,
-    /// The last component of the sysfs path (e.g. `"BAT0"`).
-    pub sysfs_name: String,
-}
-
-impl BatteryIdentity {
-    /// Build a stable, filename-safe key for this device.
-    ///
-    /// Preference order:
-    /// 1. `serial_number` (most unique)
-    /// 2. `manufacturer + "_" + model_name`
-    /// 3. `sysfs_name` (least stable across battery replacements)
-    pub fn device_key(&self) -> String {
-        let sanitize = |s: &str| {
-            s.trim()
-                .chars()
-                .map(|c| {
-                    if c.is_alphanumeric() || c == '-' {
-                        c
-                    } else {
-                        '_'
-                    }
-                })
-                .collect::<String>()
-        };
-
-        if let Some(ref sn) = self.serial_number {
-            let key = sanitize(sn);
-            if !key.is_empty() {
-                return key;
-            }
-        }
-
-        match (&self.manufacturer, &self.model_name) {
-            (Some(mfr), Some(mdl)) => {
-                let key = format!("{}_{}", sanitize(mfr), sanitize(mdl));
-                if key.len() > 1 {
-                    return key;
-                }
-            }
-            (None, Some(mdl)) => {
-                let key = sanitize(mdl);
-                if !key.is_empty() {
-                    return key;
-                }
-            }
-            _ => {}
-        }
-
-        sanitize(&self.sysfs_name)
-    }
-}
-
-/// Read battery identity fields from the sysfs path.
-pub fn read_battery_identity(battery_path: &Path) -> BatteryIdentity {
-    let read_opt = |file: &str| {
-        fs::read_to_string(battery_path.join(file))
-            .ok()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-    };
-
-    let sysfs_name = battery_path
-        .file_name()
-        .map(|n| n.to_string_lossy().into_owned())
-        .unwrap_or_else(|| "battery".to_string());
-
-    let identity = BatteryIdentity {
-        serial_number: read_opt("serial_number"),
-        model_name: read_opt("model_name"),
-        manufacturer: read_opt("manufacturer"),
-        sysfs_name,
-    };
-
-    tracing::debug!(
-        "battery identity: sysfs='{}' manufacturer={} model={} serial={} → key='{}'",
-        identity.sysfs_name,
-        identity.manufacturer.as_deref().unwrap_or("(none)"),
-        identity.model_name.as_deref().unwrap_or("(none)"),
-        identity.serial_number.as_deref().unwrap_or("(none)"),
-        identity.device_key(),
-    );
-
-    identity
 }
 
 /// Detect the battery sysfs path by scanning `/sys/class/power_supply/` for
@@ -252,10 +150,9 @@ mod tests {
     #[test]
     fn test_power_calculation() {
         let reading = SysfsReading {
-            when: Local::now(),
-            current_now: 1_500_000,  // 1.5 A
-            voltage_now: 12_000_000, // 12 V
-            capacity_now: BatteryCapacity::MicroAmpereHours(5_000_000), // 5 Ah
+            current_now: 1_500_000,                                      // 1.5 A
+            voltage_now: 12_000_000,                                     // 12 V
+            capacity_now: BatteryCapacity::MicroAmpereHours(5_000_000),  // 5 Ah
             capacity_full: BatteryCapacity::MicroAmpereHours(6_000_000), // 6 Ah
             status: ChargingStatus::Discharging,
         };
@@ -268,7 +165,6 @@ mod tests {
     #[test]
     fn test_percentage() {
         let reading = SysfsReading {
-            when: Local::now(),
             current_now: 1_000_000,
             voltage_now: 1_000_000,
             capacity_now: BatteryCapacity::MicroAmpereHours(3_250_000), // 3.25 Ah

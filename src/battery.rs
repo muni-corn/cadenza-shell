@@ -9,7 +9,6 @@ mod udev;
 mod watcher;
 
 use chrono::TimeDelta;
-use serde::{Deserialize, Serialize};
 pub use watcher::start_battery_service;
 
 pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
@@ -30,7 +29,7 @@ pub struct BatteryState {
     pub discharging_time_remaining: Duration,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Serialize)]
+#[derive(Clone, Copy, Debug)]
 pub enum BatteryCapacity {
     /// µAh
     MicroAmpereHours(u64),
@@ -40,7 +39,8 @@ pub enum BatteryCapacity {
 }
 
 impl BatteryCapacity {
-    pub fn div(self, rhs: Self) -> Option<f64> {
+    /// Returns `self / rhs`, or `None` if the units differ or `rhs` is zero.
+    pub fn ratio(self, rhs: Self) -> Option<f64> {
         match (self, rhs) {
             (Self::MicroAmpereHours(l), Self::MicroAmpereHours(r))
             | (Self::MicroWattHours(l), Self::MicroWattHours(r))
@@ -54,7 +54,7 @@ impl BatteryCapacity {
 }
 
 /// Charging status of the battery.
-#[derive(Default, Debug, Copy, Clone, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Default, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ChargingStatus {
     Charging,
     Discharging,
