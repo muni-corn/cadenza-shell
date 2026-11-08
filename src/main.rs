@@ -39,7 +39,8 @@ fn main() -> glib::ExitCode {
 
     fmt().with_env_filter(filter).with_target(true).init();
 
-    RELM_THREADS.set(16).unwrap();
+    // nothing blocks the runtime, so a few workers are plenty
+    RELM_THREADS.set(4).unwrap();
 
     relm4_icons::initialize_icons(icon_names::GRESOURCE_BYTES, icon_names::RESOURCE_PREFIX);
 
