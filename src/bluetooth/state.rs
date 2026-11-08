@@ -1,6 +1,6 @@
 use std::collections::{HashMap, hash_map};
 
-use bluer::{Adapter, Address, Device, Session};
+use bluer::{Adapter, Address, Device};
 use relm4::SharedState;
 
 pub static BLUETOOTH_STATE: SharedState<Option<BluetoothState>> = SharedState::new();
@@ -55,16 +55,11 @@ pub struct DeviceInfo {
     pub alias: String,
     pub icon: Option<String>,
     pub paired: bool,
-    pub trusted: bool,
     pub connected: bool,
-    /// Signal strength, if the device is currently visible in a scan.
-    pub rssi: Option<i16>,
-    pub battery_percentage: Option<u8>,
 }
 
 #[derive(Clone, Debug)]
 pub struct BluetoothState {
-    pub(super) _session: Session,
     pub adapter: Adapter,
     pub(super) devices: HashMap<Address, DeviceInfo>,
     pub discovering: bool,

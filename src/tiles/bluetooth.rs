@@ -15,7 +15,6 @@ use crate::{
 #[derive(Debug)]
 pub struct BluetoothTile {
     tile: Controller<Tile>,
-    bluetooth_info: Option<BluetoothState>,
     menu_open: bool,
     menu_window: Controller<MenuWindow>,
 }
@@ -45,11 +44,9 @@ impl Component for BluetoothTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        BLUETOOTH_STATE.subscribe_optional(sender.input_sender(), |state| {
-            Some(BluetoothTileMsg::Update(state.to_owned()))
+        BLUETOOTH_STATE.subscribe(sender.input_sender(), |state| {
+            BluetoothTileMsg::Update(state.to_owned())
         });
-
-        let current_state = BLUETOOTH_STATE.read().clone();
 
         // initialize the tile component
         let tile = Tile::builder().launch(Default::default()).detach();
@@ -83,7 +80,6 @@ impl Component for BluetoothTile {
         ComponentParts {
             model: Self {
                 tile,
-                bluetooth_info: current_state,
                 menu_open: false,
                 menu_window,
             },
@@ -97,7 +93,6 @@ impl Component for BluetoothTile {
         match msg {
             BluetoothTileMsg::Update(info) => {
                 root.set_visible(info.is_some());
-                self.bluetooth_info = info.clone();
 
                 if let Some(state) = info {
                     self.tile

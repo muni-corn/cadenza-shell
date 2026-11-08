@@ -382,7 +382,6 @@ async fn reinitialize_adapter(
     }
 
     let state = BluetoothState {
-        _session: session.clone(),
         powered: adapter.is_powered().await.unwrap_or(false),
         devices,
         discovering: adapter.is_discovering().await.unwrap_or(false),
@@ -522,10 +521,7 @@ async fn build_device_info(device: &Device) -> DeviceInfo {
             .unwrap_or_else(|_| device.address().to_string()),
         icon: device.icon().await.unwrap_or(None),
         paired: device.is_paired().await.unwrap_or(false),
-        trusted: device.is_trusted().await.unwrap_or(false),
         connected: device.is_connected().await.unwrap_or(false),
-        rssi: device.rssi().await.unwrap_or(None),
-        battery_percentage: device.battery_percentage().await.unwrap_or(None),
     }
 }
 
@@ -571,6 +567,21 @@ async fn reconcile_state() {
 /// property fetch before they can be snapshotted (see
 /// [`handle_device_added`]).
 fn update_from_event(input: BluetoothEvent) {
+    // properties the shell doesn't show (rssi changes several times a second
+    // during discovery) would otherwise wake every subscriber for nothing
+    if let BluetoothEvent::Device(address, DeviceEvent::PropertyChanged(property)) = &input
+        && !matches!(
+            property,
+            DeviceProperty::Connected(_)
+                | DeviceProperty::Alias(_)
+                | DeviceProperty::Icon(_)
+                | DeviceProperty::Paired(_)
+        )
+    {
+        tracing::trace!("ignoring device {address} property change: {property:?}");
+        return;
+    }
+
     let mut guard = BLUETOOTH_STATE.write();
     let Some(state) = (*guard).as_mut() else {
         return;
@@ -613,13 +624,6 @@ fn update_from_event(input: BluetoothEvent) {
                 DeviceEvent::PropertyChanged(DeviceProperty::Icon(icon)) => info.icon = Some(icon),
                 DeviceEvent::PropertyChanged(DeviceProperty::Paired(paired)) => {
                     info.paired = paired
-                }
-                DeviceEvent::PropertyChanged(DeviceProperty::Trusted(trusted)) => {
-                    info.trusted = trusted
-                }
-                DeviceEvent::PropertyChanged(DeviceProperty::Rssi(rssi)) => info.rssi = Some(rssi),
-                DeviceEvent::PropertyChanged(DeviceProperty::BatteryPercentage(pct)) => {
-                    info.battery_percentage = Some(pct)
                 }
                 DeviceEvent::PropertyChanged(device_property) => {
                     tracing::debug!("device {address} property changed: {device_property:?}");
