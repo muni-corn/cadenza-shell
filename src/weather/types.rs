@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq)]
 pub struct WeatherState {
     pub temperature: i32,
     pub condition: String,

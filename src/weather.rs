@@ -11,26 +11,48 @@ use crate::{
         DISPLAY_BRIGHTNESS, FEW_CLOUDS, FOG, MOON, MOON_CLOUD, RAIN, RAINDROPS, ROUND_CLOUD, SNOW,
         SNOWFLAKE, STORM,
     },
+    utils::{backoff::Backoff, shared_state::set_if_changed},
     weather::types::{WeatherState, WttrReport},
 };
 
 /// The global weather state that can be subscribed to.
 pub static WEATHER_STATE: SharedState<Option<WeatherState>> = SharedState::new();
 
+/// How often to refresh the weather after a successful fetch.
+const REFRESH_INTERVAL: Duration = Duration::from_secs(10 * 60);
+
+/// Fetches the weather periodically, retrying failures with a backoff.
+///
+/// A failed fetch keeps showing the last good report rather than hiding
+/// the tile over a brief outage.
 #[tracing::instrument]
 pub async fn start_weather_polling() {
-    let mut backoff: Option<u64> = None; // None => 600s normal cadence
-    loop {
-        let result = fetch_wttr().await;
-        if result.is_ok() {
-            backoff = None;
-        } else {
-            backoff = Some(next_backoff(backoff));
+    let client = match reqwest::Client::builder()
+        .connect_timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(15))
+        .build()
+    {
+        Ok(client) => client,
+        Err(e) => {
+            tracing::error!("couldn't create an http client for weather: {e}");
+            return;
         }
-        *WEATHER_STATE.write() = result.ok();
+    };
 
-        let seconds_to_wait = backoff.unwrap_or(600);
-        sleep(Duration::from_secs(seconds_to_wait)).await;
+    let mut backoff = Backoff::new(Duration::from_secs(1), Duration::from_secs(5 * 60));
+    loop {
+        let wait = match fetch_wttr(&client).await {
+            Ok(weather) => {
+                backoff.reset();
+                set_if_changed(&WEATHER_STATE, Some(weather));
+                REFRESH_INTERVAL
+            }
+            Err(e) => {
+                tracing::warn!("couldn't fetch the weather from wttr.in: {e:#}");
+                backoff.next()
+            }
+        };
+        sleep(wait).await;
     }
 }
 
@@ -83,13 +105,15 @@ fn map_icon(code: &str, dark: bool) -> &'static str {
     }
 }
 
-#[tracing::instrument]
-async fn fetch_wttr() -> anyhow::Result<WeatherState> {
-    let body = reqwest::get("https://v2.wttr.in/?format=j1")
+#[tracing::instrument(skip(client))]
+async fn fetch_wttr(client: &reqwest::Client) -> anyhow::Result<WeatherState> {
+    let parsed: WttrReport = client
+        .get("https://v2.wttr.in/?format=j1")
+        .send()
         .await?
-        .text()
+        .error_for_status()?
+        .json()
         .await?;
-    let parsed: WttrReport = serde_json::from_str(&body)?;
 
     tracing::debug!(report = ?parsed, "parsed weather report");
 
@@ -122,13 +146,6 @@ async fn fetch_wttr() -> anyhow::Result<WeatherState> {
         condition: desc,
         icon,
     })
-}
-
-fn next_backoff(prev: Option<u64>) -> u64 {
-    match prev {
-        None => 1,
-        Some(s) => (s * 2).clamp(1, 300), // cap at 5 minutes
-    }
 }
 
 fn is_dark_now(sunrise: &str, sunset: &str) -> bool {
