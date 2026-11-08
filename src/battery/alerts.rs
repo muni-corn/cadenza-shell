@@ -1,10 +1,7 @@
-use crate::sound;
-
-// SoC at which a battery's charge is considered low.
-pub const BATTERY_THRESHOLD_LOW: f32 = 0.2;
-
-// SoC at which a battery's charge is considered critically low.
-pub const BATTERY_THRESHOLD_CRITICAL: f32 = 0.1;
+use crate::{
+    battery::{BATTERY_THRESHOLD_CRITICAL, BATTERY_THRESHOLD_LOW},
+    sound,
+};
 
 /// XDG sound event id for battery warning (20%).
 const SOUND_BATTERY_LOW: &str = "battery-low";

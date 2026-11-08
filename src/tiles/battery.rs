@@ -1,10 +1,14 @@
 use std::time::Duration;
 
+use chrono::{DateTime, Local};
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    battery::{BATTERY_STATE, BatteryState, ChargingStatus},
+    battery::{
+        BATTERY_STATE, BATTERY_THRESHOLD_CRITICAL, BATTERY_THRESHOLD_LOW, BatteryState,
+        ChargingStatus,
+    },
     tiles::Attention,
     utils::icons::{BATTERY_CHARGING_ICON_NAMES, BATTERY_ICON_NAMES, percentage_to_icon_from_list},
     widgets::tile::{Tile, TileInit, TileMsg},
@@ -147,79 +151,22 @@ impl BatteryTile {
         }
     }
 
+    // a plugged-in battery that isn't charging (or reports an unknown
+    // status) isn't running out, so only warn while discharging
     fn is_low(&self) -> bool {
-        (self.current_percentage <= 0.2
-            || self.discharging_time_remaining < TIME_REMAINING_LOW_THRESHOLD)
-            && !self.status.is_charging()
+        self.status == ChargingStatus::Discharging
+            && (self.current_percentage <= BATTERY_THRESHOLD_LOW
+                || self.discharging_time_remaining < TIME_REMAINING_LOW_THRESHOLD)
     }
 
     fn is_critical(&self) -> bool {
-        (self.current_percentage <= 0.1
-            || self.discharging_time_remaining < TIME_REMAINING_CRITICAL_THRESHOLD)
-            && !self.status.is_charging()
+        self.status == ChargingStatus::Discharging
+            && (self.current_percentage <= BATTERY_THRESHOLD_CRITICAL
+                || self.discharging_time_remaining < TIME_REMAINING_CRITICAL_THRESHOLD)
     }
 
     fn get_readable_time(&self) -> String {
-        use chrono::Local;
-
-        if self.status == ChargingStatus::NotCharging {
-            "Not charging".to_string()
-        } else {
-            enum RemainingDurationCategory {
-                Soon,
-                Today,
-                Tomorrow,
-                Someday,
-            }
-
-            let time_remaining = self.discharging_time_remaining;
-            let time_category = if self.discharging_time_remaining < Duration::from_mins(30) {
-                RemainingDurationCategory::Soon
-            } else if self.discharging_time_remaining < Duration::from_hours(24) {
-                RemainingDurationCategory::Today
-            } else if self.discharging_time_remaining < Duration::from_hours(48) {
-                RemainingDurationCategory::Tomorrow
-            } else {
-                RemainingDurationCategory::Someday
-            };
-
-            match time_category {
-                RemainingDurationCategory::Soon => {
-                    if self.status.is_charging() {
-                        format!("Good for {} min", time_remaining.as_secs() / 60)
-                    } else {
-                        format!("{} min left", time_remaining.as_secs() / 60)
-                    }
-                }
-                RemainingDurationCategory::Today => {
-                    // calculate actual completion time
-                    let completion_time = Local::now() + time_remaining;
-
-                    // format as "h:mm am/pm"
-                    let formatted = completion_time.format("%-I:%M %P").to_string();
-
-                    if self.status.is_charging() {
-                        format!("Good for {}", formatted)
-                    } else {
-                        format!("Until {}", formatted)
-                    }
-                }
-                RemainingDurationCategory::Tomorrow => {
-                    if self.status.is_charging() {
-                        "Good for tomorrow".to_string()
-                    } else {
-                        "Until tomorrow".to_string()
-                    }
-                }
-                RemainingDurationCategory::Someday => {
-                    if self.status.is_charging() {
-                        "Good for a while".to_string()
-                    } else {
-                        "Until someday".to_string()
-                    }
-                }
-            }
-        }
+        format_remaining(self.status, self.discharging_time_remaining, Local::now())
     }
 
     fn get_attention(&self) -> Attention {
@@ -230,5 +177,102 @@ impl BatteryTile {
         } else {
             Attention::Normal
         }
+    }
+}
+
+/// Describes how long the battery lasts, e.g. "25 min left" or "Until 4:30
+/// pm".
+///
+/// While charging, this is how long the battery would last if unplugged now,
+/// phrased as "Good for ...".
+fn format_remaining(status: ChargingStatus, remaining: Duration, now: DateTime<Local>) -> String {
+    if status == ChargingStatus::NotCharging {
+        return "Not charging".to_string();
+    }
+
+    let charging = status.is_charging();
+    if remaining < TIME_REMAINING_LOW_THRESHOLD {
+        let minutes = remaining.as_secs() / 60;
+        if charging {
+            format!("Good for {minutes} min")
+        } else {
+            format!("{minutes} min left")
+        }
+    } else if remaining < Duration::from_hours(24) {
+        let until = (now + remaining).format("%-I:%M %P");
+        if charging {
+            format!("Good for {until}")
+        } else {
+            format!("Until {until}")
+        }
+    } else if remaining < Duration::from_hours(48) {
+        if charging {
+            "Good for tomorrow"
+        } else {
+            "Until tomorrow"
+        }
+        .to_string()
+    } else {
+        if charging {
+            "Good for a while"
+        } else {
+            "Until someday"
+        }
+        .to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::TimeZone;
+
+    use super::*;
+
+    fn noon() -> DateTime<Local> {
+        Local.with_ymd_and_hms(2026, 1, 1, 12, 0, 0).unwrap()
+    }
+
+    #[test]
+    fn short_times_are_in_minutes() {
+        assert_eq!(
+            format_remaining(ChargingStatus::Discharging, Duration::from_mins(25), noon()),
+            "25 min left"
+        );
+        assert_eq!(
+            format_remaining(ChargingStatus::Charging, Duration::from_mins(25), noon()),
+            "Good for 25 min"
+        );
+    }
+
+    #[test]
+    fn same_day_times_show_the_end_time() {
+        assert_eq!(
+            format_remaining(ChargingStatus::Discharging, Duration::from_hours(3), noon()),
+            "Until 3:00 pm"
+        );
+    }
+
+    #[test]
+    fn long_times_are_vague() {
+        assert_eq!(
+            format_remaining(
+                ChargingStatus::Discharging,
+                Duration::from_hours(30),
+                noon()
+            ),
+            "Until tomorrow"
+        );
+        assert_eq!(
+            format_remaining(ChargingStatus::Full, Duration::from_hours(80), noon()),
+            "Good for a while"
+        );
+    }
+
+    #[test]
+    fn not_charging_says_so() {
+        assert_eq!(
+            format_remaining(ChargingStatus::NotCharging, Duration::from_hours(3), noon()),
+            "Not charging"
+        );
     }
 }

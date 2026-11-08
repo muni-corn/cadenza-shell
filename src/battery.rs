@@ -12,6 +12,12 @@ pub use watcher::start_battery_service;
 
 pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
 
+/// Charge level at which the battery is considered low.
+pub const BATTERY_THRESHOLD_LOW: f32 = 0.2;
+
+/// Charge level at which the battery is considered critically low.
+pub const BATTERY_THRESHOLD_CRITICAL: f32 = 0.1;
+
 /// How often to read the battery state.
 const READ_INTERVAL_SECONDS: u32 = 10;
 
