@@ -1,4 +1,4 @@
-use std::{cell::RefCell, collections::HashMap, rc::Rc, sync::Arc};
+use std::sync::Arc;
 
 use gdk4::Display;
 use gtk4::prelude::*;
@@ -26,32 +26,32 @@ use crate::{
     },
 };
 
-/// Pairs a monitor connector name with its fresh-notification panel so we can
-/// drop the panel if that specific monitor is removed or invalidated.
+/// Pairs a monitor with its fresh-notification panel so we can drop the panel
+/// if that specific monitor goes away.
 struct FreshPanel {
-    connector: String,
+    monitor: gdk4::Monitor,
     controller: Controller<FreshNotifications>,
 }
 
+/// A bar together with the monitor it was created for.
+struct MonitorBar {
+    monitor: gdk4::Monitor,
+    controller: AsyncController<Bar>,
+}
+
 pub(crate) struct CadenzaShellModel {
-    bars: HashMap<String, AsyncController<Bar>>,
+    display: Display,
+    bars: Vec<MonitorBar>,
     tray_client: Option<Arc<Mutex<TrayClient>>>,
     /// Single global fresh-notification popup panel, anchored to one monitor.
     fresh_panel: Option<FreshPanel>,
-
-    _display: Display,
 }
 
 #[derive(Debug)]
 pub(crate) enum CadenzaShellMsg {
-    MonitorAdded(gdk4::Monitor),
-    MonitorRemoved(String),
-    /// Emitted by a Bar when its associated monitor becomes invalid (i.e. the
-    /// display is unplugged). Carries the connector name so the bar can be
-    /// removed from the map and dropped. This is defense-in-depth on top of
-    /// the items_changed signal, which may fire later or not at all depending
-    /// on the compositor.
-    MonitorInvalidated(String),
+    /// The monitor list changed or a monitor was invalidated; bars are
+    /// reconciled against the current list.
+    MonitorsChanged,
     HandleTrayItemOutput(TrayItemOutput),
     ToggleNotificationCenter,
     /// A notification event forwarded from the global broadcast channel.
@@ -220,96 +220,22 @@ impl AsyncComponent for CadenzaShellModel {
         let display = Display::default().expect("could not get default display");
 
         let model = CadenzaShellModel {
-            bars: HashMap::new(),
+            display: display.clone(),
+            bars: Vec::new(),
             tray_client,
             fresh_panel: None,
-
-            _display: display.clone(),
         };
 
-        // set up monitor detection
-        let monitors = display.monitors();
-
-        // build initial connector list, mirroring the GListModel order so we
-        // can recover connector names for removed items later (items_changed
-        // fires after the model has already mutated, so we cannot call
-        // monitors.item(i) for removed indices)
-        let tracked: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(
-            monitors
-                .iter::<gdk4::Monitor>()
-                .filter_map(|m| m.ok())
-                .filter_map(|m| m.connector().map(|c| c.to_string()))
-                .collect(),
-        ));
-
-        tracing::debug!("initial monitors: {:?}", tracked.borrow().as_slice());
-
-        // create bars for existing monitors (skip any without a connector)
-        for monitor in monitors.iter::<gdk4::Monitor>() {
-            let monitor = monitor.unwrap();
-            if monitor.connector().is_some() {
-                sender.input(CadenzaShellMsg::MonitorAdded(monitor));
-            }
-        }
-
-        // monitor for display changes (hotplug support)
+        // reconcile bars whenever the monitor list changes (hotplug), and once
+        // now for the monitors that already exist
         let sender_clone = sender.clone();
-        monitors.connect_items_changed(move |monitors, position, removed, added| {
-            tracing::debug!(
-                "items_changed: position={}, removed={}, added={}",
-                position,
-                removed,
-                added
-            );
-
-            // read removed connector names from our tracked list before
-            // mutating it; after the signal fires the model has already
-            // changed, so monitors.item(i) for removed indices would return the
-            // wrong item
-            let removed_connectors: Vec<String> = {
-                let tracked = tracked.borrow();
-                let start = position as usize;
-                let end = (position + removed) as usize;
-                tracked.get(start..end).unwrap_or(&[]).to_vec()
-            };
-
-            // collect newly added monitor objects (at position..position+added)
-            let added_monitors: Vec<gdk4::Monitor> = (position..position + added)
-                .filter_map(|i| monitors.item(i).and_downcast::<gdk4::Monitor>())
-                .collect();
-
-            // build the new connector names for items being added
-            let added_connectors: Vec<String> = added_monitors
-                .iter()
-                .filter_map(|m| m.connector().map(|c| c.to_string()))
-                .collect();
-
-            // update the tracked list: splice out the removed range and insert
-            // the new connectors in their place, mirroring the model mutation
-            {
-                let mut tracked = tracked.borrow_mut();
-                tracked.splice(
-                    (position as usize)..(position as usize + removed as usize),
-                    added_connectors.clone(),
-                );
-            }
-
-            tracing::debug!(
-                "hotplug — removing {:?}, adding {:?}",
-                removed_connectors,
-                added_connectors
-            );
-
-            // emit removal messages for every connector that just left
-            for connector in removed_connectors {
-                sender_clone.input(CadenzaShellMsg::MonitorRemoved(connector));
-            }
-
-            // emit addition messages for every monitor that just joined
-            for monitor in added_monitors {
-                sender_clone.input(CadenzaShellMsg::MonitorAdded(monitor));
-            }
-        });
+        display
+            .monitors()
+            .connect_items_changed(move |_, position, removed, added| {
+                tracing::debug!(position, removed, added, "monitor list changed");
+                sender_clone.input(CadenzaShellMsg::MonitorsChanged);
+            });
+        sender.input(CadenzaShellMsg::MonitorsChanged);
 
         AsyncComponentParts { model, widgets: () }
     }
@@ -321,71 +247,7 @@ impl AsyncComponent for CadenzaShellModel {
         _root: &Self::Root,
     ) {
         match msg {
-            CadenzaShellMsg::MonitorAdded(monitor) => {
-                let Some(connector) = monitor.connector() else {
-                    tracing::warn!("ignoring monitor with no connector name");
-                    return;
-                };
-
-                let connector_str = connector.to_string();
-
-                // replace any existing (now-stale) bar for this connector so
-                // the new Monitor object is used; this handles
-                // disconnect→reconnect cycles where the compositor reuses the
-                // same connector name
-                if self.bars.contains_key(&connector_str) {
-                    tracing::warn!(
-                        "bar already exists for connector '{}' — replacing with fresh monitor",
-                        connector_str
-                    );
-                    self.bars.remove(&connector_str);
-                }
-
-                // get the current system tray items
-                let tray_items = if let Some(ref c) = self.tray_client {
-                    Some(c.lock().await.items())
-                } else {
-                    None
-                };
-
-                tracing::info!("creating bar for monitor: {}", connector_str);
-
-                let bar = Bar::builder()
-                    .launch(BarInit {
-                        monitor: monitor.clone(),
-                        tray_items,
-                    })
-                    .forward(sender.input_sender(), |output| match output {
-                        BarOutput::ToggleNotificationCenter => {
-                            CadenzaShellMsg::ToggleNotificationCenter
-                        }
-                        BarOutput::TrayItemOutput(tray_item_output) => {
-                            CadenzaShellMsg::HandleTrayItemOutput(tray_item_output)
-                        }
-                        BarOutput::MonitorInvalidated(connector) => {
-                            CadenzaShellMsg::MonitorInvalidated(connector)
-                        }
-                    });
-
-                self.bars.insert(connector_str.clone(), bar);
-
-                // create the fresh panel on the first available monitor if we
-                // don't have one yet
-                self.ensure_fresh_panel(connector_str, monitor, &sender);
-            }
-            CadenzaShellMsg::MonitorRemoved(connector) => {
-                tracing::info!("removing bar for monitor: {}", connector);
-                self.bars.remove(&connector);
-                self.drop_fresh_panel_if_owned(&connector);
-            }
-            CadenzaShellMsg::MonitorInvalidated(connector) => {
-                tracing::info!(
-                    "monitor invalidated, removing bar for connector: {}",
-                    connector
-                );
-                self.bars.remove(&connector);
-                self.drop_fresh_panel_if_owned(&connector);
-            }
+            CadenzaShellMsg::MonitorsChanged => self.reconcile_bars(&sender).await,
             CadenzaShellMsg::HandleTrayItemOutput(tray_item_output) => match tray_item_output {
                 TrayItemOutput::Activate(activate_request) => {
                     if let Some(client) = &self.tray_client {
@@ -405,8 +267,8 @@ impl AsyncComponent for CadenzaShellModel {
             },
             CadenzaShellMsg::ToggleNotificationCenter => {
                 // broadcast to all bars so each monitor's center toggles
-                for bar in self.bars.values() {
-                    bar.emit(BarMsg::ToggleNotificationCenter);
+                for bar in &self.bars {
+                    bar.controller.emit(BarMsg::ToggleNotificationCenter);
                 }
             }
             CadenzaShellMsg::NotificationEvent(event) => {
@@ -462,8 +324,8 @@ impl AsyncComponent for CadenzaShellModel {
     ) {
         match message {
             Self::CommandOutput::TrayEvent(event) => {
-                for bar in self.bars.values() {
-                    bar.emit(BarMsg::TrayEvent(event.clone()));
+                for bar in &self.bars {
+                    bar.controller.emit(BarMsg::TrayEvent(event.clone()));
                 }
             }
             Self::CommandOutput::NotificationEvent(event) => {
@@ -474,57 +336,108 @@ impl AsyncComponent for CadenzaShellModel {
 }
 
 impl CadenzaShellModel {
+    /// Creates bars for new monitors and drops bars whose monitor is gone.
+    ///
+    /// Monitors are compared by identity rather than connector name, so a
+    /// reconnected display that reuses its connector name gets a fresh bar
+    /// bound to its new monitor object.
+    async fn reconcile_bars(&mut self, sender: &AsyncComponentSender<Self>) {
+        let current: Vec<gdk4::Monitor> = self
+            .display
+            .monitors()
+            .iter::<gdk4::Monitor>()
+            .filter_map(Result::ok)
+            .filter(|monitor| monitor.is_valid() && monitor.connector().is_some())
+            .collect();
+
+        self.bars.retain(|bar| {
+            let keep = current.contains(&bar.monitor);
+            if !keep {
+                tracing::info!("removing bar for monitor: {:?}", bar.monitor.connector());
+            }
+            keep
+        });
+
+        if self
+            .fresh_panel
+            .as_ref()
+            .is_some_and(|panel| !current.contains(&panel.monitor))
+        {
+            tracing::info!("dropping fresh notification panel; monitor removed");
+            self.fresh_panel = None;
+        }
+
+        for monitor in current {
+            if self.bars.iter().any(|bar| bar.monitor == monitor) {
+                continue;
+            }
+            self.create_bar(monitor.clone(), sender).await;
+            self.ensure_fresh_panel(monitor, sender);
+        }
+    }
+
+    /// Creates a bar on `monitor` and reconciles again as soon as the
+    /// monitor is invalidated, which gdk can report before the monitor list
+    /// changes.
+    async fn create_bar(&mut self, monitor: gdk4::Monitor, sender: &AsyncComponentSender<Self>) {
+        tracing::info!("creating bar for monitor: {:?}", monitor.connector());
+
+        let tray_items = if let Some(ref c) = self.tray_client {
+            Some(c.lock().await.items())
+        } else {
+            None
+        };
+
+        let controller = Bar::builder()
+            .launch(BarInit {
+                monitor: monitor.clone(),
+                tray_items,
+            })
+            .forward(sender.input_sender(), |output| match output {
+                BarOutput::ToggleNotificationCenter => CadenzaShellMsg::ToggleNotificationCenter,
+                BarOutput::TrayItemOutput(tray_item_output) => {
+                    CadenzaShellMsg::HandleTrayItemOutput(tray_item_output)
+                }
+            });
+
+        let input = sender.input_sender().clone();
+        monitor.connect_invalidate(move |monitor| {
+            tracing::info!("monitor invalidated: {:?}", monitor.connector());
+            input.emit(CadenzaShellMsg::MonitorsChanged);
+        });
+
+        self.bars.push(MonitorBar {
+            monitor,
+            controller,
+        });
+    }
+
     /// Creates the fresh notification panel anchored to `monitor` if none
     /// exists yet. Does nothing if a panel is already running.
-    fn ensure_fresh_panel(
-        &mut self,
-        connector: String,
-        monitor: gdk4::Monitor,
-        sender: &AsyncComponentSender<Self>,
-    ) {
+    fn ensure_fresh_panel(&mut self, monitor: gdk4::Monitor, sender: &AsyncComponentSender<Self>) {
         if self.fresh_panel.is_some() {
             return;
         }
 
         tracing::info!(
-            connector = %connector,
-            "creating fresh notification panel on monitor"
+            "creating fresh notification panel on monitor: {:?}",
+            monitor.connector()
         );
 
-        let controller =
-            FreshNotifications::builder()
-                .launch(monitor)
-                .forward(sender.input_sender(), |msg| match msg {
-                    FreshNotificationsOutput::NotificationDismissed(id) => {
-                        CadenzaShellMsg::FreshNotificationDismissed(id)
-                    }
-                    FreshNotificationsOutput::NotificationActionTriggered(id, action) => {
-                        CadenzaShellMsg::FreshNotificationAction(id, action)
-                    }
-                });
+        let controller = FreshNotifications::builder()
+            .launch(monitor.clone())
+            .forward(sender.input_sender(), |msg| match msg {
+                FreshNotificationsOutput::NotificationDismissed(id) => {
+                    CadenzaShellMsg::FreshNotificationDismissed(id)
+                }
+                FreshNotificationsOutput::NotificationActionTriggered(id, action) => {
+                    CadenzaShellMsg::FreshNotificationAction(id, action)
+                }
+            });
 
         self.fresh_panel = Some(FreshPanel {
-            connector,
+            monitor,
             controller,
         });
-    }
-
-    /// Drops the fresh panel if it is anchored to `connector`.
-    ///
-    /// Called when a monitor is removed or invalidated so the panel is
-    /// re-created on the next available monitor.
-    fn drop_fresh_panel_if_owned(&mut self, connector: &str) {
-        let should_drop = self
-            .fresh_panel
-            .as_ref()
-            .is_some_and(|p| p.connector == connector);
-
-        if should_drop {
-            tracing::info!(
-                connector = %connector,
-                "dropping fresh notification panel; monitor removed"
-            );
-            self.fresh_panel = None;
-        }
     }
 }
