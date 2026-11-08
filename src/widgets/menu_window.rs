@@ -136,4 +136,10 @@ impl SimpleComponent for MenuWindow {
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         widgets.window.set_visible(self.visible);
     }
+
+    fn shutdown(&mut self, widgets: &mut Self::Widgets, _output: relm4::Sender<Self::Output>) {
+        // dropping the controller doesn't destroy a toplevel, so a visible
+        // menu would otherwise outlive its bar and jump to another output
+        widgets.window.destroy();
+    }
 }
