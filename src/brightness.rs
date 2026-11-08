@@ -4,6 +4,8 @@ use anyhow::{Context, Result};
 use inotify::{Inotify, WatchMask};
 use relm4::SharedState;
 
+use crate::utils::shared_state::set_if_changed;
+
 pub static BRIGHTNESS_STATE: SharedState<Option<f64>> = SharedState::new();
 
 pub async fn start_brightness_watcher() {
@@ -44,7 +46,9 @@ pub async fn start_brightness_watcher() {
                     // when the brightness file is closed after writing, read
                     // the new value
                     match read_current_brightness_percentage(&interface_clone, max_val) {
-                        Ok(percentage) => *BRIGHTNESS_STATE.write() = Some(percentage),
+                        Ok(percentage) => {
+                            set_if_changed(&BRIGHTNESS_STATE, Some(percentage));
+                        }
                         Err(e) => tracing::error!("couldn't update brightness info: {}", e),
                     }
                 }
