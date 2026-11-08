@@ -46,6 +46,7 @@ impl SimpleComponent for TrayWidget {
 
             #[name(revealer)]
             gtk::Revealer {
+                add_css_class: "tray-revealer",
                 #[watch]
                 set_reveal_child: model.expanded,
                 set_transition_type: gtk::RevealerTransitionType::SlideLeft,

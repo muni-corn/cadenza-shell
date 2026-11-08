@@ -1,7 +1,6 @@
 @use "sass:string";
 
 $warn-color: #fa0;
-$dim-color: rgba(255, 255, 255, 0.5);
 
 .tile {
   min-width: 0;
@@ -20,19 +19,6 @@ window {
 
 .bar {
   background-color: rgba(0, 0, 0, 0.5);
-
-  .bar-button,
-  menubutton.bar-button > button {
-    min-width: 0;
-    box-shadow: none;
-
-    &:not(:hover) {
-    }
-  }
-}
-
-.bar-groups {
-  border-spacing: 40px;
 }
 
 .dim,
@@ -56,10 +42,6 @@ progressbar {
     progress {
       background-color: rgba(255, 255, 255, 0.5);
     }
-
-    &.full progress {
-      background-color: #fa0;
-    }
   }
 
   &.dim {
@@ -78,10 +60,6 @@ progressbar {
 
       progress {
         background-color: rgba(255, 255, 255, 1);
-      }
-
-      &.full progress {
-        background-color: #fa0;
       }
     }
   }
@@ -233,7 +211,7 @@ box.notification-card {
   }
 }
 
-revealer {
+.tray-revealer {
   background-color: rgba(0, 0, 0, 0.1);
 }
 
@@ -241,11 +219,6 @@ revealer {
   padding: 16px 16px 0px 16px;
   border-radius: 16px;
   box-shadow: 0px 4px 8px gtkalpha(black, 0.5);
-
-  .empty-state {
-    margin-top: 20px;
-    opacity: 50%;
-  }
 }
 
 // content wrapper for MenuWindow (the wifi/bluetooth dropdowns)
@@ -276,14 +249,6 @@ revealer {
   font-weight: 500;
   font-size: 1.1em;
   opacity: 0.8;
-}
-
-.bold {
-  font-weight: bold;
-}
-
-.access-point-frequency {
-  font-weight: normal;
 }
 
 // niri workspace indicators
