@@ -1,4 +1,4 @@
-use std::{collections::HashMap, time::Duration};
+use std::collections::HashMap;
 
 use gdk4::Monitor;
 use gtk4::prelude::*;
@@ -8,7 +8,7 @@ use relm4::{factory::FactoryVecDeque, prelude::*};
 use crate::{
     notifications::{
         card::{NotificationCard, NotificationCardOutput},
-        types::{Notification, NotificationUrgency},
+        types::Notification,
     },
     settings,
 };
@@ -112,13 +112,15 @@ impl Component for FreshNotifications {
                     "queued fresh popup"
                 );
 
+                let duration =
+                    notification.popup_duration(settings::get_config().notifications.timeout);
+
                 // add to the beginning (top) of the list
                 self.cards.guard().push_front(notification);
 
-                // set up auto-dismiss for non-critical notifications; a zero
-                // timeout in the config keeps popups until they're closed
-                let timeout = settings::get_config().notifications.timeout;
-                if timeout > 0 && !matches!(urgency, NotificationUrgency::Critical) {
+                // hide the popup after its timeout; the notification itself
+                // stays in the action panel until it's closed
+                if let Some(duration) = duration {
                     let generation = self.next_timer_generation;
                     self.next_timer_generation = generation.wrapping_add(1);
                     self.auto_dismiss_timeouts
@@ -126,14 +128,9 @@ impl Component for FreshNotifications {
 
                     // relm4 cancels the command if the panel shuts down first
                     sender.oneshot_command(async move {
-                        tokio::time::sleep(Duration::from_secs(timeout)).await;
+                        tokio::time::sleep(duration).await;
                         (notification_id, generation)
                     });
-                } else {
-                    tracing::debug!(
-                        notification.id = notification_id,
-                        "critical notification; skipping auto-dismiss"
-                    );
                 }
             }
             FreshNotificationsMsg::RemoveNotification(id) => {
@@ -220,11 +217,11 @@ impl Component for FreshNotifications {
             return;
         }
 
-        tracing::debug!(notification.id = id, "auto-dismiss timer fired");
+        tracing::debug!(notification.id = id, "popup timeout elapsed");
         self.auto_dismiss_timeouts.remove(&id);
 
-        // remove the notification and notify service
+        // only the popup goes away; the notification stays in the action
+        // panel and nobody is told it was dismissed
         sender.input(FreshNotificationsMsg::RemoveNotification(id));
-        sender.input(FreshNotificationsMsg::DismissNotification(id));
     }
 }

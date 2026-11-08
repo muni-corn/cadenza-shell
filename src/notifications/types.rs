@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use serde_repr::{Deserialize_repr, Serialize_repr};
 use zbus::zvariant::Type;
 
@@ -11,14 +13,32 @@ pub struct Notification {
     pub summary: String,
     pub body: String,
     pub urgency: NotificationUrgency,
-    // part of the freedesktop spec; retained for completeness even if not
-    // currently used
-    #[allow(dead_code)]
+    /// The client's `expire_timeout` in milliseconds: -1 leaves it to the
+    /// server and 0 means never.
     pub timeout: i32,
     pub timestamp: i64,
 
     /// Action identifiers paired with their user-facing labels.
     pub actions: Vec<(String, String)>,
+}
+
+impl Notification {
+    /// How long this notification's popup stays on screen, or `None` to keep
+    /// it until the notification is closed.
+    ///
+    /// Critical notifications always stay. Otherwise the client's timeout
+    /// wins, and -1 falls back to `default_secs` (where 0 also means stay).
+    pub fn popup_duration(&self, default_secs: u64) -> Option<Duration> {
+        if self.urgency == NotificationUrgency::Critical {
+            return None;
+        }
+
+        match self.timeout {
+            0 => None,
+            timeout if timeout > 0 => Some(Duration::from_millis(timeout as u64)),
+            _ => (default_secs > 0).then(|| Duration::from_secs(default_secs)),
+        }
+    }
 }
 
 #[derive(Serialize_repr, Deserialize_repr, PartialEq, Default, Debug, Type, Clone, Copy)]
@@ -30,4 +50,50 @@ pub enum NotificationUrgency {
     Normal = 1,
 
     Critical = 2,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn notification(timeout: i32, urgency: NotificationUrgency) -> Notification {
+        Notification {
+            id: 1,
+            app_name: String::new(),
+            app_icon: String::new(),
+            desktop_entry: String::new(),
+            image: String::new(),
+            summary: String::new(),
+            body: String::new(),
+            urgency,
+            timeout,
+            timestamp: 0,
+            actions: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn client_timeouts_are_in_milliseconds() {
+        let n = notification(2500, NotificationUrgency::Normal);
+        assert_eq!(n.popup_duration(10), Some(Duration::from_millis(2500)));
+    }
+
+    #[test]
+    fn server_default_applies_to_minus_one() {
+        let n = notification(-1, NotificationUrgency::Normal);
+        assert_eq!(n.popup_duration(10), Some(Duration::from_secs(10)));
+        assert_eq!(n.popup_duration(0), None);
+    }
+
+    #[test]
+    fn zero_and_critical_stay_on_screen() {
+        assert_eq!(
+            notification(0, NotificationUrgency::Low).popup_duration(10),
+            None
+        );
+        assert_eq!(
+            notification(5000, NotificationUrgency::Critical).popup_duration(10),
+            None
+        );
+    }
 }
