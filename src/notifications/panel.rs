@@ -43,6 +43,7 @@ pub struct ActionPanelWidgets {
     clock: Controller<AnalogClock>,
     time_label: gtk4::Label,
     date_label: gtk4::Label,
+    clock_timer: Option<glib::SourceId>,
 }
 
 /// Formats the current time as a 12-hour clock string (e.g. "2:34 PM").
@@ -95,7 +96,7 @@ impl SimpleComponent for ActionPanel {
         window.set_margin_all(8);
         window.set_width_request(432);
 
-        let widgets = ActionPanelWidgets {
+        let mut widgets = ActionPanelWidgets {
             window,
             cards: FactoryVecDeque::builder()
                 .launch(gtk4::Box::default())
@@ -123,6 +124,7 @@ impl SimpleComponent for ActionPanel {
                 .css_classes(["date-label"])
                 .halign(gtk4::Align::Start)
                 .build(),
+            clock_timer: None,
         };
 
         // horizontal row holding both the analog clock and the digital
@@ -150,14 +152,21 @@ impl SimpleComponent for ActionPanel {
         widgets.panel.append(widgets.cards.widget());
         widgets.window.set_child(Some(&widgets.panel));
 
-        // update the digital clock and date labels every second
-        let time_label_clone = widgets.time_label.clone();
-        let date_label_clone = widgets.date_label.clone();
-        glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
-            time_label_clone.set_label(&format_time());
-            date_label_clone.set_label(&format_date());
+        // update the digital clock and date labels every second; weak refs
+        // keep the timer from holding the labels alive
+        let time_label = widgets.time_label.downgrade();
+        let date_label = widgets.date_label.downgrade();
+        let clock_timer = glib::timeout_add_local(std::time::Duration::from_secs(1), move || {
+            let (Some(time_label), Some(date_label)) = (time_label.upgrade(), date_label.upgrade())
+            else {
+                return ControlFlow::Break;
+            };
+            time_label.set_label(&format_time());
+            date_label.set_label(&format_date());
             ControlFlow::Continue
         });
+
+        widgets.clock_timer = Some(clock_timer);
 
         ComponentParts { model, widgets }
     }
@@ -211,5 +220,11 @@ impl SimpleComponent for ActionPanel {
         // dropping the controller doesn't destroy a toplevel, so the panel
         // would otherwise outlive its bar and jump to another output
         widgets.window.destroy();
+
+        // the labels are still alive here, so the timer hasn't broken out
+        // on its own and removing it can't fail
+        if let Some(clock_timer) = widgets.clock_timer.take() {
+            clock_timer.remove();
+        }
     }
 }
