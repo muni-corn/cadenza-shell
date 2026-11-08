@@ -567,22 +567,21 @@ struct BluetoothDeviceWidget {
 }
 
 #[derive(Debug)]
-pub enum BluetoothDeviceMsg {
+enum BluetoothDeviceMsg {
     Toggle,
     RemoveClicked,
     UpdateInfo(DeviceInfo),
 }
 
 #[derive(Debug)]
-pub enum BluetoothDeviceOutput {
+enum BluetoothDeviceOutput {
     Connect(Address),
     Disconnect(Address),
     Pair(Address),
     Remove(Address),
 }
 
-pub struct BluetoothDeviceWidgetWidgets {
-    _main_box: gtk::Box,
+struct BluetoothDeviceWidgetWidgets {
     device_label: gtk::Label,
     status_label: gtk::Label,
     remove_button: gtk::Button,
@@ -681,7 +680,6 @@ impl AsyncFactoryComponent for BluetoothDeviceWidget {
         root.append(&remove_button);
 
         BluetoothDeviceWidgetWidgets {
-            _main_box: main_box,
             device_label,
             status_label,
             remove_button,

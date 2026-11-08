@@ -121,8 +121,7 @@ impl Component for BluetoothTile {
 }
 
 fn get_bluetooth_icon(state: &BluetoothState) -> String {
-    // matches bluetooth_menu's four-state icon mapping; this previously
-    // only had three states and never showed a discovering indicator
+    // matches bluetooth_menu's four-state icon mapping
     if !state.powered {
         BLUETOOTH_NO
     } else if state.discovering {
@@ -138,8 +137,7 @@ fn get_bluetooth_icon(state: &BluetoothState) -> String {
 /// Builds the tile's tooltip text from cached device snapshots.
 ///
 /// Synchronous: device connection state and alias are already snapshotted
-/// in `BluetoothState`, so this no longer needs a per-device D-Bus round
-/// trip (previously wrapped in a `oneshot_command` for exactly that reason).
+/// in `BluetoothState`, so no D-Bus round trip is needed.
 fn get_tooltip_text(state: &BluetoothState) -> String {
     if !state.powered {
         return "Bluetooth disabled".to_string();

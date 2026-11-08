@@ -76,9 +76,7 @@ impl BluetoothState {
     ///
     /// Derived from the device snapshots on every read rather than tracked
     /// as a separate incrementally-updated counter, so it can never drift
-    /// out of sync with the devices it's supposed to be counting (a missed
-    /// or duplicated `Connected` event used to desync a standalone counter
-    /// permanently until the next system wake).
+    /// out of sync with the devices it's supposed to be counting.
     pub fn connected_device_count(&self) -> usize {
         self.devices.values().filter(|d| d.connected).count()
     }

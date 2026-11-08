@@ -1,4 +1,4 @@
-use std::sync::Mutex;
+use std::sync::{Mutex, PoisonError};
 
 use bluer::{
     Session,
@@ -62,7 +62,7 @@ async fn await_reply<T>(
     extract: impl FnOnce(PairingReply) -> Option<T>,
 ) -> ReqResult<T> {
     let (tx, rx) = oneshot::channel();
-    *PENDING_REPLY.lock().unwrap() = Some(tx);
+    *PENDING_REPLY.lock().unwrap_or_else(PoisonError::into_inner) = Some(tx);
     *PAIRING_PROMPT.write() = Some(prompt);
 
     let result = match rx.await {
@@ -162,7 +162,11 @@ async fn handle_display_passkey(req: DisplayPasskey) -> ReqResult<()> {
 
 /// Responds to the current pairing prompt, if any.
 pub fn respond(reply: PairingReply) {
-    if let Some(tx) = PENDING_REPLY.lock().unwrap().take() {
+    if let Some(tx) = PENDING_REPLY
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take()
+    {
         let _ = tx.send(reply);
     }
 }
@@ -171,6 +175,9 @@ pub fn respond(reply: PairingReply) {
 pub fn cancel() {
     // dropping the sender causes the awaiting handler's rx.await to error,
     // which await_reply maps to ReqError::Rejected
-    PENDING_REPLY.lock().unwrap().take();
+    PENDING_REPLY
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .take();
     *PAIRING_PROMPT.write() = None;
 }

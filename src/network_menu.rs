@@ -595,7 +595,6 @@ enum AccessPointRowOutput {
 }
 
 struct AccessPointRowWidgets {
-    _main_box: gtk::Box,
     strength_icon: gtk::Image,
     ssid_label: gtk::Label,
     status_label: gtk::Label,
@@ -670,7 +669,6 @@ impl FactoryComponent for AccessPointRow {
         root.append(&forget_button);
 
         let widgets = AccessPointRowWidgets {
-            _main_box: main_box,
             strength_icon,
             ssid_label,
             status_label,
