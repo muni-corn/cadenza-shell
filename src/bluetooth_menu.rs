@@ -18,6 +18,9 @@ pub struct BluetoothMenu {
     paired_devices: AsyncFactoryVecDeque<BluetoothDeviceWidget>,
     nearby_devices: AsyncFactoryVecDeque<BluetoothDeviceWidget>,
     pairing_prompt: Option<PairingPrompt>,
+    /// Set when new state arrives, so the switch only snaps to the real
+    /// value then and not right after the user flips it.
+    resync_power_switch: bool,
 }
 
 #[derive(Debug)]
@@ -40,9 +43,6 @@ pub struct BluetoothMenuWidgets {
     icon: gtk::Image,
     toggle_switch: gtk::Switch,
     toggle_switch_handler: glib::SignalHandlerId,
-    /// The `powered` value last pushed into the switch, so it's only resynced
-    /// when the real state changes rather than after every message.
-    synced_powered: bool,
     status_label: gtk::Label,
     scan_button: gtk::Button,
     pairing_box: gtk::Box,
@@ -87,6 +87,7 @@ impl SimpleComponent for BluetoothMenu {
             paired_devices,
             nearby_devices,
             pairing_prompt: PAIRING_PROMPT.read().clone(),
+            resync_power_switch: false,
         };
 
         // create header box
@@ -250,7 +251,6 @@ impl SimpleComponent for BluetoothMenu {
 
         let mut widgets = BluetoothMenuWidgets {
             icon,
-            synced_powered: toggle_switch.is_active(),
             toggle_switch,
             toggle_switch_handler,
             status_label,
@@ -277,8 +277,10 @@ impl SimpleComponent for BluetoothMenu {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+        self.resync_power_switch = false;
         match msg {
             BluetoothMenuMsg::UpdateState(state) => {
+                self.resync_power_switch = true;
                 update_device_rows(&mut self.paired_devices, paired_devices_iter(&state));
                 update_device_rows(&mut self.nearby_devices, nearby_devices_iter(&state));
                 self.bluetooth_state = state;
@@ -296,11 +298,18 @@ impl SimpleComponent for BluetoothMenu {
                 }
 
                 let state_clone = self.bluetooth_state.clone();
+                let input = sender.input_sender().clone();
                 sender.oneshot_command(async move {
                     if let Some(state) = state_clone
                         && let Err(e) = state.adapter.set_powered(enabled).await
                     {
                         tracing::error!("failed to toggle bluetooth: {}", e);
+
+                        // nothing changed, so resync the switch with the
+                        // real state
+                        input.emit(BluetoothMenuMsg::UpdateState(
+                            BLUETOOTH_STATE.read().clone(),
+                        ));
                     }
                 });
             }
@@ -385,8 +394,7 @@ impl SimpleComponent for BluetoothMenu {
         let is_powered = self.bluetooth_state.as_ref().map_or_default(|s| s.powered);
 
         // set_active emits state-set, which would send ToggleBluetooth again
-        if widgets.synced_powered != is_powered {
-            widgets.synced_powered = is_powered;
+        if self.resync_power_switch && widgets.toggle_switch.is_active() != is_powered {
             widgets
                 .toggle_switch
                 .block_signal(&widgets.toggle_switch_handler);
