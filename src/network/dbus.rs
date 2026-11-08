@@ -32,12 +32,6 @@ pub trait NetworkManager {
         specific_object: &zvariant::ObjectPath<'_>,
     ) -> zbus::Result<(zvariant::OwnedObjectPath, zvariant::OwnedObjectPath)>;
 
-    /// Deactivate an active connection.
-    fn deactivate_connection(
-        &self,
-        active_connection: &zvariant::ObjectPath<'_>,
-    ) -> zbus::Result<()>;
-
     /// Indicates if wireless is currently enabled or not.
     #[zbus(property)]
     fn wireless_enabled(&self) -> zbus::Result<bool>;
@@ -73,6 +67,10 @@ pub trait NetworkDevice {
     /// The device's `NMDeviceType`.
     #[zbus(property)]
     fn device_type(&self) -> zbus::Result<u32>;
+
+    /// Disconnects the device and keeps it from auto-activating until the
+    /// user connects it again.
+    fn disconnect(&self) -> zbus::Result<()>;
 }
 
 #[proxy(

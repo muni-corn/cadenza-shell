@@ -28,7 +28,7 @@ pub(crate) enum NetworkCommand {
         password: Option<String>,
         saved_connection: Option<OwnedObjectPath>,
     },
-    /// Deactivates the current primary connection, if any.
+    /// Disconnects the wifi device.
     Disconnect,
     /// Deletes a saved connection profile.
     Forget(OwnedObjectPath),
@@ -82,7 +82,7 @@ pub fn connect(
     });
 }
 
-/// Disconnects the currently active connection, if any.
+/// Disconnects from the current wifi network.
 pub fn disconnect() {
     send(NetworkCommand::Disconnect);
 }

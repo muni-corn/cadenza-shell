@@ -577,15 +577,15 @@ fn build_security_settings(security: ApSecurity, password: &str) -> HashMap<Stri
     settings
 }
 
+/// Disconnects the wifi device, leaving any wired or vpn connection alone.
 async fn handle_disconnect(conn: &zbus::Connection) -> anyhow::Result<()> {
-    let nm_proxy = NetworkManagerProxy::new(conn).await?;
-    let primary_path = nm_proxy.primary_connection().await?;
-
-    if primary_path.as_str() == "/" {
-        anyhow::bail!("no active connection to disconnect");
-    }
-
-    nm_proxy.deactivate_connection(&primary_path).await?;
+    let device_path = find_wireless_device(conn).await?;
+    NetworkDeviceProxy::builder(conn)
+        .path(&device_path)?
+        .build()
+        .await?
+        .disconnect()
+        .await?;
     Ok(())
 }
 
