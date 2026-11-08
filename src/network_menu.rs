@@ -7,7 +7,8 @@ use zbus::zvariant::OwnedObjectPath;
 use crate::{
     network::{
         self, AccessPointSummary, ApSecurity, ConnectFailureReason, NETWORK_STATE, NetworkEvent,
-        NetworkInfo, WIFI_SCAN_STATE, WifiScanState, get_icon, get_strength_icon, subscribe_events,
+        NetworkInfo, Password, WIFI_SCAN_STATE, WifiScanState, get_icon, get_strength_icon,
+        subscribe_events,
     },
     settings,
 };
@@ -55,7 +56,7 @@ pub enum NetworkMenuMsg {
     Disconnect,
     ApClicked(AccessPointSummary),
     ForgetClicked(AccessPointSummary),
-    PasswordSubmitted(String),
+    PasswordSubmitted(Password),
     CancelPassword,
     UpdateState(NetworkInfo),
     UpdateScanState(WifiScanState),
@@ -301,9 +302,9 @@ impl Component for NetworkMenu {
             let sender = sender.clone();
             let password_entry = password_entry.clone();
             move || {
-                sender.input(NetworkMenuMsg::PasswordSubmitted(
+                sender.input(NetworkMenuMsg::PasswordSubmitted(Password::new(
                     password_entry.text().to_string(),
-                ));
+                )));
             }
         };
         connect_button.connect_clicked({
@@ -436,7 +437,7 @@ impl Component for NetworkMenu {
             NetworkMenuMsg::PasswordSubmitted(password) => {
                 // keep the prompt open so the password can be corrected
                 if let Some(prompt) = &self.password_prompt
-                    && let Err(problem) = prompt.security.validate_password(&password)
+                    && let Err(problem) = prompt.security.validate_password(password.expose())
                 {
                     self.connect_error = Some(problem.to_string());
                     return;

@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 use tokio::sync::mpsc::UnboundedSender;
 use zbus::zvariant::OwnedObjectPath;
 
-use crate::network::security::ApSecurity;
+use crate::network::{password::Password, security::ApSecurity};
 
 /// Commands the UI can send to the network service.
 ///
@@ -26,7 +26,7 @@ pub(crate) enum NetworkCommand {
     Connect {
         ssid: String,
         security: ApSecurity,
-        password: Option<String>,
+        password: Option<Password>,
         saved_connections: Vec<OwnedObjectPath>,
     },
     /// Disconnects the wifi device.
@@ -72,7 +72,7 @@ pub fn request_scan() {
 pub fn connect(
     ssid: String,
     security: ApSecurity,
-    password: Option<String>,
+    password: Option<Password>,
     saved_connections: Vec<OwnedObjectPath>,
 ) {
     send(NetworkCommand::Connect {

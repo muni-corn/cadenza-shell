@@ -12,6 +12,7 @@ use crate::{
             SettingsConnectionProxy, WirelessDeviceProxy,
         },
         events::{self, ConnectFailureReason, NetworkEvent},
+        password::Password,
         scan,
         security::ApSecurity,
         state::{
@@ -334,7 +335,7 @@ async fn handle_command(conn: &zbus::Connection, cmd: NetworkCommand) {
                 conn,
                 &ssid,
                 security,
-                password.as_deref(),
+                password.as_ref().map(Password::expose),
                 saved_connections,
             )
             .await

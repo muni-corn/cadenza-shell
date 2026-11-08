@@ -1,6 +1,7 @@
 mod commands;
 mod dbus;
 mod events;
+mod password;
 mod scan;
 mod security;
 mod service;
@@ -8,6 +9,7 @@ mod state;
 mod types;
 pub use commands::{connect, disconnect, forget, request_scan, set_wifi_enabled};
 pub use events::{ConnectFailureReason, NetworkEvent, subscribe_events};
+pub use password::Password;
 pub use security::ApSecurity;
 pub use service::run_network_service;
 pub use state::{
