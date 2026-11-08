@@ -11,7 +11,7 @@ use relm4::prelude::*;
 use system_tray::data::BaseMap;
 
 use crate::{
-    notifications::panel::ActionPanel,
+    notifications::panel::{ActionPanel, ActionPanelMsg},
     settings,
     widgets::{
         bar::{
@@ -36,7 +36,8 @@ pub struct Bar {
     center: Controller<CenterGroup>,
     right: Controller<RightGroup>,
 
-    notification_center: Controller<ActionPanel>,
+    /// This bar's own action panel, toggled by its bell button.
+    action_panel: Controller<ActionPanel>,
 }
 
 #[derive(Debug)]
@@ -48,12 +49,13 @@ pub struct BarInit {
 #[derive(Debug)]
 pub enum BarMsg {
     TrayEvent(TrayEvent),
-    ToggleNotificationCenter,
+    ToggleActionPanel,
+    /// A tray item asked to be activated; relayed to the app.
+    TrayItemOutput(TrayItemOutput),
 }
 
 #[derive(Debug)]
 pub enum BarOutput {
-    ToggleNotificationCenter,
     TrayItemOutput(TrayItemOutput),
 }
 
@@ -83,8 +85,8 @@ impl SimpleAsyncComponent for Bar {
     ) -> AsyncComponentParts<Self> {
         let config = settings::get_config();
 
-        // create notification center for this bar/monitor
-        let notification_center = ActionPanel::builder().launch(monitor.clone()).detach();
+        // each bar owns the action panel for its own monitor
+        let action_panel = ActionPanel::builder().launch(monitor.clone()).detach();
 
         let model = Bar {
             left: LeftGroup::builder()
@@ -100,16 +102,14 @@ impl SimpleAsyncComponent for Bar {
                     tray_items,
                     monitor: monitor.clone(),
                 })
-                .forward(sender.output_sender(), |output| match output {
-                    RightGroupOutput::ToggleNotificationCenter => {
-                        BarOutput::ToggleNotificationCenter
-                    }
+                .forward(sender.input_sender(), |output| match output {
+                    RightGroupOutput::ToggleActionPanel => BarMsg::ToggleActionPanel,
                     RightGroupOutput::TrayItemOutput(tray_item_output) => {
-                        BarOutput::TrayItemOutput(tray_item_output)
+                        BarMsg::TrayItemOutput(tray_item_output)
                     }
                 }),
 
-            notification_center,
+            action_panel,
 
             window: window.clone(),
             monitor,
@@ -142,13 +142,15 @@ impl SimpleAsyncComponent for Bar {
         AsyncComponentParts { model, widgets: () }
     }
 
-    async fn update(&mut self, msg: Self::Input, _sender: AsyncComponentSender<Self>) {
+    async fn update(&mut self, msg: Self::Input, sender: AsyncComponentSender<Self>) {
         match msg {
             // propagate tray update to the right group
             BarMsg::TrayEvent(event) => self.right.emit(RightGroupMsg::TrayEvent(event)),
-            BarMsg::ToggleNotificationCenter => {
-                use crate::notifications::panel::ActionPanelMsg;
-                self.notification_center.emit(ActionPanelMsg::Toggle);
+            BarMsg::ToggleActionPanel => self.action_panel.emit(ActionPanelMsg::Toggle),
+            BarMsg::TrayItemOutput(tray_item_output) => {
+                sender
+                    .output(BarOutput::TrayItemOutput(tray_item_output))
+                    .unwrap_or_else(|_| tracing::error!("couldn't relay tray item output to app"));
             }
         }
     }

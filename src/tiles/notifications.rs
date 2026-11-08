@@ -21,7 +21,8 @@ pub enum NotificationsTileMsg {
 
 #[derive(Debug)]
 pub enum NotificationsTileOutput {
-    ToggleNotificationCenter,
+    /// The bell was clicked; the owning bar toggles its action panel.
+    ToggleActionPanel,
 }
 
 #[derive(Debug)]
@@ -73,9 +74,9 @@ impl SimpleComponent for NotificationsTile {
             NotificationsTileMsg::TileClicked => {
                 tracing::debug!("notifications tile clicked");
                 sender
-                    .output(NotificationsTileOutput::ToggleNotificationCenter)
+                    .output(NotificationsTileOutput::ToggleActionPanel)
                     .unwrap_or_else(|_| {
-                        tracing::error!("couldn't send output to open notification center")
+                        tracing::error!("couldn't send output to toggle action panel")
                     });
             }
             NotificationsTileMsg::StateUpdate(state) => {

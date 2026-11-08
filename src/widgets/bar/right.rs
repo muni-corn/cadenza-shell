@@ -51,7 +51,7 @@ pub enum RightGroupMsg {
 
 #[derive(Debug)]
 pub enum RightGroupOutput {
-    ToggleNotificationCenter,
+    ToggleActionPanel,
     TrayItemOutput(TrayItemOutput),
 }
 
@@ -86,9 +86,7 @@ impl SimpleComponent for RightGroup {
         let notifications = NotificationsTile::builder().launch(()).forward(
             sender.output_sender(),
             |msg| match msg {
-                NotificationsTileOutput::ToggleNotificationCenter => {
-                    RightGroupOutput::ToggleNotificationCenter
-                }
+                NotificationsTileOutput::ToggleActionPanel => RightGroupOutput::ToggleActionPanel,
             },
         );
         let tray_opt = tray_items.and_then(|m| match m.lock() {

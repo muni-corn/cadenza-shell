@@ -53,7 +53,6 @@ pub(crate) enum CadenzaShellMsg {
     /// reconciled against the current list.
     MonitorsChanged,
     HandleTrayItemOutput(TrayItemOutput),
-    ToggleNotificationCenter,
     /// A notification event forwarded from the global broadcast channel.
     NotificationEvent(NotificationEvent),
     /// A notification was dismissed from the fresh panel.
@@ -265,12 +264,6 @@ impl AsyncComponent for CadenzaShellModel {
                     }
                 }
             },
-            CadenzaShellMsg::ToggleNotificationCenter => {
-                // broadcast to all bars so each monitor's center toggles
-                for bar in &self.bars {
-                    bar.controller.emit(BarMsg::ToggleNotificationCenter);
-                }
-            }
             CadenzaShellMsg::NotificationEvent(event) => {
                 let Some(panel) = &self.fresh_panel else {
                     return;
@@ -399,7 +392,6 @@ impl CadenzaShellModel {
                 tray_items,
             })
             .forward(sender.input_sender(), |output| match output {
-                BarOutput::ToggleNotificationCenter => CadenzaShellMsg::ToggleNotificationCenter,
                 BarOutput::TrayItemOutput(tray_item_output) => {
                     CadenzaShellMsg::HandleTrayItemOutput(tray_item_output)
                 }
