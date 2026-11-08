@@ -80,19 +80,19 @@ impl SimpleComponent for Tile {
 
         // create widgets
         let icon = gtk::Image::builder()
-            .css_classes(vec!["icon", model.attention.css_class()])
+            .css_classes(model.attention.with_classes(&["icon"]))
             .pixel_size(settings::get_config().tiles.icon_size)
             .width_request(settings::get_config().tiles.icon_size)
             .build();
 
         let primary_label = gtk::Label::builder()
-            .css_classes(vec!["primary", model.attention.css_class()])
+            .css_classes(model.attention.with_classes(&["primary"]))
             .ellipsize(gtk::pango::EllipsizeMode::End)
             .max_width_chars(64)
             .build();
 
         let secondary_label = gtk::Label::builder()
-            .css_classes(vec!["secondary", model.attention.css_class()])
+            .css_classes(model.attention.with_classes(&["secondary"]))
             .ellipsize(gtk::pango::EllipsizeMode::End)
             .max_width_chars(20)
             .build();
@@ -149,14 +149,15 @@ impl SimpleComponent for Tile {
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         // update attention css classes
-        let attention_class = self.attention.css_class();
-        widgets.icon.set_css_classes(&["icon", attention_class]);
+        widgets
+            .icon
+            .set_css_classes(&self.attention.with_classes(&["icon"]));
         widgets
             .primary_label
-            .set_css_classes(&["primary", attention_class]);
+            .set_css_classes(&self.attention.with_classes(&["primary"]));
         widgets
             .secondary_label
-            .set_css_classes(&["secondary", attention_class]);
+            .set_css_classes(&self.attention.with_classes(&["secondary"]));
 
         // update icon
         if let Some(icon_name) = &self.icon {

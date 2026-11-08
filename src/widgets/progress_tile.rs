@@ -74,14 +74,14 @@ impl Component for ProgressTile {
 
         // create icon
         let icon = gtk::Image::builder()
-            .css_classes(vec!["icon", model.attention.css_class()])
+            .css_classes(model.attention.with_classes(&["icon"]))
             .pixel_size(settings::get_config().tiles.icon_size)
             .width_request(settings::get_config().tiles.icon_size)
             .build();
 
         // create progress bar
         let progress_bar = gtk::ProgressBar::builder()
-            .css_classes(vec![model.attention.css_class()])
+            .css_classes(model.attention.with_classes(&[]))
             .fraction(model.progress)
             .valign(gtk::Align::Center)
             .build();
@@ -133,9 +133,12 @@ impl Component for ProgressTile {
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         // update attention CSS classes
-        let attention_class = self.attention.css_class();
-        widgets.icon.set_css_classes(&["icon", attention_class]);
-        widgets.progress_bar.set_css_classes(&[attention_class]);
+        widgets
+            .icon
+            .set_css_classes(&self.attention.with_classes(&["icon"]));
+        widgets
+            .progress_bar
+            .set_css_classes(&self.attention.with_classes(&[]));
 
         if self.active {
             widgets.icon.add_css_class("active");
