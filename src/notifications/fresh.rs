@@ -198,6 +198,12 @@ impl Component for FreshNotifications {
         }
     }
 
+    fn shutdown(&mut self, widgets: &mut Self::Widgets, _output: relm4::Sender<Self::Output>) {
+        // dropping the controller doesn't destroy a toplevel, so popups would
+        // otherwise outlive their monitor and jump to another output
+        widgets.window.destroy();
+    }
+
     fn update_cmd(
         &mut self,
         (id, generation): Self::CommandOutput,

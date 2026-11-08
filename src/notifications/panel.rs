@@ -206,4 +206,10 @@ impl SimpleComponent for ActionPanel {
             }
         }
     }
+
+    fn shutdown(&mut self, widgets: &mut Self::Widgets, _output: relm4::Sender<Self::Output>) {
+        // dropping the controller doesn't destroy a toplevel, so the panel
+        // would otherwise outlive its bar and jump to another output
+        widgets.window.destroy();
+    }
 }
