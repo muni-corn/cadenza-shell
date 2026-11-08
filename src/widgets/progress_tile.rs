@@ -12,7 +12,8 @@ pub struct ProgressTile {
     progress: f64,
     attention: Attention,
     active: bool,
-    fade_timeout_source: Option<glib::SourceId>,
+    /// Bumped on every activation so stale fade timers can be ignored.
+    fade_generation: u64,
 }
 
 #[derive(Debug)]
@@ -23,8 +24,6 @@ pub enum ProgressTileMsg {
     /// Sets the fraction of the ProgressTile, expanding it with an animation to
     /// show its fraction.
     SetProgress(f64),
-
-    FadeTimeout,
 }
 
 #[derive(Debug)]
@@ -56,7 +55,11 @@ impl Default for ProgressTileInit {
     }
 }
 
-impl SimpleComponent for ProgressTile {
+/// How long a tile stays highlighted after its progress changes.
+const FADE_DELAY: std::time::Duration = std::time::Duration::from_secs(3);
+
+impl Component for ProgressTile {
+    type CommandOutput = u64;
     type Init = ProgressTileInit;
     type Input = ProgressTileMsg;
     type Output = ProgressTileOutput;
@@ -72,8 +75,8 @@ impl SimpleComponent for ProgressTile {
             icon: init.icon_name,
             progress: init.progress,
             attention: init.attention,
-            fade_timeout_source: None,
             active: false,
+            fade_generation: 0,
         };
 
         // create container
@@ -112,7 +115,7 @@ impl SimpleComponent for ProgressTile {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             ProgressTileMsg::SetIcon(icon) => {
                 self.icon = icon;
@@ -123,10 +126,18 @@ impl SimpleComponent for ProgressTile {
                 // trigger fade effect
                 self.activate(&sender);
             }
-            ProgressTileMsg::FadeTimeout => {
-                self.active = false;
-                self.fade_timeout_source = None;
-            }
+        }
+    }
+
+    fn update_cmd(
+        &mut self,
+        generation: Self::CommandOutput,
+        _sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        // a newer activation restarted the timer, so this one is stale
+        if generation == self.fade_generation {
+            self.active = false;
         }
     }
 
@@ -160,19 +171,15 @@ impl SimpleComponent for ProgressTile {
 
 impl ProgressTile {
     fn activate(&mut self, sender: &ComponentSender<Self>) {
-        // cancel existing timeout
-        if let Some(source_id) = self.fade_timeout_source.take() {
-            source_id.remove();
-        }
-
         self.active = true;
+        self.fade_generation = self.fade_generation.wrapping_add(1);
 
-        // schedule fade back to dim
-        let sender_clone = sender.clone();
-        let source_id = glib::timeout_add_seconds_local(3, move || {
-            sender_clone.input(ProgressTileMsg::FadeTimeout);
-            glib::ControlFlow::Break
+        // schedule fade back to dim; relm4 cancels the command if the tile
+        // shuts down first
+        let generation = self.fade_generation;
+        sender.oneshot_command(async move {
+            tokio::time::sleep(FADE_DELAY).await;
+            generation
         });
-        self.fade_timeout_source = Some(source_id);
     }
 }
