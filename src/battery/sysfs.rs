@@ -97,31 +97,38 @@ pub fn read_battery_sysfs(battery_path: &Path) -> Option<SysfsReading> {
     })
 }
 
-/// Detect the battery sysfs path by scanning `/sys/class/power_supply/` for
+/// Detect the system battery by scanning `/sys/class/power_supply/` for
 /// devices with type "Battery".
+///
+/// Mice, controllers and other peripherals also report type "Battery", but
+/// with scope "Device", so those are skipped.
 pub fn detect_battery_path() -> Option<PathBuf> {
     let power_supply_path = Path::new("/sys/class/power_supply");
 
-    fs::read_dir(power_supply_path).ok()?.find_map(|entry| {
-        let entry = entry.ok()?;
-        let path = entry.path();
+    let candidates: Vec<String> = fs::read_dir(power_supply_path)
+        .ok()?
+        .filter_map(|entry| {
+            let path = entry.ok()?.path();
+            let read = |file: &str| fs::read_to_string(path.join(file)).unwrap_or_default();
 
-        if path.is_dir() {
-            let type_path = path.join("type");
-            if type_path.exists() {
-                let type_content = fs::read_to_string(&type_path).ok()?;
-                if type_content.trim().eq_ignore_ascii_case("battery") {
-                    Some(path)
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    })
+            let is_battery = read("type").trim().eq_ignore_ascii_case("battery");
+            let is_peripheral = read("scope").trim().eq_ignore_ascii_case("device");
+            (is_battery && !is_peripheral)
+                .then(|| path.file_name()?.to_str().map(str::to_owned))
+                .flatten()
+        })
+        .collect();
+
+    pick_battery(&candidates).map(|name| power_supply_path.join(name))
+}
+
+/// Picks the system battery from candidate names, preferring the
+/// conventional `BAT*` names and breaking ties alphabetically.
+fn pick_battery(candidates: &[String]) -> Option<&str> {
+    candidates
+        .iter()
+        .min_by_key(|name| (!name.starts_with("BAT"), name.as_str()))
+        .map(String::as_str)
 }
 
 /// Read a sysfs file as u64.
@@ -153,6 +160,19 @@ fn read_charging_status(battery_path: &Path) -> ChargingStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn prefers_bat_named_batteries() {
+        let candidates = vec!["CMB0".to_string(), "BAT1".to_string(), "BAT0".to_string()];
+        assert_eq!(pick_battery(&candidates), Some("BAT0"));
+    }
+
+    #[test]
+    fn falls_back_to_other_names() {
+        let candidates = vec!["CMB0".to_string()];
+        assert_eq!(pick_battery(&candidates), Some("CMB0"));
+        assert_eq!(pick_battery(&[]), None);
+    }
 
     #[test]
     fn remaining_wh_converts_charge_with_voltage() {

@@ -3,6 +3,8 @@
 //! This module provides helpers for creating a udev monitor on the
 //! `power_supply` subsystem and parsing charging status strings.
 
+use std::path::Path;
+
 use udev::MonitorSocket;
 
 use crate::battery::ChargingStatus;
@@ -15,16 +17,17 @@ pub fn create_battery_monitor() -> anyhow::Result<MonitorSocket> {
     Ok(socket)
 }
 
-/// Returns true if the event is a `change` action on a battery device.
-pub fn is_battery_change(event: &udev::Event) -> bool {
+/// Returns true if the event is a `change` action on the given battery.
+///
+/// Matching by name keeps peripheral batteries (mice, controllers) from
+/// triggering updates.
+pub fn is_battery_change(event: &udev::Event, battery_path: &Path) -> bool {
     let is_change = event.action().is_some_and(|a| a.to_str() == Some("change"));
+    let is_ours = battery_path
+        .file_name()
+        .is_some_and(|name| event.sysname() == name);
 
-    let is_battery = event.property_value("POWER_SUPPLY_TYPE").is_some_and(|v| {
-        v.to_str()
-            .is_some_and(|s| s.eq_ignore_ascii_case("battery"))
-    });
-
-    is_change && is_battery
+    is_change && is_ours
 }
 
 /// Parses a charging status string into a [`ChargingStatus`] variant.

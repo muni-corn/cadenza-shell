@@ -110,7 +110,7 @@ async fn watch_battery(
                 // drain all pending events from the monitor
                 for event in guard.get_inner().iter() {
                     tracing::debug!("udev event received: {event:?}");
-                    if is_battery_change(&event) {
+                    if is_battery_change(&event, battery_path) {
                         tracing::debug!("event is a battery event");
                         update_battery_state(
                             battery_path,
