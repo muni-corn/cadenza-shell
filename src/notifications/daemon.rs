@@ -139,7 +139,7 @@ impl NotificationsDaemon {
         (
             "cadenza-shell".to_string(),
             "municorn".to_string(),
-            "1.0.0".to_string(),
+            env!("CARGO_PKG_VERSION").to_string(),
             "1.3".to_string(),
         )
     }
