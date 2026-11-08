@@ -1,6 +1,7 @@
 pub mod card;
 pub mod daemon;
 pub mod fresh;
+mod lifecycle;
 pub mod panel;
 pub mod types;
 
@@ -20,6 +21,7 @@ use zbus::{
 
 use crate::notifications::{
     daemon::{NotificationsDaemon, NotificationsDaemonSignals},
+    lifecycle::CloseReason,
     types::{Notification, NotificationUrgency},
 };
 
@@ -73,7 +75,7 @@ static COMMAND_TX: OnceLock<mpsc::UnboundedSender<NotificationCommand>> = OnceLo
 
 /// Dismiss a notification by ID.
 ///
-/// Removes the notification from state and emits a `NotificationClosed` event.
+/// Closes the notification as dismissed by the user.
 /// Has no effect if the service has not been started.
 pub fn dismiss(id: u32) {
     if let Some(tx) = COMMAND_TX.get() {
@@ -83,7 +85,7 @@ pub fn dismiss(id: u32) {
 
 /// Clear all notifications.
 ///
-/// Removes all notifications from state.
+/// Closes every notification as dismissed by the user.
 /// Has no effect if the service has not been started.
 pub fn clear_all() {
     if let Some(tx) = COMMAND_TX.get() {
@@ -165,10 +167,12 @@ pub async fn run_notifications_service() {
         }
     };
 
+    lifecycle::set_connection(connection.clone());
+
     // look up the interface ref so we can emit D-Bus signals for commands
     let interface_ref = match connection
         .object_server()
-        .interface::<_, NotificationsDaemon>("/org/freedesktop/Notifications")
+        .interface::<_, NotificationsDaemon>(lifecycle::OBJECT_PATH)
         .await
     {
         Ok(r) => r,
@@ -197,23 +201,21 @@ pub async fn run_notifications_service() {
         match cmd {
             NotificationCommand::Dismiss(id) => {
                 tracing::trace!(notification.id = id, "dismiss command received");
-
-                NOTIFICATIONS_STATE.write().notifications.remove(&id);
-                let remaining = NOTIFICATIONS_STATE.read().notifications.len();
-                tracing::debug!(notification.id = id, remaining, "notification dismissed");
-
-                let _ = event_tx().send(NotificationEvent::Closed { id });
-
-                // also emit the D-Bus signal so external clients are notified
-                if let Err(e) = interface_ref.notification_closed(id, 2).await {
-                    tracing::error!(notification.id = id, error = %e, "couldn't emit notification_closed signal");
-                }
+                lifecycle::close(id, CloseReason::Dismissed).await;
             }
             NotificationCommand::ClearAll => {
                 tracing::trace!("clear_all command received");
 
-                NOTIFICATIONS_STATE.write().notifications.clear();
-                tracing::debug!("all notifications cleared from state");
+                // close each one so clients and popups hear about it
+                let ids: Vec<u32> = NOTIFICATIONS_STATE
+                    .read()
+                    .notifications
+                    .keys()
+                    .copied()
+                    .collect();
+                for id in ids {
+                    lifecycle::close(id, CloseReason::Dismissed).await;
+                }
             }
             NotificationCommand::InvokeAction { id, action_key } => {
                 tracing::trace!(notification.id = id, %action_key, "invoke_action command received");
@@ -231,7 +233,7 @@ async fn initialize_notifications_daemon() -> Result<Connection> {
     tracing::debug!("building D-Bus connection for org.freedesktop.Notifications");
     Ok(zbus::connection::Builder::session()?
         .name("org.freedesktop.Notifications")?
-        .serve_at("/org/freedesktop/Notifications", NotificationsDaemon)?
+        .serve_at(lifecycle::OBJECT_PATH, NotificationsDaemon)?
         .build()
         .await?)
 }

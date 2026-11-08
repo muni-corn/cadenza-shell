@@ -1,12 +1,13 @@
 use std::{
     sync::atomic::{AtomicU32, Ordering},
-    time::SystemTime,
+    time::{Duration, SystemTime},
 };
 
 use zbus::{interface, object_server::SignalEmitter};
 
 use crate::notifications::{
     NOTIFICATIONS_STATE, NotificationEvent, NotificationHints, event_tx,
+    lifecycle::{self, CloseReason},
     types::{Notification, NotificationUrgency},
 };
 
@@ -87,41 +88,32 @@ impl NotificationsDaemon {
         let _ = event_tx().send(NotificationEvent::Received(notification));
 
         // handle timeout — auto-close non-persistent notifications
-        if expire_timeout > 0 {
-            tracing::debug!(
-                notification.id = id,
-                expire_timeout,
-                "scheduling auto-close timer"
-            );
-            relm4::spawn(async move {
-                tokio::time::sleep(tokio::time::Duration::from_millis(expire_timeout as u64)).await;
-                NOTIFICATIONS_STATE.write().notifications.remove(&id);
-                tracing::debug!(notification.id = id, "auto-close timer fired");
-                let _ = event_tx().send(NotificationEvent::Closed { id });
-            });
+        // a replaced notification must not be closed by its predecessor's
+        // timer, and the spec forbids expiring critical notifications
+        lifecycle::cancel_expiry(id);
+        if expire_timeout > 0 && urgency != NotificationUrgency::Critical {
+            tracing::debug!(notification.id = id, expire_timeout, "scheduling expiry");
+            lifecycle::schedule_expiry(id, Duration::from_millis(expire_timeout as u64));
         }
 
         id
     }
 
-    async fn close_notification(
-        &self,
-        id: u32,
-        #[zbus(signal_emitter)] emitter: SignalEmitter<'_>,
-    ) {
+    /// Closes a notification on a client's request; the spec requires an
+    /// error reply for ids that don't exist.
+    async fn close_notification(&self, id: u32) -> zbus::fdo::Result<()> {
         tracing::debug!(
             notification.id = id,
             "close_notification invoked over D-Bus"
         );
 
-        NOTIFICATIONS_STATE.write().notifications.remove(&id);
-
-        // emit D-Bus signal (reason 2 = closed by the notification server)
-        if let Err(e) = emitter.notification_closed(id, 2).await {
-            tracing::error!(notification.id = id, error = %e, "failed to emit notification_closed signal");
+        if lifecycle::close(id, CloseReason::Closed).await {
+            Ok(())
+        } else {
+            Err(zbus::fdo::Error::Failed(format!(
+                "there's no notification with id {id}"
+            )))
         }
-
-        let _ = event_tx().send(NotificationEvent::Closed { id });
     }
 
     async fn get_capabilities(&self) -> Vec<String> {
@@ -152,7 +144,7 @@ impl NotificationsDaemon {
     // signals
 
     #[zbus(signal)]
-    async fn notification_closed(
+    pub async fn notification_closed(
         emitter: &SignalEmitter<'_>,
         id: u32,
         reason: u32,
