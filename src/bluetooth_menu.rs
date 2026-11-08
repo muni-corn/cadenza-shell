@@ -62,6 +62,15 @@ impl SimpleComponent for BluetoothMenu {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
+        // subscribe before reading the initial state below, so a write in
+        // between isn't missed
+        BLUETOOTH_STATE.subscribe(sender.input_sender(), |state| {
+            BluetoothMenuMsg::UpdateState(state.to_owned())
+        });
+        PAIRING_PROMPT.subscribe(sender.input_sender(), |prompt| {
+            BluetoothMenuMsg::UpdatePairingPrompt(prompt.to_owned())
+        });
+
         // create device factories, one per section
         let paired_devices = FactoryVecDeque::builder()
             .launch(
@@ -238,14 +247,6 @@ impl SimpleComponent for BluetoothMenu {
         content_box.append(model.nearby_devices.widget());
         scrolled_window.set_child(Some(&content_box));
         root.append(&scrolled_window);
-
-        // subscribe to bluetooth state and pairing prompt updates
-        BLUETOOTH_STATE.subscribe(sender.input_sender(), |state| {
-            BluetoothMenuMsg::UpdateState(state.to_owned())
-        });
-        PAIRING_PROMPT.subscribe(sender.input_sender(), |prompt| {
-            BluetoothMenuMsg::UpdatePairingPrompt(prompt.to_owned())
-        });
 
         let mut widgets = BluetoothMenuWidgets {
             icon,
