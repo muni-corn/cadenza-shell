@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     sync::atomic::{AtomicU32, Ordering},
-    time::{Duration, SystemTime},
+    time::Duration,
 };
 
 use zbus::{interface, object_server::SignalEmitter, zvariant::OwnedValue};
@@ -36,6 +36,9 @@ impl NotificationsDaemon {
         expire_timeout: i32,
     ) -> u32 {
         let id = if replaces_id != 0 {
+            // a client may pick an id we haven't assigned yet; keep the
+            // counter past it so it's never handed out to someone else
+            NOTIFICATION_ID.fetch_max(replaces_id.saturating_add(1), Ordering::SeqCst);
             replaces_id
         } else {
             NOTIFICATION_ID.fetch_add(1, Ordering::SeqCst)
@@ -45,10 +48,7 @@ impl NotificationsDaemon {
         let hints = Hints::from(hints);
         let urgency = hints.urgency();
 
-        let timestamp = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
+        let timestamp = chrono::Local::now().timestamp();
 
         let actions = {
             let evens = actions.iter().step_by(2).cloned();
