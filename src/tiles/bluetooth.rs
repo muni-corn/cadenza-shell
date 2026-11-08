@@ -8,7 +8,7 @@ use crate::{
     icon_names::{BLUETOOTH, BLUETOOTH_DOTS, BLUETOOTH_NO, BLUETOOTH_X},
     widgets::{
         menu_window::{MenuWindow, MenuWindowInit, MenuWindowMsg, MenuWindowOutput},
-        tile::{Tile, TileMsg, TileOutput},
+        tile::{Tile, TileMsg},
     },
 };
 
@@ -35,7 +35,7 @@ impl Component for BluetoothTile {
     type CommandOutput = ();
     type Init = Monitor;
     type Input = BluetoothTileMsg;
-    type Output = TileOutput;
+    type Output = ();
     type Root = gtk::Box;
     type Widgets = BluetoothWidgets;
 

@@ -8,7 +8,7 @@ use crate::{
     tiles::Attention,
     widgets::{
         menu_window::{MenuWindow, MenuWindowInit, MenuWindowMsg, MenuWindowOutput},
-        tile::{Tile, TileInit, TileMsg, TileOutput},
+        tile::{Tile, TileInit, TileMsg},
     },
 };
 
@@ -38,7 +38,7 @@ pub struct NetworkTileWidgets {
 impl SimpleComponent for NetworkTile {
     type Init = Monitor;
     type Input = NetworkTileMsg;
-    type Output = TileOutput;
+    type Output = ();
     type Root = gtk::Box;
     type Widgets = NetworkTileWidgets;
 
