@@ -6,7 +6,6 @@ use serde::{Deserialize, Serialize};
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct CadenzaShellConfig {
-    pub ui: UiConfig,
     pub bar: BarConfig,
     pub notifications: NotificationConfig,
     pub tiles: TileConfig,
@@ -41,27 +40,11 @@ impl CadenzaShellConfig {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct UiConfig {
-    /// Overall UI scaling factor
-    pub scale_factor: f64,
-}
-
-#[derive(Debug, Copy, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum BarPosition {
-    Top,
-    Bottom,
-}
-
 #[derive(Debug, Copy, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct BarConfig {
     /// Bar height in pixels
     pub height: i32,
-    /// Bar position (top, bottom)
-    pub position: BarPosition,
     /// Spacing between tiles
     pub tile_spacing: i32,
     /// Margin from screen edges
@@ -71,8 +54,6 @@ pub struct BarConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct NotificationConfig {
-    /// Maximum number of notifications to show
-    pub max_notifications: usize,
     /// Auto-dismiss timeout in seconds (0 = no auto-dismiss)
     pub timeout: u64,
     /// Notification popup width
@@ -86,10 +67,6 @@ pub struct NotificationConfig {
 pub struct TileConfig {
     /// Default tile icon size
     pub icon_size: i32,
-    /// Show tile labels
-    pub show_labels: bool,
-    /// Maximum text width for tiles
-    pub max_text_width: i32,
     /// Analog clock radius
     pub analog_clock_radius: f64,
 }
@@ -121,17 +98,10 @@ pub struct BluetoothConfig {
     pub discovery_timeout: u64,
 }
 
-impl Default for UiConfig {
-    fn default() -> Self {
-        Self { scale_factor: 1.0 }
-    }
-}
-
 impl Default for BarConfig {
     fn default() -> Self {
         Self {
             height: 32,
-            position: BarPosition::Top,
             tile_spacing: 12,
             edge_padding: 8,
         }
@@ -141,7 +111,6 @@ impl Default for BarConfig {
 impl Default for NotificationConfig {
     fn default() -> Self {
         Self {
-            max_notifications: 10,
             timeout: 10,
             popup_width: 400,
             center_width: 400,
@@ -153,8 +122,6 @@ impl Default for TileConfig {
     fn default() -> Self {
         Self {
             icon_size: 16,
-            show_labels: true,
-            max_text_width: 30,
             analog_clock_radius: 60.0,
         }
     }
