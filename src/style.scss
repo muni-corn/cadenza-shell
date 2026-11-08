@@ -21,7 +21,8 @@ window {
   background-color: rgba(0, 0, 0, 0.5);
 }
 
-.dim,
+// active progress tiles brighten even though they're dimmed at rest
+.dim:not(.active),
 .secondary {
   opacity: 0.5;
 }
@@ -126,6 +127,10 @@ box.notification-card {
     box-shadow: 0px 4px 8px gtkalpha(black, 0.5);
   }
 
+  &.low > box {
+    opacity: 0.85;
+  }
+
   &.critical > box {
     border: 2px solid $warn-color;
 
@@ -180,6 +185,15 @@ box.notification-card {
     .summary {
       margin-bottom: 4px;
       font-weight: bold;
+    }
+
+    .icon-image {
+      margin-right: 16px;
+      -gtk-icon-size: 48px;
+    }
+
+    .body {
+      opacity: 0.8;
     }
 
     .image {
@@ -267,5 +281,9 @@ box.notification-card {
 .tray-item {
   &:not(:hover) {
     background: transparent;
+  }
+
+  &.tray-needs-attention {
+    color: $warn-color;
   }
 }
