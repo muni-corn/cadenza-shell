@@ -561,7 +561,7 @@ fn get_status_text(state: &Option<BluetoothState>) -> String {
         Some(s) if s.discovering => "Searching for devices...".to_string(),
         Some(s) if s.connected_device_count() == 1 => "1 device connected".to_string(),
         Some(s) if s.connected_device_count() > 0 => {
-            format!("{} device(s) connected", s.connected_device_count())
+            format!("{} devices connected", s.connected_device_count())
         }
         Some(_) => "Bluetooth enabled".to_string(),
         None => "Bluetooth unavailable".to_string(),
