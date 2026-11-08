@@ -280,6 +280,13 @@ async fn handle_command(conn: &zbus::Connection, cmd: NetworkCommand) {
                 handle_connect(conn, &ssid, security, password.as_deref(), saved_connection).await
             {
                 tracing::error!("couldn't connect to {ssid}: {e}");
+
+                // the menu has already closed its password prompt, so it
+                // needs to hear about failures that happen before activation
+                let _ = events::event_tx().send(NetworkEvent::ConnectionFailed {
+                    ssid,
+                    reason: ConnectFailureReason::Other,
+                });
             }
         }
         NetworkCommand::Disconnect => {

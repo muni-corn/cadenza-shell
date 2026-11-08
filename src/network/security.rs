@@ -66,6 +66,26 @@ impl ApSecurity {
     pub fn requires_password(self) -> bool {
         matches!(self, Self::Wep | Self::Psk | Self::Sae)
     }
+
+    /// Checks that `password` is acceptable for this security scheme before
+    /// handing it to NetworkManager, which would otherwise reject it with a
+    /// generic error. Returns a user-facing explanation if it isn't.
+    pub fn validate_password(self, password: &str) -> Result<(), &'static str> {
+        match self {
+            Self::Psk | Self::Sae => {
+                let is_passphrase = (8..=63).contains(&password.len());
+                let is_raw_key =
+                    password.len() == 64 && password.chars().all(|c| c.is_ascii_hexdigit());
+                if is_passphrase || is_raw_key {
+                    Ok(())
+                } else {
+                    Err("Passwords for this network are 8 to 63 characters")
+                }
+            }
+            Self::Wep if password.is_empty() => Err("Enter the network's password"),
+            Self::Wep | Self::Open | Self::Enterprise => Ok(()),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -131,6 +151,24 @@ mod tests {
             ),
             ApSecurity::Enterprise
         );
+    }
+
+    #[test]
+    fn wpa_passwords_must_be_8_to_63_characters() {
+        assert!(ApSecurity::Psk.validate_password("short").is_err());
+        assert!(ApSecurity::Psk.validate_password("long enough").is_ok());
+        assert!(ApSecurity::Sae.validate_password(&"x".repeat(64)).is_err());
+    }
+
+    #[test]
+    fn wpa_accepts_a_64_digit_hex_key() {
+        assert!(ApSecurity::Psk.validate_password(&"ab".repeat(32)).is_ok());
+    }
+
+    #[test]
+    fn wep_needs_a_non_empty_password() {
+        assert!(ApSecurity::Wep.validate_password("").is_err());
+        assert!(ApSecurity::Wep.validate_password("12345").is_ok());
     }
 
     #[test]

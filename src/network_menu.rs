@@ -395,6 +395,9 @@ impl Component for NetworkMenu {
                 if summary.is_active {
                     // already connected to this network; nothing to do here,
                     // the Disconnect button handles leaving it
+                } else if summary.security == ApSecurity::Enterprise && !summary.is_saved() {
+                    self.connect_error =
+                        Some("Enterprise networks aren't supported here".to_string());
                 } else if summary.needs_password() {
                     self.password_prompt = Some(PasswordPrompt {
                         ssid: summary.ssid,
@@ -416,6 +419,15 @@ impl Component for NetworkMenu {
                 }
             }
             NetworkMenuMsg::PasswordSubmitted(password) => {
+                // keep the prompt open so the password can be corrected
+                if let Some(prompt) = &self.password_prompt
+                    && let Err(problem) = prompt.security.validate_password(&password)
+                {
+                    self.connect_error = Some(problem.to_string());
+                    return;
+                }
+
+                self.connect_error = None;
                 if let Some(prompt) = self.password_prompt.take() {
                     network::connect(
                         prompt.ssid,
