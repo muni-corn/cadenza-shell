@@ -32,6 +32,9 @@ pub enum BluetoothEvent {
     Reconcile,
     /// A command issued by the UI (via `bluetooth::commands`).
     Command(BluetoothCommand),
+    /// bluetoothd gained a new owner on the bus (it started or restarted),
+    /// which loses our agent registration and every adapter subscription.
+    BluezRestarted,
 }
 
 pub async fn run_bluetooth_service() {
@@ -42,22 +45,15 @@ pub async fn run_bluetooth_service() {
         return;
     };
 
-    // register our pairing agent; the handle must be held for the agent to
-    // stay registered, so it's kept alive for the rest of this function
-    // (which runs for the life of the service)
-    let default_agent = settings::get_config().bluetooth.default_agent;
-    let _agent_handle = match agent::register_agent(&session, default_agent).await {
-        Ok(handle) => {
-            tracing::info!(default_agent, "bluetooth pairing agent registered");
-            Some(handle)
-        }
-        Err(e) => {
-            tracing::error!("couldn't register bluetooth pairing agent: {e}");
-            None
-        }
-    };
+    // the agent stays registered for as long as its handle is held
+    let mut agent_handle = None;
+    ensure_agent(&session, &mut agent_handle).await;
 
     let (event_tx, mut event_rx) = unbounded_channel();
+
+    // bluer's session events don't report bluetoothd restarting, so watch
+    // its bus name directly
+    spawn_bluez_owner_watcher(event_tx.clone());
 
     // watch for adapters appearing or disappearing on the bus; this task
     // itself never needs to be respawned, since it's subscribed against the
@@ -165,13 +161,97 @@ pub async fn run_bluetooth_service() {
                     .await;
                 }
             }
+            BluetoothEvent::BluezRestarted => {
+                tracing::info!("bluetoothd restarted, re-registering agent and subscriptions");
+                if let Some(handle) = adapter_events_task.take() {
+                    handle.abort();
+                }
+                for (_, handle) in device_event_tasks.drain() {
+                    handle.abort();
+                }
+                if let Some(handle) = discovery_task.take() {
+                    handle.abort();
+                }
+                agent_handle = None;
+                ensure_agent(&session, &mut agent_handle).await;
+                reinitialize_adapter(
+                    &session,
+                    &event_tx,
+                    &mut adapter_events_task,
+                    &mut device_event_tasks,
+                )
+                .await;
+            }
             BluetoothEvent::Command(cmd) => {
                 handle_command(cmd, &mut discovery_task).await;
+            }
+            // a failed registration at startup (e.g. bluetoothd wasn't up
+            // yet) is retried on every reconcile
+            BluetoothEvent::Reconcile if agent_handle.is_none() => {
+                ensure_agent(&session, &mut agent_handle).await;
+                update(
+                    BluetoothEvent::Reconcile,
+                    &event_tx,
+                    &mut device_event_tasks,
+                )
+                .await;
             }
             other => update(other, &event_tx, &mut device_event_tasks).await,
         }
     }
     tracing::warn!("bluetooth service has stopped receiving events");
+}
+
+/// Registers the pairing agent unless it's already registered.
+///
+/// If becoming the default agent fails (e.g. another agent holds that role),
+/// registration is retried as a non-default agent, which still handles the
+/// pairings this shell starts itself.
+async fn ensure_agent(session: &Session, handle: &mut Option<bluer::agent::AgentHandle>) {
+    if handle.is_some() {
+        return;
+    }
+
+    let default_agent = settings::get_config().bluetooth.default_agent;
+    let registered = match agent::register_agent(session, default_agent).await {
+        Err(e) if default_agent => {
+            tracing::warn!("couldn't become the default pairing agent, registering normally: {e}");
+            agent::register_agent(session, false).await
+        }
+        result => result,
+    };
+
+    match registered {
+        Ok(agent_handle) => {
+            tracing::info!("bluetooth pairing agent registered");
+            *handle = Some(agent_handle);
+        }
+        Err(e) => tracing::warn!("couldn't register bluetooth pairing agent: {e}"),
+    }
+}
+
+/// Sends [`BluetoothEvent::BluezRestarted`] whenever `org.bluez` gets a new
+/// owner.
+fn spawn_bluez_owner_watcher(event_tx: UnboundedSender<BluetoothEvent>) {
+    relm4::spawn(async move {
+        let result: anyhow::Result<()> = async {
+            let conn = zbus::Connection::system().await?;
+            let dbus = zbus::fdo::DBusProxy::new(&conn).await?;
+            let mut changes = dbus.receive_name_owner_changed().await?;
+            while let Some(change) = changes.next().await {
+                let args = change.args()?;
+                if args.name.as_str() == "org.bluez" && args.new_owner.is_some() {
+                    event_tx.send(BluetoothEvent::BluezRestarted)?;
+                }
+            }
+            Ok(())
+        }
+        .await;
+
+        if let Err(e) = result {
+            tracing::warn!("stopped watching for bluetoothd restarts: {e}");
+        }
+    });
 }
 
 /// Dispatches a single UI-issued command to its `bluer` handler, logging on
@@ -608,7 +688,8 @@ fn update_from_event(input: BluetoothEvent) {
         BluetoothEvent::Wake
         | BluetoothEvent::Reconcile
         | BluetoothEvent::Session(_)
-        | BluetoothEvent::Command(_) => {}
+        | BluetoothEvent::Command(_)
+        | BluetoothEvent::BluezRestarted => {}
         BluetoothEvent::Device(address, device_event) => {
             let Some(info) = state.devices.get_mut(&address) else {
                 tracing::debug!("property change for untracked device {address}, ignoring");
