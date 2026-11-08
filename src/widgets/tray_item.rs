@@ -19,6 +19,7 @@ pub struct TrayItem {
 }
 
 pub struct TrayItemWidgets {
+    button: gtk::Button,
     popover: gtk::PopoverMenu,
     action_group: gio::SimpleActionGroup,
 }
@@ -137,52 +138,7 @@ impl FactoryComponent for TrayItem {
         root.set_width_request(24);
         root.set_height_request(24);
 
-        // add status-specific CSS classes
-        match self.inner.status {
-            Status::Active => root.add_css_class("tray-active"),
-            Status::NeedsAttention => root.add_css_class("tray-needs-attention"),
-            _ => {} // default styling
-        }
-
-        let mut tooltip_text = if let Some(title) = &self.inner.title
-            && !title.is_empty()
-        {
-            String::from(title)
-        } else {
-            String::new()
-        };
-
-        // Create enhanced tooltip with more information
-        if let Some(tooltip) = &self.inner.tool_tip {
-            tooltip_text.push_str(&format!("\n{}", tooltip.description));
-        };
-        root.set_tooltip_text(Some(tooltip_text.trim_start()));
-
-        // Create image or label for the button
-        if let Some(icon_name) = &self.inner.icon_name
-            && !icon_name.is_empty()
-        {
-            let image = gtk::Image::from_icon_name(icon_name);
-            image.set_pixel_size(16);
-            image.set_halign(gtk::Align::Center);
-            image.set_valign(gtk::Align::Center);
-            root.set_child(Some(&image));
-        } else if let Some(pixmaps) = &self.inner.icon_pixmap {
-            if let Some(texture) = pixmap_to_texture(pixmaps) {
-                let image = gtk::Image::from_paintable(Some(&texture));
-                image.set_pixel_size(16);
-                image.set_halign(gtk::Align::Center);
-                image.set_valign(gtk::Align::Center);
-                root.set_child(Some(&image));
-            } else {
-                let label =
-                    gtk::Label::new(Some(&self.inner.id.chars().take(2).collect::<String>()));
-                root.set_child(Some(&label));
-            }
-        } else {
-            let label = gtk::Label::new(Some(&self.inner.id.chars().take(2).collect::<String>()));
-            root.set_child(Some(&label));
-        }
+        self.render_appearance(&root);
 
         // TODO: Left click - activate
         let address_clone = self.address.clone();
@@ -220,12 +176,15 @@ impl FactoryComponent for TrayItem {
         root.add_controller(middle_click_gesture);
 
         TrayItemWidgets {
+            button: root,
             popover,
             action_group,
         }
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, sender: FactorySender<Self>) {
+        self.render_appearance(&widgets.button);
+
         if let Some(ref menu) = self.menu
             && let Some(ref menu_path) = self.inner.menu
         {
@@ -240,6 +199,52 @@ impl FactoryComponent for TrayItem {
             widgets.action_group = new_action_group;
         } else {
             widgets.popover.set_menu_model(None::<&gio::Menu>);
+        }
+    }
+}
+
+impl TrayItem {
+    /// Applies the item's status, tooltip and icon to its button.
+    fn render_appearance(&self, button: &gtk::Button) {
+        button.remove_css_class("tray-active");
+        button.remove_css_class("tray-needs-attention");
+        match self.inner.status {
+            Status::Active => button.add_css_class("tray-active"),
+            Status::NeedsAttention => button.add_css_class("tray-needs-attention"),
+            _ => {} // default styling
+        }
+
+        let mut tooltip_text = self.inner.title.clone().unwrap_or_default();
+        if let Some(tooltip) = &self.inner.tool_tip {
+            tooltip_text.push_str(&format!("\n{}", tooltip.description));
+        }
+        button.set_tooltip_text(Some(tooltip_text.trim()));
+
+        let texture = self
+            .inner
+            .icon_pixmap
+            .as_deref()
+            .and_then(pixmap_to_texture);
+        let image = match (&self.inner.icon_name, texture) {
+            (Some(icon_name), _) if !icon_name.is_empty() => {
+                Some(gtk::Image::from_icon_name(icon_name))
+            }
+            (_, Some(texture)) => Some(gtk::Image::from_paintable(Some(&texture))),
+            _ => None,
+        };
+
+        match image {
+            Some(image) => {
+                image.set_pixel_size(16);
+                image.set_halign(gtk::Align::Center);
+                image.set_valign(gtk::Align::Center);
+                button.set_child(Some(&image));
+            }
+            // fall back to the item's initials
+            None => {
+                let initials: String = self.inner.id.chars().take(2).collect();
+                button.set_child(Some(&gtk::Label::new(Some(&initials))));
+            }
         }
     }
 }
