@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use bluer::{
-    Adapter, AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, DeviceProperty, Session,
+    AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, DeviceProperty, Session,
     SessionEvent,
 };
 use futures_lite::StreamExt;
@@ -444,6 +444,14 @@ async fn reinitialize_adapter(
     adapter_events_task: &mut Option<tokio::task::AbortHandle>,
     device_event_tasks: &mut HashMap<Address, tokio::task::AbortHandle>,
 ) {
+    // subscriptions from a previous adapter would keep forwarding stale events
+    if let Some(handle) = adapter_events_task.take() {
+        handle.abort();
+    }
+    for (_, handle) in device_event_tasks.drain() {
+        handle.abort();
+    }
+
     let Ok(adapter) = session.default_adapter().await.inspect_err(|e| {
         tracing::warn!("no bluetooth adapter currently available: {e}");
     }) else {
@@ -451,68 +459,45 @@ async fn reinitialize_adapter(
         return;
     };
 
-    let mut devices = HashMap::new();
-    if let Ok(addresses) = adapter.device_addresses().await {
-        for address in addresses {
-            let Ok(device) = adapter.device(address) else {
-                continue;
-            };
-            devices.insert(address, build_device_info(&device).await);
+    // subscribe before snapshotting so devices and changes that appear in
+    // between are delivered as events instead of being lost
+    match adapter.events().await {
+        Ok(mut adapter_events) => {
+            let event_tx = event_tx.clone();
+            let handle = relm4::spawn(async move {
+                while let Some(event) = adapter_events.next().await {
+                    event_tx
+                        .send(BluetoothEvent::Adapter(event))
+                        .unwrap_or_else(|e| {
+                            tracing::error!("couldn't send adapter bluetooth event: {e}")
+                        });
+                }
+                tracing::warn!("bluetooth service has stopped receiving adapter events");
+            });
+            *adapter_events_task = Some(handle.abort_handle());
         }
+        Err(e) => tracing::error!("couldn't subscribe to bluetooth adapter events: {e}"),
+    }
+
+    let mut devices = HashMap::new();
+    for address in adapter.device_addresses().await.unwrap_or_default() {
+        let Ok(device) = adapter.device(address) else {
+            continue;
+        };
+        if let Some(handle) = subscribe_device_events(address, device.clone(), event_tx).await {
+            device_event_tasks.insert(address, handle);
+        }
+        devices.insert(address, build_device_info(&device).await);
     }
 
     let state = BluetoothState {
         powered: adapter.is_powered().await.unwrap_or(false),
         devices,
         discovering: adapter.is_discovering().await.unwrap_or(false),
-        adapter: adapter.clone(),
+        adapter,
     };
 
     *BLUETOOTH_STATE.write() = Some(state);
-
-    match start_event_listening(adapter, event_tx).await {
-        Ok((new_adapter_events_task, new_device_event_tasks)) => {
-            *adapter_events_task = Some(new_adapter_events_task);
-            *device_event_tasks = new_device_event_tasks;
-        }
-        Err(e) => {
-            tracing::error!("failed to setup bluetooth monitoring: {e}");
-        }
-    }
-}
-
-async fn start_event_listening(
-    adapter: Adapter,
-    event_tx: &UnboundedSender<BluetoothEvent>,
-) -> anyhow::Result<(
-    tokio::task::AbortHandle,
-    HashMap<Address, tokio::task::AbortHandle>,
-)> {
-    // monitor adapter events
-    let mut adapter_events = adapter.events().await?;
-    let event_tx_clone = event_tx.clone();
-    let adapter_events_task = relm4::spawn(async move {
-        while let Some(event) = adapter_events.next().await {
-            event_tx_clone
-                .send(BluetoothEvent::Adapter(event))
-                .unwrap_or_else(|e| tracing::error!("couldn't send adapter bluetooth event: {e}"));
-        }
-        tracing::warn!("bluetooth service has stopped receiving adapter events");
-    })
-    .abort_handle();
-
-    // monitor existing devices for connection status changes
-    let mut device_event_tasks = HashMap::new();
-    let devices = adapter.device_addresses().await.unwrap_or_default();
-    for addr in devices {
-        if let Ok(device) = adapter.device(addr)
-            && let Some(handle) = subscribe_device_events(addr, device, event_tx).await
-        {
-            device_event_tasks.insert(addr, handle);
-        }
-    }
-
-    Ok((adapter_events_task, device_event_tasks))
 }
 
 async fn update(
@@ -573,21 +558,19 @@ async fn handle_device_added(
     let Ok(device) = adapter.device(address) else {
         return;
     };
-    let info = build_device_info(&device).await;
 
-    {
-        let mut guard = BLUETOOTH_STATE.write();
-        if let Some(ref mut state) = *guard {
-            state.devices.insert(address, info);
-        }
-    }
-
-    // replace any stale subscription for this address (e.g. it was
-    // previously removed and re-added) rather than leaking it
-    if let Some(handle) = subscribe_device_events(address, device, event_tx).await
+    // subscribe before fetching so a change in between isn't lost; replace
+    // any stale subscription for this address (e.g. it was previously
+    // removed and re-added) rather than leaking it
+    if let Some(handle) = subscribe_device_events(address, device.clone(), event_tx).await
         && let Some(old_handle) = device_event_tasks.insert(address, handle)
     {
         old_handle.abort();
+    }
+
+    let info = build_device_info(&device).await;
+    if let Some(ref mut state) = *BLUETOOTH_STATE.write() {
+        state.devices.insert(address, info);
     }
 }
 
