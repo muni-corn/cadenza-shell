@@ -11,6 +11,9 @@ pub struct ProgressTile {
     active: bool,
     /// Bumped on every activation so stale fade timers can be ignored.
     fade_generation: u64,
+    /// Whether a progress value has arrived since init; the first one is
+    /// the initial state, not a change worth highlighting.
+    received_progress: bool,
 }
 
 #[derive(Debug)]
@@ -67,6 +70,7 @@ impl Component for ProgressTile {
             attention: init.attention,
             active: false,
             fade_generation: 0,
+            received_progress: false,
         };
 
         // create container
@@ -111,10 +115,14 @@ impl Component for ProgressTile {
                 self.icon = icon;
             }
             ProgressTileMsg::SetProgress(progress) => {
+                // only highlight real changes, not repeats of the same value
+                // from unrelated updates
+                let changed = (progress - self.progress).abs() > f64::EPSILON;
                 self.progress = progress;
-
-                // trigger fade effect
-                self.activate(&sender);
+                if changed && self.received_progress {
+                    self.activate(&sender);
+                }
+                self.received_progress = true;
             }
         }
     }
