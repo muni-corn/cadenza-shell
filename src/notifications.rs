@@ -1,6 +1,7 @@
 pub mod card;
 pub mod daemon;
 pub mod fresh;
+mod hints;
 mod lifecycle;
 pub mod panel;
 pub mod types;
@@ -9,20 +10,13 @@ use std::{collections::HashMap, sync::OnceLock};
 
 use anyhow::Result;
 use relm4::SharedState;
-use serde::{Deserialize, Serialize};
 use tokio::sync::{broadcast, mpsc};
-use zbus::{
-    Connection,
-    zvariant::{
-        OwnedValue, Type,
-        as_value::{self, optional},
-    },
-};
+use zbus::Connection;
 
 use crate::notifications::{
     daemon::{NotificationsDaemon, NotificationsDaemonSignals},
     lifecycle::CloseReason,
-    types::{Notification, NotificationUrgency},
+    types::Notification,
 };
 
 /// Global snapshot of all current notifications.
@@ -100,42 +94,6 @@ pub fn invoke_action(id: u32, action_key: String) {
     if let Some(tx) = COMMAND_TX.get() {
         let _ = tx.send(NotificationCommand::InvokeAction { id, action_key });
     }
-}
-
-/// D-Bus hints passed with each `Notify` call.
-#[derive(Deserialize, Serialize, Type, Default)]
-#[zvariant(signature = "dict")]
-#[serde(default, rename_all = "kebab-case")]
-pub struct NotificationHints {
-    #[serde(with = "as_value")]
-    action_icons: bool,
-
-    #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
-    category: Option<String>,
-
-    #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
-    pub desktop_entry: Option<String>,
-
-    #[serde(with = "as_value")]
-    resident: bool,
-
-    #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
-    sound_file: Option<String>,
-
-    #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
-    sound_name: Option<String>,
-
-    #[serde(with = "as_value")]
-    suppress_sound: bool,
-
-    #[serde(with = "as_value")]
-    transient: bool,
-
-    #[serde(with = "optional", skip_serializing_if = "Option::is_none")]
-    pub urgency: Option<NotificationUrgency>,
-
-    #[serde(flatten)]
-    others: HashMap<String, OwnedValue>,
 }
 
 /// Runs the notification service.

@@ -165,7 +165,6 @@ dependencies = [
  "rsass",
  "serde",
  "serde_json",
- "serde_repr",
  "system-tray",
  "tokio",
  "tracing",

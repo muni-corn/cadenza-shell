@@ -1,8 +1,5 @@
 use std::time::Duration;
 
-use serde_repr::{Deserialize_repr, Serialize_repr};
-use zbus::zvariant::Type;
-
 #[derive(Debug, Clone)]
 pub struct Notification {
     pub id: u32,
@@ -41,15 +38,23 @@ impl Notification {
     }
 }
 
-#[derive(Serialize_repr, Deserialize_repr, PartialEq, Default, Debug, Type, Clone, Copy)]
-#[repr(u8)]
+#[derive(PartialEq, Eq, Default, Debug, Clone, Copy)]
 pub enum NotificationUrgency {
-    Low = 0,
-
+    Low,
     #[default]
-    Normal = 1,
+    Normal,
+    Critical,
+}
 
-    Critical = 2,
+impl From<u8> for NotificationUrgency {
+    /// Maps the spec's urgency levels, treating anything unknown as normal.
+    fn from(level: u8) -> Self {
+        match level {
+            0 => Self::Low,
+            2 => Self::Critical,
+            _ => Self::Normal,
+        }
+    }
 }
 
 #[cfg(test)]

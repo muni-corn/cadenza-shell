@@ -1,12 +1,14 @@
 use std::{
+    collections::HashMap,
     sync::atomic::{AtomicU32, Ordering},
     time::{Duration, SystemTime},
 };
 
-use zbus::{interface, object_server::SignalEmitter};
+use zbus::{interface, object_server::SignalEmitter, zvariant::OwnedValue};
 
 use crate::notifications::{
-    NOTIFICATIONS_STATE, NotificationEvent, NotificationHints, event_tx,
+    NOTIFICATIONS_STATE, NotificationEvent, event_tx,
+    hints::Hints,
     lifecycle::{self, CloseReason},
     types::{Notification, NotificationUrgency},
 };
@@ -30,7 +32,7 @@ impl NotificationsDaemon {
         summary: String,
         body: String,
         actions: Vec<String>,
-        hints: NotificationHints,
+        hints: HashMap<String, OwnedValue>,
         expire_timeout: i32,
     ) -> u32 {
         let id = if replaces_id != 0 {
@@ -40,7 +42,8 @@ impl NotificationsDaemon {
         };
 
         let is_replacement = replaces_id != 0;
-        let urgency = hints.urgency.unwrap_or(NotificationUrgency::Normal);
+        let hints = Hints::from(hints);
+        let urgency = hints.urgency();
 
         let timestamp = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -68,7 +71,7 @@ impl NotificationsDaemon {
             id,
             app_name,
             app_icon,
-            desktop_entry: hints.desktop_entry.unwrap_or_default(),
+            desktop_entry: hints.string("desktop-entry").unwrap_or_default(),
             image: String::new(), // TODO: Extract from hints if available
             summary,
             body,
