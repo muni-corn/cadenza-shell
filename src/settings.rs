@@ -1,9 +1,6 @@
-// temporary until we figure things out
-#![allow(dead_code)]
+use std::{fs, path::PathBuf, sync::OnceLock};
 
-use std::{fs, path::PathBuf};
-
-use anyhow::Result;
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 
 #[derive(Default, Debug, Clone, Serialize, Deserialize)]
@@ -182,159 +179,54 @@ impl Default for BluetoothConfig {
     }
 }
 
-#[derive(Debug)]
-pub struct ConfigManager {
-    config: CadenzaShellConfig,
-    config_path: PathBuf,
+/// Global configuration, loaded once on first access.
+static CONFIG: OnceLock<CadenzaShellConfig> = OnceLock::new();
+
+/// Loads the configuration so later reads don't hit the disk.
+pub fn init() {
+    get_config();
 }
 
-impl ConfigManager {
-    /// Create a new ConfigManager instance
-    pub fn new() -> Result<Self> {
-        let config_path = Self::get_config_path();
-        let config = Self::load_config(&config_path)?;
-
-        Ok(Self {
-            config,
-            config_path,
-        })
-    }
-
-    /// Load configuration from file, creating default if it doesn't exist.
-    pub fn load_config(path: &PathBuf) -> Result<CadenzaShellConfig> {
-        if path.exists() {
-            let content = fs::read_to_string(path)?;
-            let config: CadenzaShellConfig = serde_json::from_str(&content)?;
-            tracing::info!("loaded configuration from: {}", path.display());
-            Ok(config)
-        } else {
-            let default_config = CadenzaShellConfig::default();
-
-            // create config directory if it doesn't exist
-            if let Some(parent) = path.parent() {
-                fs::create_dir_all(parent)?;
-            }
-
-            // write default config
-            let content = serde_json::to_string_pretty(&default_config)?;
-            fs::write(path, content)?;
-            tracing::info!("created default configuration at: {}", path.display());
-
-            Ok(default_config)
-        }
-    }
-
-    /// Get the configuration file path
-    pub fn get_config_path() -> PathBuf {
-        // use XDG config directory or fallback to ~/.config
-        let config_dir = if let Ok(xdg_config) = std::env::var("XDG_CONFIG_HOME") {
-            PathBuf::from(xdg_config)
-        } else if let Ok(home) = std::env::var("HOME") {
-            PathBuf::from(home).join(".config")
-        } else {
-            PathBuf::from("./config") // fallback for testing
-        };
-
-        config_dir.join("cadenza-shell").join("config.json")
-    }
-
-    /// Get the current configuration
-    pub fn config(&self) -> &CadenzaShellConfig {
-        &self.config
-    }
-
-    /// Update configuration and save to file
-    pub fn update_config(&mut self, config: CadenzaShellConfig) -> Result<()> {
-        self.config = config;
-        self.save()?;
-        Ok(())
-    }
-
-    /// Save configuration to file
-    pub fn save(&self) -> Result<()> {
-        let content = serde_json::to_string_pretty(&self.config)?;
-        fs::write(&self.config_path, content)?;
-        tracing::info!("saved configuration to: {}", self.config_path.display());
-        Ok(())
-    }
-
-    /// Reload configuration from file
-    pub fn reload(&mut self) -> Result<()> {
-        self.config = Self::load_config(&self.config_path)?;
-        tracing::info!("reloaded configuration from file");
-        Ok(())
-    }
-
-    /// Reset configuration to defaults
-    pub fn reset_to_defaults(&mut self) -> Result<()> {
-        self.config = CadenzaShellConfig::default();
-        self.save()?;
-        tracing::info!("reset configuration to defaults");
-        Ok(())
-    }
-}
-
-use std::sync::{Mutex, OnceLock};
-
-/// Global configuration instance
-static CONFIG: OnceLock<Mutex<CadenzaShellConfig>> = OnceLock::new();
-
-/// Initialize the global configuration manager
-pub fn init() -> Result<()> {
-    let mut config = match ConfigManager::new() {
-        Ok(manager) => manager.config,
-        Err(e) => {
-            tracing::error!("failed to load configuration: {}", e);
-            tracing::info!("using default configuration");
+/// Returns the global configuration, loading it on first use.
+pub fn get_config() -> &'static CadenzaShellConfig {
+    CONFIG.get_or_init(|| {
+        let mut config = load().unwrap_or_else(|e| {
+            tracing::error!("couldn't load configuration, using defaults: {e:#}");
             CadenzaShellConfig::default()
-        }
-    };
-    config.clamp_intervals();
-
-    CONFIG
-        .set(Mutex::new(config))
-        .map_err(|_| anyhow::anyhow!("configuration already initialized"))?;
-
-    Ok(())
+        });
+        config.clamp_intervals();
+        config
+    })
 }
 
-/// Get a copy of the current configuration
-pub fn get_config() -> CadenzaShellConfig {
-    CONFIG
-        .get()
-        .and_then(|config| config.lock().ok())
-        .map(|config| config.clone())
-        .unwrap_or_default()
-}
+/// Reads the config file, writing a default one first if none exists.
+fn load() -> Result<CadenzaShellConfig> {
+    let path = config_path();
 
-/// Update the global configuration
-pub fn update_config(new_config: CadenzaShellConfig) -> Result<()> {
-    if let Some(config_mutex) = CONFIG.get()
-        && let Ok(mut config) = config_mutex.lock()
-    {
-        *config = new_config.clone();
-
-        // also save to file
-        let config_path = ConfigManager::get_config_path();
-        let content = serde_json::to_string_pretty(&new_config)?;
-        fs::write(&config_path, content)?;
-        tracing::info!("updated and saved configuration");
+    if path.exists() {
+        let content = fs::read_to_string(&path)?;
+        let config = serde_json::from_str(&content)
+            .with_context(|| format!("couldn't parse {}", path.display()))?;
+        tracing::info!("loaded configuration from: {}", path.display());
+        return Ok(config);
     }
-    Ok(())
+
+    let config = CadenzaShellConfig::default();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&path, serde_json::to_string_pretty(&config)?)?;
+    tracing::info!("created default configuration at: {}", path.display());
+
+    Ok(config)
 }
 
-/// Reload the global configuration from file
-pub fn reload_config() -> Result<()> {
-    let config_path = ConfigManager::get_config_path();
-    let reloaded_config = ConfigManager::load_config(&config_path)?;
-
-    if let Some(config_mutex) = CONFIG.get()
-        && let Ok(mut config) = config_mutex.lock()
-    {
-        *config = reloaded_config;
-        tracing::info!("reloaded configuration from file");
-    }
-    Ok(())
+/// Returns `$XDG_CONFIG_HOME/cadenza-shell/config.json`.
+fn config_path() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("./config"))
+        .join("cadenza-shell")
+        .join("config.json")
 }
 
 #[cfg(test)]

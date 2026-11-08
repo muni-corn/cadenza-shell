@@ -45,9 +45,7 @@ fn main() -> glib::ExitCode {
     relm4_icons::initialize_icons(icon_names::GRESOURCE_BYTES, icon_names::RESOURCE_PREFIX);
 
     // initialize configuration system
-    if let Err(e) = settings::init() {
-        tracing::error!("failed to initialize settings: {}", e);
-    }
+    settings::init();
 
     // set_global_css needs a display, so gtk has to be up first
     if let Err(e) = gtk4::init() {
