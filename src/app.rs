@@ -91,11 +91,13 @@ impl AsyncComponent for CadenzaShellModel {
             .ok()
             .map(|c| Arc::new(Mutex::new(c)));
 
-        // start sleep monitor (must be first so other services can subscribe)
+        // every service channel is created lazily on first use, so the
+        // order services start in doesn't matter
+
+        // start sleep monitor
         sender.command(|_, shutdown| shutdown.register(run_sleep_monitor()).drop_on_shutdown());
 
-        // start notifications service (registers the D-Bus daemon; must be
-        // started before any UI component subscribes or issues commands)
+        // start notifications service (registers the D-Bus daemon)
         sender.command(|_, shutdown| {
             shutdown
                 .register(run_notifications_service())
@@ -103,8 +105,6 @@ impl AsyncComponent for CadenzaShellModel {
         });
 
         // subscribe to notification events and forward them into update()
-        // note: run_notifications_service initializes EVENT_TX eagerly, so
-        // subscribe_events() is safe to call from here
         sender.command(|out, shutdown| {
             shutdown
                 .register(async move {

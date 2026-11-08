@@ -144,8 +144,7 @@ pub struct NotificationHints {
 /// [`NOTIFICATIONS_STATE`] and broadcasts [`NotificationEvent`]s to every
 /// subscriber obtained via [`subscribe_events`].
 ///
-/// Must be started exactly once, from `app.rs`, before any UI component
-/// subscribes to the state or issues commands.
+/// Must be started exactly once, from `app.rs`.
 #[tracing::instrument(level = "debug", skip_all)]
 pub async fn run_notifications_service() {
     // initialize the broadcast sender so subscribers can call
