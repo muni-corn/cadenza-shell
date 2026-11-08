@@ -693,14 +693,28 @@ fn build_security_settings(security: ApSecurity, password: &str) -> HashMap<Stri
             settings.insert("psk".to_string(), Value::new(password.to_string()));
         }
         ApSecurity::Wep => {
-            // NM_WEP_KEY_TYPE_KEY; wep-key0 holds the passphrase/hex key
-            settings.insert("wep-key-type".to_string(), Value::new(1u32));
+            settings.insert(
+                "wep-key-type".to_string(),
+                Value::new(wep_key_type(password)),
+            );
             settings.insert("wep-key0".to_string(), Value::new(password.to_string()));
         }
         ApSecurity::Open | ApSecurity::Enterprise => {}
     }
 
     settings
+}
+
+/// Picks the `NMWepKeyType` for a WEP password: raw keys are 5 or 13 ASCII
+/// characters or 10 or 26 hex digits (`KEY`, 1); anything else is hashed as
+/// a passphrase (`PASSPHRASE`, 2).
+fn wep_key_type(password: &str) -> u32 {
+    let is_hex = password.chars().all(|c| c.is_ascii_hexdigit());
+    match password.len() {
+        5 | 13 => 1,
+        10 | 26 if is_hex => 1,
+        _ => 2,
+    }
 }
 
 /// Disconnects the wifi device, leaving any wired or vpn connection alone.
@@ -1225,4 +1239,22 @@ async fn subscribe_active_ap(
     }
 
     tracing::debug!("active access point subscription for device {device_path} ended");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn raw_wep_keys_are_detected() {
+        assert_eq!(wep_key_type("abcde"), 1);
+        assert_eq!(wep_key_type("0123456789"), 1);
+        assert_eq!(wep_key_type(&"a1".repeat(13)), 1);
+    }
+
+    #[test]
+    fn other_wep_passwords_are_passphrases() {
+        assert_eq!(wep_key_type("a longer passphrase"), 2);
+        assert_eq!(wep_key_type("not hex at"), 2);
+    }
 }

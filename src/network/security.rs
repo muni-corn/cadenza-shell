@@ -24,8 +24,9 @@ pub enum ApSecurity {
     /// WPA/WPA2 pre-shared key. Password-only; supported by the inline
     /// connect flow.
     Psk,
-    /// WPA3 Simultaneous Authentication of Equals. Password-only; supported
-    /// by the inline connect flow.
+    /// WPA3-only Simultaneous Authentication of Equals. Password-only;
+    /// supported by the inline connect flow. Transition networks that also
+    /// accept PSK are classified as [`ApSecurity::Psk`].
     Sae,
     /// 802.1X or WPA3-Enterprise. Requires more than a single password (a
     /// username, certificate, or RADIUS-backed exchange), which the inline
@@ -43,12 +44,14 @@ impl ApSecurity {
 
         let combined = wpa_flags | rsn_flags;
 
-        if combined & KEY_MGMT_SAE != 0 {
+        // wpa2/wpa3 transition networks advertise both psk and sae; psk works
+        // on every card, while forcing sae fails on hardware without it
+        if combined & KEY_MGMT_PSK != 0 {
+            Self::Psk
+        } else if combined & KEY_MGMT_SAE != 0 {
             Self::Sae
         } else if combined & (KEY_MGMT_802_1X | KEY_MGMT_EAP_SUITE_B_192) != 0 {
             Self::Enterprise
-        } else if combined & KEY_MGMT_PSK != 0 {
-            Self::Psk
         } else if flags & ap_flags::PRIVACY != 0 {
             Self::Wep
         } else {
@@ -122,13 +125,21 @@ mod tests {
     }
 
     #[test]
-    fn wpa3_sae_takes_priority_over_psk_in_transition_mode() {
+    fn transition_mode_networks_use_psk() {
         assert_eq!(
             ApSecurity::from_flags(
                 ap_flags::PRIVACY,
                 ap_security_flags::KEY_MGMT_PSK,
                 ap_security_flags::KEY_MGMT_SAE
             ),
+            ApSecurity::Psk
+        );
+    }
+
+    #[test]
+    fn wpa3_only_networks_use_sae() {
+        assert_eq!(
+            ApSecurity::from_flags(ap_flags::PRIVACY, 0, ap_security_flags::KEY_MGMT_SAE),
             ApSecurity::Sae
         );
     }
