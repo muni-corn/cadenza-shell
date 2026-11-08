@@ -42,21 +42,7 @@ pub struct NotificationsState {
 #[derive(Debug, Clone)]
 pub enum NotificationEvent {
     Received(Notification),
-    Closed {
-        id: u32,
-        // reason codes defined by the freedesktop spec; retained even if
-        // consumers currently pattern-match with `..`
-        #[allow(dead_code)]
-        reason: u32,
-    },
-    ActionInvoked {
-        // retained for future consumers; currently matched with `..`
-        #[allow(dead_code)]
-        id: u32,
-        #[allow(dead_code)]
-        action_key: String,
-    },
-    AllCleared,
+    Closed { id: u32 },
 }
 
 // capacity of 64 events; lagging receivers miss old events but never block
@@ -97,7 +83,7 @@ pub fn dismiss(id: u32) {
 
 /// Clear all notifications.
 ///
-/// Removes all notifications from state and emits an `AllCleared` event.
+/// Removes all notifications from state.
 /// Has no effect if the service has not been started.
 pub fn clear_all() {
     if let Some(tx) = COMMAND_TX.get() {
@@ -217,7 +203,7 @@ pub async fn run_notifications_service() {
                 let remaining = NOTIFICATIONS_STATE.read().notifications.len();
                 tracing::debug!(notification.id = id, remaining, "notification dismissed");
 
-                let _ = event_tx().send(NotificationEvent::Closed { id, reason: 2 });
+                let _ = event_tx().send(NotificationEvent::Closed { id });
 
                 // also emit the D-Bus signal so external clients are notified
                 if let Err(e) = interface_ref.notification_closed(id, 2).await {
@@ -229,16 +215,9 @@ pub async fn run_notifications_service() {
 
                 NOTIFICATIONS_STATE.write().notifications.clear();
                 tracing::debug!("all notifications cleared from state");
-
-                let _ = event_tx().send(NotificationEvent::AllCleared);
             }
             NotificationCommand::InvokeAction { id, action_key } => {
                 tracing::trace!(notification.id = id, %action_key, "invoke_action command received");
-
-                let _ = event_tx().send(NotificationEvent::ActionInvoked {
-                    id,
-                    action_key: action_key.clone(),
-                });
 
                 if let Err(e) = interface_ref.action_invoked(id, action_key).await {
                     tracing::error!(notification.id = id, error = %e, "couldn't emit action_invoked signal");
@@ -253,10 +232,7 @@ async fn initialize_notifications_daemon() -> Result<Connection> {
     tracing::debug!("building D-Bus connection for org.freedesktop.Notifications");
     Ok(zbus::connection::Builder::session()?
         .name("org.freedesktop.Notifications")?
-        .serve_at(
-            "/org/freedesktop/Notifications",
-            NotificationsDaemon::new(event_tx().clone()),
-        )?
+        .serve_at("/org/freedesktop/Notifications", NotificationsDaemon)?
         .build()
         .await?)
 }

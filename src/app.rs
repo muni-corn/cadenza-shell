@@ -280,7 +280,7 @@ impl AsyncComponent for CadenzaShellModel {
                             .controller
                             .emit(FreshNotificationsMsg::NewNotification(notification));
                     }
-                    NotificationEvent::Closed { id, .. } => {
+                    NotificationEvent::Closed { id } => {
                         tracing::debug!(
                             notification.id = id,
                             "app forwarding notification closed to fresh panel"
@@ -289,9 +289,6 @@ impl AsyncComponent for CadenzaShellModel {
                             .controller
                             .emit(FreshNotificationsMsg::RemoveNotification(id));
                     }
-                    // AllCleared and ActionInvoked don't require fresh panel
-                    // updates; individual Closed events will drain it
-                    NotificationEvent::AllCleared | NotificationEvent::ActionInvoked { .. } => {}
                 }
             }
             CadenzaShellMsg::FreshNotificationDismissed(id) => {

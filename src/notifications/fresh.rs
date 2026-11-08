@@ -12,7 +12,6 @@ use crate::notifications::{
 
 #[derive(Debug)]
 pub struct FreshNotifications {
-    visible: bool,
     cards: FactoryVecDeque<NotificationCard>,
     monitor: Monitor,
     /// Generation of the pending auto-dismiss timer for each popup.
@@ -46,7 +45,7 @@ impl Component for FreshNotifications {
         #[root]
         window = gtk4::Window {
             #[watch]
-            set_visible: model.visible && !model.cards.is_empty(),
+            set_visible: !model.cards.is_empty(),
 
             #[local_ref]
             notifications_container -> gtk4::Box {
@@ -74,7 +73,6 @@ impl Component for FreshNotifications {
             });
 
         let model = FreshNotifications {
-            visible: true,
             cards,
             monitor,
             auto_dismiss_timeouts: HashMap::new(),

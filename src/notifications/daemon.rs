@@ -3,11 +3,10 @@ use std::{
     time::SystemTime,
 };
 
-use tokio::sync::broadcast;
 use zbus::{interface, object_server::SignalEmitter};
 
 use crate::notifications::{
-    NOTIFICATIONS_STATE, NotificationEvent, NotificationHints,
+    NOTIFICATIONS_STATE, NotificationEvent, NotificationHints, event_tx,
     types::{Notification, NotificationUrgency},
 };
 
@@ -15,9 +14,7 @@ static NOTIFICATION_ID: AtomicU32 = AtomicU32::new(1);
 
 /// Implements https://specifications.freedesktop.org/notification-spec/latest/protocol.html.
 #[derive(Debug)]
-pub struct NotificationsDaemon {
-    event_tx: broadcast::Sender<NotificationEvent>,
-}
+pub struct NotificationsDaemon;
 
 #[interface(name = "org.freedesktop.Notifications")]
 impl NotificationsDaemon {
@@ -34,7 +31,6 @@ impl NotificationsDaemon {
         actions: Vec<String>,
         hints: NotificationHints,
         expire_timeout: i32,
-        #[zbus(signal_emitter)] _emitter: SignalEmitter<'_>,
     ) -> u32 {
         let id = if replaces_id != 0 {
             replaces_id
@@ -56,20 +52,6 @@ impl NotificationsDaemon {
             evens.zip(odds).collect::<Vec<_>>()
         };
 
-        let notification = Notification {
-            id,
-            app_name: app_name.clone(),
-            app_icon: app_icon.clone(),
-            desktop_entry: hints.desktop_entry.unwrap_or_default(),
-            image: String::new(), // TODO: Extract from hints if available
-            summary: summary.clone(),
-            body: body.clone(),
-            urgency,
-            timeout: expire_timeout,
-            timestamp,
-            actions: actions.clone(),
-        };
-
         tracing::info!(
             notification.id = id,
             notification.app = %app_name,
@@ -81,6 +63,20 @@ impl NotificationsDaemon {
             "notify accepted"
         );
 
+        let notification = Notification {
+            id,
+            app_name,
+            app_icon,
+            desktop_entry: hints.desktop_entry.unwrap_or_default(),
+            image: String::new(), // TODO: Extract from hints if available
+            summary,
+            body,
+            urgency,
+            timeout: expire_timeout,
+            timestamp,
+            actions,
+        };
+
         // write to the global state
         NOTIFICATIONS_STATE
             .write()
@@ -88,9 +84,7 @@ impl NotificationsDaemon {
             .insert(id, notification.clone());
 
         // broadcast the event to all subscribers
-        let _ = self
-            .event_tx
-            .send(NotificationEvent::Received(notification.clone()));
+        let _ = event_tx().send(NotificationEvent::Received(notification));
 
         // handle timeout — auto-close non-persistent notifications
         if expire_timeout > 0 {
@@ -99,12 +93,11 @@ impl NotificationsDaemon {
                 expire_timeout,
                 "scheduling auto-close timer"
             );
-            let event_tx = self.event_tx.clone();
             relm4::spawn(async move {
                 tokio::time::sleep(tokio::time::Duration::from_millis(expire_timeout as u64)).await;
                 NOTIFICATIONS_STATE.write().notifications.remove(&id);
                 tracing::debug!(notification.id = id, "auto-close timer fired");
-                let _ = event_tx.send(NotificationEvent::Closed { id, reason: 1 });
+                let _ = event_tx().send(NotificationEvent::Closed { id });
             });
         }
 
@@ -128,9 +121,7 @@ impl NotificationsDaemon {
             tracing::error!(notification.id = id, error = %e, "failed to emit notification_closed signal");
         }
 
-        let _ = self
-            .event_tx
-            .send(NotificationEvent::Closed { id, reason: 2 });
+        let _ = event_tx().send(NotificationEvent::Closed { id });
     }
 
     async fn get_capabilities(&self) -> Vec<String> {
@@ -173,11 +164,4 @@ impl NotificationsDaemon {
         id: u32,
         action_key: String,
     ) -> zbus::Result<()>;
-}
-
-impl NotificationsDaemon {
-    /// Creates a new daemon that broadcasts events onto `event_tx`.
-    pub fn new(event_tx: broadcast::Sender<NotificationEvent>) -> Self {
-        Self { event_tx }
-    }
 }
