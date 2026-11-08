@@ -11,12 +11,17 @@ use crate::{
         DISPLAY_BRIGHTNESS, FEW_CLOUDS, FOG, MOON, MOON_CLOUD, RAIN, RAINDROPS, ROUND_CLOUD, SNOW,
         SNOWFLAKE, STORM,
     },
+    sleep_monitor,
     utils::{backoff::Backoff, shared_state::set_if_changed},
     weather::types::{WeatherState, WttrReport},
 };
 
 /// The global weather state that can be subscribed to.
 pub static WEATHER_STATE: SharedState<Option<WeatherState>> = SharedState::new();
+
+/// How long to wait after resuming before fetching, so the network has
+/// reconnected.
+const WAKE_SETTLE_DELAY: Duration = Duration::from_secs(5);
 
 /// How often to refresh the weather after a successful fetch.
 const REFRESH_INTERVAL: Duration = Duration::from_secs(10 * 60);
@@ -40,6 +45,7 @@ pub async fn start_weather_polling() {
     };
 
     let mut backoff = Backoff::new(Duration::from_secs(1), Duration::from_secs(5 * 60));
+    let mut wake = sleep_monitor::subscribe_wake();
     loop {
         let wait = match fetch_wttr(&client).await {
             Ok(weather) => {
@@ -52,7 +58,15 @@ pub async fn start_weather_polling() {
                 backoff.next()
             }
         };
-        sleep(wait).await;
+
+        // timers pause during suspend, so refetch soon after waking
+        tokio::select! {
+            () = sleep(wait) => {}
+            Ok(()) = wake.recv() => {
+                // give the network a moment to come back up
+                sleep(WAKE_SETTLE_DELAY).await;
+            }
+        }
     }
 }
 
