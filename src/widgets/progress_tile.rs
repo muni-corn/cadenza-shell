@@ -1,6 +1,3 @@
-// temporary until we figure things out
-#![allow(dead_code)]
-
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
@@ -27,11 +24,6 @@ pub enum ProgressTileMsg {
 }
 
 #[derive(Debug)]
-pub enum ProgressTileOutput {
-    Clicked,
-}
-
-#[derive(Debug)]
 pub struct ProgressTileWidgets {
     icon: gtk::Image,
     progress_bar: gtk::ProgressBar,
@@ -41,7 +33,6 @@ pub struct ProgressTileInit {
     pub icon_name: Option<String>,
     pub progress: f64,
     pub attention: Attention,
-    pub extra_classes: Vec<String>,
 }
 
 impl Default for ProgressTileInit {
@@ -50,7 +41,6 @@ impl Default for ProgressTileInit {
             icon_name: None,
             progress: 0.0,
             attention: Attention::Normal,
-            extra_classes: Vec::new(),
         }
     }
 }
@@ -62,7 +52,7 @@ impl Component for ProgressTile {
     type CommandOutput = u64;
     type Init = ProgressTileInit;
     type Input = ProgressTileMsg;
-    type Output = ProgressTileOutput;
+    type Output = ();
     type Root = gtk::Button;
     type Widgets = ProgressTileWidgets;
 

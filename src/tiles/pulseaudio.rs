@@ -4,7 +4,7 @@ use relm4::prelude::*;
 use crate::{
     pulseaudio::{PulseAudioData, VOLUME_STATE},
     utils::icons::{VOLUME_ICONS, VOLUME_MUTED, VOLUME_ZERO, percentage_to_icon_from_list},
-    widgets::progress_tile::{ProgressTile, ProgressTileInit, ProgressTileMsg, ProgressTileOutput},
+    widgets::progress_tile::{ProgressTile, ProgressTileInit, ProgressTileMsg},
 };
 
 #[derive(Debug)]
@@ -14,7 +14,6 @@ pub struct PulseAudioTile {
 
 #[derive(Debug)]
 pub enum PulseAudioTileMsg {
-    TileClicked,
     Update,
 }
 
@@ -37,11 +36,8 @@ impl SimpleComponent for PulseAudioTile {
                 icon_name: None,
                 progress: 0.0,
                 attention: super::Attention::Dim,
-                ..Default::default()
             })
-            .forward(sender.input_sender(), |output| match output {
-                ProgressTileOutput::Clicked => PulseAudioTileMsg::TileClicked,
-            });
+            .detach();
 
         root.append(progress_tile.widget());
 
