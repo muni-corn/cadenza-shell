@@ -53,6 +53,10 @@ pub enum NetworkMenuMsg {
 pub struct NetworkMenuWidgets {
     wifi_icon: gtk::Image,
     wifi_switch: gtk::Switch,
+    wifi_switch_handler: glib::SignalHandlerId,
+    /// The `wifi_enabled` value last pushed into the switch, so it's only
+    /// resynced when the real state changes rather than after every message.
+    synced_wifi_enabled: bool,
     ssid_label: gtk::Label,
     connectivity_label: gtk::Label,
     connection_state_label: gtk::Label,
@@ -164,7 +168,7 @@ impl SimpleComponent for NetworkMenu {
             .valign(gtk::Align::End)
             .build();
 
-        wifi_switch.connect_state_set({
+        let wifi_switch_handler = wifi_switch.connect_state_set({
             let sender = sender.clone();
             move |_, state| {
                 sender.input(NetworkMenuMsg::ToggleWifi(state));
@@ -331,6 +335,8 @@ impl SimpleComponent for NetworkMenu {
         let widgets = NetworkMenuWidgets {
             wifi_icon,
             wifi_switch,
+            wifi_switch_handler,
+            synced_wifi_enabled: model.network_state.wifi_enabled,
             ssid_label,
             connectivity_label,
             connection_state_label,
@@ -442,9 +448,20 @@ impl SimpleComponent for NetworkMenu {
         widgets
             .wifi_icon
             .set_icon_name(Some(get_icon(&self.network_state)));
-        widgets
-            .wifi_switch
-            .set_active(self.network_state.wifi_enabled);
+
+        // set_active emits state-set, which would send ToggleWifi again
+        if widgets.synced_wifi_enabled != self.network_state.wifi_enabled {
+            widgets.synced_wifi_enabled = self.network_state.wifi_enabled;
+            widgets
+                .wifi_switch
+                .block_signal(&widgets.wifi_switch_handler);
+            widgets
+                .wifi_switch
+                .set_active(self.network_state.wifi_enabled);
+            widgets
+                .wifi_switch
+                .unblock_signal(&widgets.wifi_switch_handler);
+        }
 
         let ssid = self.network_state.wifi_ssid();
         widgets.ssid_label.set_visible(ssid.is_some());
