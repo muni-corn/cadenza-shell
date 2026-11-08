@@ -14,6 +14,7 @@ use crate::{
         card::{NotificationCard, NotificationCardOutput},
         types::Notification,
     },
+    settings,
 };
 
 #[derive(Debug)]
@@ -113,7 +114,9 @@ impl SimpleComponent for ActionPanel {
                 .vexpand(true)
                 .visible(true)
                 .build(),
-            clock: AnalogClock::builder().launch(32.0).detach(),
+            clock: AnalogClock::builder()
+                .launch(settings::get_config().tiles.analog_clock_radius)
+                .detach(),
             time_label: gtk4::Label::builder()
                 .label(format_time())
                 .css_classes(["big-clock"])

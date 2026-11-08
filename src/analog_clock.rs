@@ -1,6 +1,3 @@
-// temporary until we figure things out
-#![allow(dead_code)]
-
 use std::{cell::Cell, f64::consts::PI};
 
 use chrono::Timelike;
@@ -11,8 +8,6 @@ use relm4::{
     gtk::DrawingArea,
 };
 
-use crate::settings;
-
 /// Minimum time between redraws, in microseconds of frame clock time.
 const REDRAW_INTERVAL_US: i64 = 100_000;
 
@@ -21,13 +16,11 @@ pub struct AnalogClock {
     radius: f64,
 }
 
-#[derive(Debug)]
-pub enum AnalogClockMsg {}
-
 #[relm4::component(pub)]
 impl SimpleComponent for AnalogClock {
+    /// Radius of the clock face in pixels.
     type Init = f64;
-    type Input = AnalogClockMsg;
+    type Input = ();
     type Output = ();
 
     view! {
@@ -116,14 +109,10 @@ impl SimpleComponent for AnalogClock {
     }
 
     fn init(
-        _radius: Self::Init,
+        radius: Self::Init,
         root: Self::Root,
         _sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // Use configuration instead of hardcoded radius
-        let config = settings::get_config();
-        let radius = config.tiles.analog_clock_radius;
-
         let model = AnalogClock { radius };
 
         let widgets = view_output!();
@@ -144,9 +133,5 @@ impl SimpleComponent for AnalogClock {
             });
 
         ComponentParts { model, widgets }
-    }
-
-    fn update(&mut self, _message: Self::Input, _sender: ComponentSender<Self>) {
-        // No messages to handle - drawing updates happen via timer
     }
 }
