@@ -365,6 +365,12 @@ async fn handle_set_wifi_enabled(conn: &zbus::Connection, enabled: bool) -> anyh
 /// results. Fresh results are published once `LastScan` advances (see
 /// [`ensure_scan_watcher`]).
 async fn handle_scan(conn: &zbus::Connection) -> anyhow::Result<()> {
+    // NetworkManager rejects scans while the radio is off
+    if !NETWORK_STATE.read().wifi_enabled {
+        tracing::debug!("wifi is disabled, skipping scan");
+        return Ok(());
+    }
+
     WIFI_SCAN_STATE.write().scanning = true;
     let result = scan_and_refresh(conn).await;
 
@@ -383,11 +389,8 @@ async fn scan_and_refresh(conn: &zbus::Connection) -> anyhow::Result<()> {
         .build()
         .await?;
 
+    // the caller logs a failed request, so only the refresh is logged here
     let scan_result = wifi_proxy.request_scan(HashMap::new()).await;
-
-    if let Err(e) = &scan_result {
-        tracing::warn!("RequestScan failed: {e}");
-    }
 
     if let Err(e) = refresh_access_points(conn, &device_path).await {
         tracing::warn!("couldn't refresh access points after scan request: {e}");

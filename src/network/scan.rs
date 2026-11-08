@@ -119,7 +119,7 @@ async fn fetch_saved_wifi_connections(
 
 /// Groups raw per-BSSID readings by SSID (keeping only the strongest signal
 /// for each), attaches saved status, and sorts by descending signal
-/// strength.
+/// strength, then by name.
 fn dedupe_and_sort(
     readings: Vec<RawApReading>,
     saved: &HashMap<String, OwnedObjectPath>,
@@ -146,7 +146,8 @@ fn dedupe_and_sort(
         })
         .collect();
 
-    summaries.sort_by_key(|summary| Reverse(summary.strength));
+    // ties are broken by name so equal strengths don't shuffle between scans
+    summaries.sort_by_key(|summary| (Reverse(summary.strength), summary.ssid.clone()));
 
     summaries
 }
@@ -189,6 +190,16 @@ mod tests {
 
         let ssids: Vec<&str> = summaries.iter().map(|s| s.ssid.as_str()).collect();
         assert_eq!(ssids, vec!["Strongest", "Mid", "Weak"]);
+    }
+
+    #[test]
+    fn breaks_strength_ties_by_name() {
+        let readings = vec![reading("b", 50), reading("c", 50), reading("a", 50)];
+
+        let summaries = dedupe_and_sort(readings, &HashMap::new());
+
+        let ssids: Vec<&str> = summaries.iter().map(|s| s.ssid.as_str()).collect();
+        assert_eq!(ssids, vec!["a", "b", "c"]);
     }
 
     #[test]
