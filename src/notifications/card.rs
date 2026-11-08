@@ -3,7 +3,7 @@ use std::path::Path;
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::notifications::types::{Notification, NotificationUrgency};
+use crate::notifications::types::{DEFAULT_ACTION, Notification, NotificationUrgency};
 
 fn is_icon(icon: &str) -> bool {
     if let Some(display) = gtk4::gdk::Display::default() {
@@ -160,12 +160,12 @@ impl FactoryComponent for NotificationCard {
                     },
                 },
 
-                // Actions section (if multiple actions)
+                // buttons for every action except the default one
                 #[name = "actions_box"]
                 gtk4::Box {
                     add_css_class: "actions",
                     #[watch]
-                    set_visible: self.notification.actions.len() > 1,
+                    set_visible: self.button_actions().next().is_some(),
                 },
             }
         }
@@ -188,41 +188,33 @@ impl FactoryComponent for NotificationCard {
     ) -> Self::Widgets {
         let widgets = view_output!();
 
-        // execute the first action when the notification is clicked
-        if let Some(first_action) = self.notification.actions.first() {
-            let action_id = first_action.0.as_str();
-
-            let sender_clone = sender.clone();
-            let action_id = action_id.to_string();
+        // clicking the notification itself invokes the "default" action
+        if self.has_default_action() {
+            let sender = sender.clone();
             widgets.content_container.connect_clicked(move |_| {
-                sender_clone.input(NotificationCardMsg::Action(action_id.clone()));
+                sender.input(NotificationCardMsg::Action(DEFAULT_ACTION.to_string()));
             });
         }
 
-        // if multiple actions, create action buttons
-        if self.notification.actions.len() > 1 {
-            for chunk in &self.notification.actions {
-                let action_id = chunk.0.as_str();
-                let label = chunk.1.as_str();
+        // every other action gets a button
+        for (action_id, label) in self.button_actions() {
+            let action_button = gtk4::Button::builder().hexpand(true).build();
 
-                let action_button = gtk4::Button::builder().hexpand(true).build();
+            let button_label = gtk4::Label::builder()
+                .label(label)
+                .halign(gtk4::Align::Center)
+                .hexpand(true)
+                .build();
 
-                let button_label = gtk4::Label::builder()
-                    .label(label)
-                    .halign(gtk4::Align::Center)
-                    .hexpand(true)
-                    .build();
+            action_button.set_child(Some(&button_label));
 
-                action_button.set_child(Some(&button_label));
+            let sender = sender.clone();
+            let action_id = action_id.to_string();
+            action_button.connect_clicked(move |_| {
+                sender.input(NotificationCardMsg::Action(action_id.clone()));
+            });
 
-                let sender_clone = sender.clone();
-                let action_id = action_id.to_string();
-                action_button.connect_clicked(move |_| {
-                    sender_clone.input(NotificationCardMsg::Action(action_id.clone()));
-                });
-
-                widgets.actions_box.append(&action_button);
-            }
+            widgets.actions_box.append(&action_button);
         }
 
         widgets
@@ -253,6 +245,22 @@ impl FactoryComponent for NotificationCard {
 }
 
 impl NotificationCard {
+    fn has_default_action(&self) -> bool {
+        self.notification
+            .actions
+            .iter()
+            .any(|(id, _)| id == DEFAULT_ACTION)
+    }
+
+    /// Actions shown as buttons: everything except the default action.
+    fn button_actions(&self) -> impl Iterator<Item = (&str, &str)> {
+        self.notification
+            .actions
+            .iter()
+            .filter(|(id, _)| id != DEFAULT_ACTION)
+            .map(|(id, label)| (id.as_str(), label.as_str()))
+    }
+
     fn get_urgency_class(&self) -> &'static str {
         match self.notification.urgency {
             NotificationUrgency::Low => "low",

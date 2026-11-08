@@ -17,7 +17,13 @@ pub struct Notification {
 
     /// Action identifiers paired with their user-facing labels.
     pub actions: Vec<(String, String)>,
+    /// Whether the notification stays open after an action is invoked (the
+    /// `resident` hint).
+    pub resident: bool,
 }
+
+/// The action invoked by clicking the notification itself.
+pub const DEFAULT_ACTION: &str = "default";
 
 impl Notification {
     /// How long this notification's popup stays on screen, or `None` to keep
@@ -74,6 +80,7 @@ mod tests {
             timeout,
             timestamp: 0,
             actions: Vec::new(),
+            resident: false,
         }
     }
 

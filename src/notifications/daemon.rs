@@ -79,6 +79,7 @@ impl NotificationsDaemon {
             timeout: expire_timeout,
             timestamp,
             actions,
+            resident: hints.flag("resident"),
         };
 
         // write to the global state

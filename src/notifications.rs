@@ -181,6 +181,17 @@ pub async fn run_notifications_service() {
                 if let Err(e) = interface_ref.action_invoked(id, action_key).await {
                     tracing::error!(notification.id = id, error = %e, "couldn't emit action_invoked signal");
                 }
+
+                // servers close notifications once an action is taken,
+                // unless the client asked for them to stay
+                let resident = NOTIFICATIONS_STATE
+                    .read()
+                    .notifications
+                    .get(&id)
+                    .is_some_and(|notification| notification.resident);
+                if !resident {
+                    lifecycle::close(id, CloseReason::Dismissed).await;
+                }
             }
         }
     }

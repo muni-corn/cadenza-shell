@@ -35,6 +35,16 @@ impl Hints {
         }
     }
 
+    /// A boolean hint, also accepting integers since some clients send
+    /// those. Missing or unreadable hints are `false`.
+    pub fn flag(&self, key: &str) -> bool {
+        match self.0.get(key).map(|value| &**value) {
+            Some(Value::Bool(flag)) => *flag,
+            Some(_) => self.integer(key).is_some_and(|n| n != 0),
+            None => false,
+        }
+    }
+
     /// An integer hint of any integer type.
     fn integer(&self, key: &str) -> Option<i64> {
         match &**self.0.get(key)? {
@@ -81,6 +91,14 @@ mod tests {
             NotificationUrgency::Normal
         );
         assert_eq!(Hints::default().urgency(), NotificationUrgency::Normal);
+    }
+
+    #[test]
+    fn reads_flags_from_bools_and_integers() {
+        let hints = hints(&[("resident", Value::Bool(true)), ("transient", Value::U8(1))]);
+        assert!(hints.flag("resident"));
+        assert!(hints.flag("transient"));
+        assert!(!hints.flag("missing"));
     }
 
     #[test]
