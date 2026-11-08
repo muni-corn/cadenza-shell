@@ -6,10 +6,8 @@ description = "muni's desktop shell - a modern desktop shell built with Rust and
 
 [dependencies]
 anyhow = "1"
-async-channel = "2.3"
 bluer = { version = "0.17", features = ["full"] }
 chrono = { version = "0.4", features = ["serde"] }
-csv = "1.4.0"
 dirs = "6.0.0"
 futures-lite = { version = "2", default-features = false }
 gdk4 = { version = "0.11", features = ["v4_14"] }
@@ -22,7 +20,6 @@ niri-ipc = "26.4"
 pango = "0.22"
 pulse = { package = "libpulse-binding", version = "2.30" }
 relm4 = { version = "0.11" }
-relm4-components = "0.11"
 relm4-icons = "0.11"
 reqwest = { version = "0.13", default-features = false, features = ["json"] }
 rsass = "0.29"
@@ -31,8 +28,6 @@ serde-big-array = "0.5.1"
 serde_json = "1"
 serde_repr = "0.1"
 system-tray = "0.8.3"
-systemstat = "0.2"
-thiserror = "2"
 tokio = { version = "1", features = ["full"] }
 tracing = { version = "0.1", features = ["release_max_level_info"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
@@ -40,9 +35,4 @@ udev = { version = "0.9.3", features = ["send", "sync"] }
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 
 [build-dependencies]
-glib-build-tools = "0.22"
 relm4-icons-build = "0.11"
-
-[features]
-default = []
-docs = []
