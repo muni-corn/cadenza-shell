@@ -1,7 +1,7 @@
 use std::{path::Path, time::Duration};
 
 use chrono::Local;
-use tokio::io::unix::AsyncFd;
+use tokio::io::unix::{AsyncFd, AsyncFdReadyGuard};
 
 use super::{BATTERY_STATE, BatteryState, ChargingStatus};
 use crate::battery::{
@@ -54,40 +54,29 @@ pub async fn start_battery_service() {
         });
     }
 
-    // set up udev monitor for immediate status change events
-    let monitor = match create_battery_monitor() {
-        Ok(m) => m,
+    // udev reports status changes right away; without it the poll interval
+    // still keeps the tile current, just less promptly
+    let udev = match create_battery_monitor().and_then(|monitor| Ok(AsyncFd::new(monitor)?)) {
+        Ok(fd) => Some(fd),
         Err(e) => {
-            tracing::error!("couldn't create udev battery monitor: {}", e);
-            return;
-        }
-    };
-
-    let async_fd = match AsyncFd::new(monitor) {
-        Ok(fd) => fd,
-        Err(e) => {
-            tracing::error!("couldn't wrap udev monitor in AsyncFd: {}", e);
-            return;
+            tracing::warn!("couldn't monitor udev for battery changes, polling instead: {e}");
+            None
         }
     };
 
     let mut alert_state = AlertState::default();
 
-    watch_battery(
-        &battery_path,
-        async_fd,
-        &mut power_history,
-        &mut alert_state,
-    )
-    .await;
+    watch_battery(&battery_path, udev, &mut power_history, &mut alert_state).await;
 }
 
+/// Updates the battery state on every udev change event for the battery and
+/// on every poll tick, forever.
 async fn watch_battery(
     battery_path: &Path,
-    async_fd: AsyncFd<udev::MonitorSocket>,
+    mut udev: Option<AsyncFd<udev::MonitorSocket>>,
     power_history: &mut DischargeProfile,
     alert_state: &mut AlertState,
-) -> Option<!> {
+) {
     let mut poll_interval =
         tokio::time::interval(Duration::from_secs(READ_INTERVAL_SECONDS.into()));
 
@@ -96,47 +85,41 @@ async fn watch_battery(
 
     loop {
         tokio::select! {
-            guard = async_fd.readable() => {
-                let mut guard = match guard {
-                    Ok(g) => g,
-                    Err(e) => {
-                        tracing::error!("error acquiring guard: {e}");
-                        continue;
-                    },
-                };
+            ready = udev_readable(udev.as_ref()) => match ready {
+                Ok(mut guard) => {
+                    // drain every pending event, but update once per batch
+                    let battery_changed = guard
+                        .get_inner()
+                        .iter()
+                        .filter(|event| is_battery_change(event, battery_path))
+                        .count()
+                        > 0;
+                    guard.clear_ready();
 
-                tracing::debug!("async_fd ready: {:?}", guard.ready());
-
-                // drain all pending events from the monitor
-                for event in guard.get_inner().iter() {
-                    tracing::debug!("udev event received: {event:?}");
-                    if is_battery_change(&event, battery_path) {
-                        tracing::debug!("event is a battery event");
-                        update_battery_state(
-                            battery_path,
-                            power_history,
-                            alert_state,
-                        ).await;
-                    } else {
-                        tracing::debug!("event was not a battery event");
+                    if battery_changed {
+                        update_battery_state(battery_path, power_history, alert_state).await;
                     }
                 }
-
-                tracing::debug!("reaching end of socket iterator");
-
-                // clear readiness so we wait for the next edge
-                guard.clear_ready();
-            }
+                Err(e) => {
+                    tracing::error!("udev battery monitor failed, polling instead: {e}");
+                    udev = None;
+                }
+            },
 
             _ = poll_interval.tick() => {
-                tracing::debug!("battery poll interval elapsed, fetching battery info");
-                update_battery_state(
-                    battery_path,
-                    power_history,
-                    alert_state,
-                ).await;
+                update_battery_state(battery_path, power_history, alert_state).await;
             }
         }
+    }
+}
+
+/// Waits for the udev monitor to become readable, or forever without one.
+async fn udev_readable(
+    udev: Option<&AsyncFd<udev::MonitorSocket>>,
+) -> std::io::Result<AsyncFdReadyGuard<'_, udev::MonitorSocket>> {
+    match udev {
+        Some(fd) => fd.readable().await,
+        None => std::future::pending().await,
     }
 }
 
