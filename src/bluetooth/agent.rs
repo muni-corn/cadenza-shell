@@ -1,4 +1,7 @@
-use std::sync::{Mutex, PoisonError};
+use std::sync::{
+    Mutex, PoisonError,
+    atomic::{AtomicU64, Ordering},
+};
 
 use bluer::{
     Session,
@@ -23,9 +26,63 @@ pub enum PairingReply {
     Confirm,
 }
 
-// only one pairing prompt is ever active at a time in this UI, so a single
-// slot (rather than a map keyed by device) is sufficient
-static PENDING_REPLY: Mutex<Option<oneshot::Sender<PairingReply>>> = Mutex::new(None);
+// only one pairing prompt is ever shown at a time in this UI, so a single
+// slot (rather than a map keyed by device) is sufficient; the slot is tagged
+// with the generation of the prompt it answers
+static PENDING_REPLY: Mutex<Option<(u64, oneshot::Sender<PairingReply>)>> = Mutex::new(None);
+
+/// Generation of the prompt currently in [`PAIRING_PROMPT`], or 0 for none.
+///
+/// The mutex also serializes every write to [`PAIRING_PROMPT`], so a stale
+/// request can never clear a newer prompt between checking and clearing.
+static SHOWN_PROMPT: Mutex<u64> = Mutex::new(0);
+
+static NEXT_GENERATION: AtomicU64 = AtomicU64::new(1);
+
+/// Keeps a pairing prompt on screen for as long as its request is alive.
+///
+/// BlueZ cancels a request by dropping its future, which skips any cleanup
+/// written after an await, so clearing happens on drop instead. Each guard
+/// only clears state that still belongs to its own request, so overlapping
+/// or repeated requests can't wipe each other's prompts.
+struct PromptGuard {
+    generation: u64,
+}
+
+impl PromptGuard {
+    /// Shows `prompt`, replacing any prompt from an earlier request.
+    fn show(prompt: PairingPrompt) -> Self {
+        let generation = NEXT_GENERATION.fetch_add(1, Ordering::Relaxed);
+        let mut shown = SHOWN_PROMPT.lock().unwrap_or_else(PoisonError::into_inner);
+        *shown = generation;
+        *PAIRING_PROMPT.write() = Some(prompt);
+        Self { generation }
+    }
+
+    /// Makes `tx` the receiver of the user's answer to this prompt.
+    fn expect_reply(&self, tx: oneshot::Sender<PairingReply>) {
+        *PENDING_REPLY.lock().unwrap_or_else(PoisonError::into_inner) = Some((self.generation, tx));
+    }
+}
+
+impl Drop for PromptGuard {
+    fn drop(&mut self) {
+        let mut pending = PENDING_REPLY.lock().unwrap_or_else(PoisonError::into_inner);
+        if pending
+            .as_ref()
+            .is_some_and(|(generation, _)| *generation == self.generation)
+        {
+            pending.take();
+        }
+        drop(pending);
+
+        let mut shown = SHOWN_PROMPT.lock().unwrap_or_else(PoisonError::into_inner);
+        if *shown == self.generation {
+            *shown = 0;
+            *PAIRING_PROMPT.write() = None;
+        }
+    }
+}
 
 /// Registers cadenza-shell as a BlueZ pairing agent with full keyboard and
 /// display capability (we can both show a code and let the user type one).
@@ -62,16 +119,13 @@ async fn await_reply<T>(
     extract: impl FnOnce(PairingReply) -> Option<T>,
 ) -> ReqResult<T> {
     let (tx, rx) = oneshot::channel();
-    *PENDING_REPLY.lock().unwrap_or_else(PoisonError::into_inner) = Some(tx);
-    *PAIRING_PROMPT.write() = Some(prompt);
+    let guard = PromptGuard::show(prompt);
+    guard.expect_reply(tx);
 
-    let result = match rx.await {
+    match rx.await {
         Ok(reply) => extract(reply).ok_or(ReqError::Rejected),
         Err(_) => Err(ReqError::Rejected),
-    };
-
-    *PAIRING_PROMPT.write() = None;
-    result
+    }
 }
 
 async fn handle_request_pin_code(req: RequestPinCode) -> ReqResult<String> {
@@ -134,20 +188,19 @@ async fn handle_request_authorization(req: RequestAuthorization) -> ReqResult<()
 /// pairing without a keyboard on their end). There's nothing for us to
 /// collect back; we just display it until BlueZ tells us to stop.
 async fn handle_display_pin_code(req: DisplayPinCode) -> ReqResult<()> {
-    *PAIRING_PROMPT.write() = Some(PairingPrompt {
+    let _guard = PromptGuard::show(PairingPrompt {
         address: req.device,
         request: PairingRequest::DisplayPinCode(req.pincode),
     });
 
     let _ = req.cancel.await;
-    *PAIRING_PROMPT.write() = None;
     Ok(())
 }
 
 /// Shows a passkey the user needs to type on the *other* device, updating
 /// as they type it (`entered` counts digits typed so far there).
 async fn handle_display_passkey(req: DisplayPasskey) -> ReqResult<()> {
-    *PAIRING_PROMPT.write() = Some(PairingPrompt {
+    let _guard = PromptGuard::show(PairingPrompt {
         address: req.device,
         request: PairingRequest::DisplayPasskey {
             passkey: req.passkey,
@@ -156,13 +209,13 @@ async fn handle_display_passkey(req: DisplayPasskey) -> ReqResult<()> {
     });
 
     let _ = req.cancel.await;
-    *PAIRING_PROMPT.write() = None;
     Ok(())
 }
 
 /// Responds to the current pairing prompt, if any.
 pub fn respond(reply: PairingReply) {
-    if let Some(tx) = PENDING_REPLY
+    // the awaiting request's guard clears the prompt once it finishes
+    if let Some((_, tx)) = PENDING_REPLY
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .take()
@@ -179,5 +232,9 @@ pub fn cancel() {
         .lock()
         .unwrap_or_else(PoisonError::into_inner)
         .take();
+
+    // display-only prompts have no reply to drop, so hide them directly
+    let mut shown = SHOWN_PROMPT.lock().unwrap_or_else(PoisonError::into_inner);
+    *shown = 0;
     *PAIRING_PROMPT.write() = None;
 }
