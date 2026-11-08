@@ -304,10 +304,16 @@ async fn handle_command(conn: &zbus::Connection, cmd: NetworkCommand) {
             ssid,
             security,
             password,
-            saved_connection,
+            saved_connections,
         } => {
-            if let Err(e) =
-                handle_connect(conn, &ssid, security, password.as_deref(), saved_connection).await
+            if let Err(e) = handle_connect(
+                conn,
+                &ssid,
+                security,
+                password.as_deref(),
+                saved_connections,
+            )
+            .await
             {
                 tracing::error!("couldn't connect to {ssid}: {e}");
 
@@ -324,9 +330,11 @@ async fn handle_command(conn: &zbus::Connection, cmd: NetworkCommand) {
                 tracing::error!("couldn't disconnect: {e}");
             }
         }
-        NetworkCommand::Forget(connection_path) => {
-            if let Err(e) = handle_forget(conn, &connection_path).await {
-                tracing::error!("couldn't forget connection {connection_path}: {e}");
+        NetworkCommand::Forget(connection_paths) => {
+            for connection_path in connection_paths {
+                if let Err(e) = handle_forget(conn, &connection_path).await {
+                    tracing::error!("couldn't forget connection {connection_path}: {e}");
+                }
             }
         }
     }
@@ -490,13 +498,13 @@ async fn handle_connect(
     ssid: &str,
     security: ApSecurity,
     password: Option<&str>,
-    saved_connection: Option<OwnedObjectPath>,
+    saved_connections: Vec<OwnedObjectPath>,
 ) -> anyhow::Result<()> {
     let device_path = find_wireless_device(conn).await?;
     let nm_proxy = NetworkManagerProxy::new(conn).await?;
     let no_specific_object = ObjectPath::try_from("/")?;
 
-    if let (Some(saved), None) = (&saved_connection, password) {
+    if let (Some(saved), None) = (saved_connections.first(), password) {
         let active_connection = nm_proxy
             .activate_connection(saved, &device_path, &no_specific_object)
             .await?;
@@ -504,10 +512,10 @@ async fn handle_connect(
         return Ok(());
     }
 
-    if let Some(saved) = saved_connection
-        && let Err(e) = handle_forget(conn, &saved).await
-    {
-        tracing::warn!("couldn't delete the rejected profile for {ssid}: {e}");
+    for saved in saved_connections {
+        if let Err(e) = handle_forget(conn, &saved).await {
+            tracing::warn!("couldn't delete the rejected profile for {ssid}: {e}");
+        }
     }
 
     let mut wireless_settings: HashMap<String, Value<'_>> = HashMap::new();

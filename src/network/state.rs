@@ -40,15 +40,15 @@ pub struct AccessPointSummary {
     /// as a percentage.
     pub strength: u8,
     pub security: ApSecurity,
-    /// The object path of a saved connection profile matching this SSID, if
-    /// one exists. `Some` means connecting won't need a password (NM already
-    /// has the secrets); it's also required to "forget" the network.
-    pub saved_connection: Option<OwnedObjectPath>,
+    /// Object paths of every saved connection profile for this SSID. Any
+    /// entry means connecting won't need a password (NM already has the
+    /// secrets); all of them are deleted to "forget" the network.
+    pub saved_connections: Vec<OwnedObjectPath>,
 }
 
 impl AccessPointSummary {
     pub fn is_saved(&self) -> bool {
-        self.saved_connection.is_some()
+        !self.saved_connections.is_empty()
     }
 
     /// Whether connecting to this network needs a password from the user

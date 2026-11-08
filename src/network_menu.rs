@@ -41,8 +41,8 @@ pub enum NetworkMenuCommand {
 struct PasswordPrompt {
     ssid: String,
     security: ApSecurity,
-    /// The profile whose secrets were rejected, replaced on submit.
-    saved_connection: Option<OwnedObjectPath>,
+    /// Profiles whose secrets were rejected, replaced on submit.
+    saved_connections: Vec<OwnedObjectPath>,
 }
 
 #[derive(Debug)]
@@ -415,20 +415,20 @@ impl Component for NetworkMenu {
                     self.password_prompt = Some(PasswordPrompt {
                         ssid: summary.ssid,
                         security: summary.security,
-                        saved_connection: None,
+                        saved_connections: Vec::new(),
                     });
                 } else {
                     network::connect(
                         summary.ssid,
                         summary.security,
                         None,
-                        summary.saved_connection,
+                        summary.saved_connections,
                     );
                 }
             }
             NetworkMenuMsg::ForgetClicked(summary) => {
-                if let Some(connection_path) = summary.saved_connection {
-                    network::forget(connection_path);
+                if summary.is_saved() {
+                    network::forget(summary.saved_connections);
                 }
             }
             NetworkMenuMsg::PasswordSubmitted(password) => {
@@ -446,7 +446,7 @@ impl Component for NetworkMenu {
                         prompt.ssid,
                         prompt.security,
                         Some(password),
-                        prompt.saved_connection,
+                        prompt.saved_connections,
                     );
                 }
             }
@@ -571,12 +571,12 @@ impl NetworkMenu {
                         .access_points
                         .iter()
                         .find(|ap| ap.ssid == ssid)
-                        .map(|ap| (ap.security, ap.saved_connection.clone()));
-                    if let Some((security, saved_connection)) = network {
+                        .map(|ap| (ap.security, ap.saved_connections.clone()));
+                    if let Some((security, saved_connections)) = network {
                         self.password_prompt = Some(PasswordPrompt {
                             ssid,
                             security,
-                            saved_connection,
+                            saved_connections,
                         });
                     }
                 }

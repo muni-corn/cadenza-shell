@@ -18,20 +18,21 @@ pub(crate) enum NetworkCommand {
     Scan,
     /// Connects to a wifi network by SSID.
     ///
-    /// Without a password, `saved_connection` is activated as-is. With a
-    /// password, any `saved_connection` is replaced by a new profile using
-    /// it, since its stored secrets were evidently rejected. `security`
-    /// determines what key-mgmt scheme to configure for the password.
+    /// Without a password, the first of `saved_connections` is activated
+    /// as-is. With a password, `saved_connections` are replaced by a new
+    /// profile using it, since their stored secrets were evidently rejected.
+    /// `security` determines what key-mgmt scheme to configure for the
+    /// password.
     Connect {
         ssid: String,
         security: ApSecurity,
         password: Option<String>,
-        saved_connection: Option<OwnedObjectPath>,
+        saved_connections: Vec<OwnedObjectPath>,
     },
     /// Disconnects the wifi device.
     Disconnect,
-    /// Deletes a saved connection profile.
-    Forget(OwnedObjectPath),
+    /// Deletes saved connection profiles.
+    Forget(Vec<OwnedObjectPath>),
 }
 
 static COMMAND_TX: OnceLock<UnboundedSender<NetworkCommand>> = OnceLock::new();
@@ -65,20 +66,20 @@ pub fn request_scan() {
 
 /// Connects to a wifi network by SSID.
 ///
-/// Pass the network's `saved_connection` (if any) and no password to
-/// activate the saved profile. Pass a password to create a new profile with
-/// it, replacing `saved_connection` if one is given.
+/// Pass the network's saved profiles and no password to activate a saved
+/// profile. Pass a password to create a new profile with it, replacing any
+/// saved profiles.
 pub fn connect(
     ssid: String,
     security: ApSecurity,
     password: Option<String>,
-    saved_connection: Option<OwnedObjectPath>,
+    saved_connections: Vec<OwnedObjectPath>,
 ) {
     send(NetworkCommand::Connect {
         ssid,
         security,
         password,
-        saved_connection,
+        saved_connections,
     });
 }
 
@@ -87,7 +88,7 @@ pub fn disconnect() {
     send(NetworkCommand::Disconnect);
 }
 
-/// Deletes a saved connection profile.
-pub fn forget(connection: OwnedObjectPath) {
-    send(NetworkCommand::Forget(connection));
+/// Deletes every saved profile of a network.
+pub fn forget(connections: Vec<OwnedObjectPath>) {
+    send(NetworkCommand::Forget(connections));
 }

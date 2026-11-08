@@ -84,14 +84,15 @@ async fn read_access_point(
     }))
 }
 
-/// Returns saved wifi connection profiles keyed by SSID.
+/// Returns saved wifi connection profiles grouped by SSID; a network can
+/// have several.
 async fn fetch_saved_wifi_connections(
     conn: &zbus::Connection,
-) -> anyhow::Result<HashMap<String, OwnedObjectPath>> {
+) -> anyhow::Result<HashMap<String, Vec<OwnedObjectPath>>> {
     let settings_proxy = SettingsProxy::new(conn).await?;
     let connection_paths = settings_proxy.list_connections().await?;
 
-    let mut result = HashMap::with_capacity(connection_paths.len());
+    let mut result: HashMap<String, Vec<OwnedObjectPath>> = HashMap::new();
     for path in connection_paths {
         let Ok(builder) = SettingsConnectionProxy::builder(conn).path(&path) else {
             continue;
@@ -111,7 +112,10 @@ async fn fetch_saved_wifi_connections(
             continue;
         };
 
-        result.insert(String::from_utf8_lossy(&ssid).to_string(), path);
+        result
+            .entry(String::from_utf8_lossy(&ssid).to_string())
+            .or_default()
+            .push(path);
     }
 
     Ok(result)
@@ -122,7 +126,7 @@ async fn fetch_saved_wifi_connections(
 /// strength, then by name.
 fn dedupe_and_sort(
     readings: Vec<RawApReading>,
-    saved: &HashMap<String, OwnedObjectPath>,
+    saved: &HashMap<String, Vec<OwnedObjectPath>>,
 ) -> Vec<AccessPointSummary> {
     let mut strongest_by_ssid: HashMap<String, RawApReading> = HashMap::new();
     for reading in readings {
@@ -139,7 +143,7 @@ fn dedupe_and_sort(
     let mut summaries: Vec<AccessPointSummary> = strongest_by_ssid
         .into_values()
         .map(|reading| AccessPointSummary {
-            saved_connection: saved.get(&reading.ssid).cloned(),
+            saved_connections: saved.get(&reading.ssid).cloned().unwrap_or_default(),
             ssid: reading.ssid,
             strength: reading.strength,
             security: reading.security,
@@ -207,7 +211,7 @@ mod tests {
         let path = OwnedObjectPath::try_from("/org/freedesktop/NetworkManager/Settings/1")
             .expect("valid object path");
         let mut saved = HashMap::new();
-        saved.insert("Home".to_string(), path.clone());
+        saved.insert("Home".to_string(), vec![path.clone()]);
 
         let readings = vec![reading("Home", 80), reading("Guest", 60)];
         let summaries = dedupe_and_sort(readings, &saved);
@@ -215,7 +219,7 @@ mod tests {
         let home = summaries.iter().find(|s| s.ssid == "Home").unwrap();
         let guest = summaries.iter().find(|s| s.ssid == "Guest").unwrap();
         assert!(home.is_saved());
-        assert_eq!(home.saved_connection, Some(path));
+        assert_eq!(home.saved_connections, vec![path]);
         assert!(!guest.is_saved());
     }
 }
