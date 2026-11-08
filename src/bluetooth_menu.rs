@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use bluer::Address;
 use gtk4::prelude::*;
 use relm4::prelude::*;
@@ -15,8 +13,8 @@ use crate::{
 #[derive(Debug)]
 pub struct BluetoothMenu {
     bluetooth_state: Option<BluetoothState>,
-    paired_devices: AsyncFactoryVecDeque<BluetoothDeviceWidget>,
-    nearby_devices: AsyncFactoryVecDeque<BluetoothDeviceWidget>,
+    paired_devices: FactoryVecDeque<BluetoothDeviceWidget>,
+    nearby_devices: FactoryVecDeque<BluetoothDeviceWidget>,
     pairing_prompt: Option<PairingPrompt>,
     /// Set when new state arrives, so the switch only snaps to the real
     /// value then and not right after the user flips it.
@@ -65,7 +63,7 @@ impl SimpleComponent for BluetoothMenu {
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
         // create device factories, one per section
-        let paired_devices = AsyncFactoryVecDeque::builder()
+        let paired_devices = FactoryVecDeque::builder()
             .launch(
                 gtk::Box::builder()
                     .orientation(gtk::Orientation::Vertical)
@@ -73,7 +71,7 @@ impl SimpleComponent for BluetoothMenu {
                     .build(),
             )
             .forward(sender.input_sender(), device_output_to_msg);
-        let nearby_devices = AsyncFactoryVecDeque::builder()
+        let nearby_devices = FactoryVecDeque::builder()
             .launch(
                 gtk::Box::builder()
                     .orientation(gtk::Orientation::Vertical)
@@ -532,38 +530,34 @@ fn get_status_text(state: &Option<BluetoothState>) -> String {
 /// every reconcile tick, a clear-and-rebuild would destroy and recreate
 /// every row's widgets on a timer even when nothing about them changed.
 fn update_device_rows<'a>(
-    devices: &mut AsyncFactoryVecDeque<BluetoothDeviceWidget>,
+    devices: &mut FactoryVecDeque<BluetoothDeviceWidget>,
     infos: impl Iterator<Item = &'a DeviceInfo>,
 ) {
-    let infos: Vec<&DeviceInfo> = infos.collect();
-    let new_addresses: HashSet<Address> = infos.iter().map(|d| d.address).collect();
+    // devices come out of a hashmap, so sort them for a stable order with
+    // connected devices on top
+    let mut infos: Vec<&DeviceInfo> = infos.collect();
+    infos.sort_by(|a, b| {
+        b.connected
+            .cmp(&a.connected)
+            .then_with(|| a.alias.cmp(&b.alias))
+            .then_with(|| a.address.cmp(&b.address))
+    });
 
-    // remove rows whose device disappeared (or moved to the other section);
-    // walk in reverse so removing a later index doesn't invalidate earlier
-    // ones still to be checked
-    let current_addresses: Vec<Option<Address>> =
-        devices.iter().map(|w| w.map(|w| w.info.address)).collect();
-    {
-        let mut guard = devices.guard();
-        for (index, address) in current_addresses.iter().enumerate().rev() {
-            let is_stale = address.is_some_and(|addr| !new_addresses.contains(&addr));
-            if is_stale {
-                guard.remove(index);
-            }
-        }
-    }
-
-    // update rows that still exist, insert ones that are new
-    for info in infos {
-        let existing_index = devices
+    let same_order = devices.len() == infos.len()
+        && devices
             .iter()
-            .position(|w| w.map(|w| w.info.address) == Some(info.address));
+            .zip(&infos)
+            .all(|(row, info)| row.info.address == info.address);
 
-        match existing_index {
-            Some(index) => devices.send(index, BluetoothDeviceMsg::UpdateInfo(info.clone())),
-            None => {
-                devices.guard().push_back(info.clone());
-            }
+    if same_order {
+        for (index, info) in infos.into_iter().enumerate() {
+            devices.send(index, BluetoothDeviceMsg::UpdateInfo(info.clone()));
+        }
+    } else {
+        let mut guard = devices.guard();
+        guard.clear();
+        for info in infos {
+            guard.push_back(info.clone());
         }
     }
 }
@@ -595,8 +589,9 @@ struct BluetoothDeviceWidgetWidgets {
     remove_button: gtk::Button,
 }
 
-impl AsyncFactoryComponent for BluetoothDeviceWidget {
+impl FactoryComponent for BluetoothDeviceWidget {
     type CommandOutput = ();
+    type Index = DynamicIndex;
     type Init = DeviceInfo;
     type Input = BluetoothDeviceMsg;
     type Output = BluetoothDeviceOutput;
@@ -604,17 +599,11 @@ impl AsyncFactoryComponent for BluetoothDeviceWidget {
     type Root = gtk::Box;
     type Widgets = BluetoothDeviceWidgetWidgets;
 
-    async fn init_model(
-        init: Self::Init,
-        _index: &DynamicIndex,
-        _sender: AsyncFactorySender<Self>,
-    ) -> Self {
-        // no async fetch needed; the snapshot already carries everything we
-        // render
+    fn init_model(init: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
         Self { info: init }
     }
 
-    async fn update(&mut self, msg: Self::Input, sender: AsyncFactorySender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         match msg {
             BluetoothDeviceMsg::Toggle => {
                 let addr = self.info.address;
@@ -635,7 +624,7 @@ impl AsyncFactoryComponent for BluetoothDeviceWidget {
         }
     }
 
-    fn init_root() -> Self::Root {
+    fn init_root(&self) -> Self::Root {
         gtk::Box::builder().spacing(4).build()
     }
 
@@ -644,7 +633,7 @@ impl AsyncFactoryComponent for BluetoothDeviceWidget {
         _index: &DynamicIndex,
         root: Self::Root,
         _returned_widget: &<Self::ParentWidget as relm4::factory::FactoryView>::ReturnedWidget,
-        sender: AsyncFactorySender<Self>,
+        sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let select_button = gtk::Button::builder().hexpand(true).build();
         select_button.connect_clicked({
@@ -694,7 +683,7 @@ impl AsyncFactoryComponent for BluetoothDeviceWidget {
         }
     }
 
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: AsyncFactorySender<Self>) {
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: FactorySender<Self>) {
         widgets.device_label.set_label(&self.info.alias);
         widgets.status_label.set_visible(self.info.connected);
         widgets.remove_button.set_visible(self.info.paired);
