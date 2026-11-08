@@ -74,6 +74,9 @@ fn main() {
             "bluetooth-dots",
             "bluetooth-x",
             "bluetooth-no",
+            // tray
+            "pan-start",
+            "pan-end",
             // media/mpris
             "music-note-single",
             "media-playback-pause",

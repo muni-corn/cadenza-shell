@@ -2,7 +2,10 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 use system_tray::{data::BaseMap, item::StatusNotifierItem};
 
-use crate::widgets::tray_item::{TrayEvent, TrayItem, TrayItemInput, TrayItemOutput};
+use crate::{
+    icon_names::{PAN_END, PAN_START},
+    widgets::tray_item::{TrayEvent, TrayItem, TrayItemInput, TrayItemOutput},
+};
 
 #[derive(Debug)]
 pub struct TrayWidget {
@@ -65,9 +68,9 @@ impl SimpleComponent for TrayWidget {
                     set_orientation: gtk::Orientation::Horizontal,
                     set_halign: gtk::Align::Center,
 
-                    gtk::Label {
+                    gtk::Image {
                         #[watch]
-                        set_label: if model.expanded { "󰅂" } else { "󰅁" }, // Arrow icons
+                        set_icon_name: Some(if model.expanded { PAN_END } else { PAN_START }),
                         add_css_class: "tile-icon",
                     },
                 }
