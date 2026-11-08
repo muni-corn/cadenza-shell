@@ -20,6 +20,10 @@ pub struct WttrCondition {
     pub weather_code: String,
     #[serde(rename = "weatherDesc")]
     pub weather_desc: Vec<WttrDesc>,
+    /// When the observation was made, in the location's local time, e.g.
+    /// "2026-11-08 02:31 PM".
+    #[serde(rename = "localObsDateTime", default)]
+    pub local_obs_date_time: String,
 }
 
 #[derive(Deserialize, Debug)]

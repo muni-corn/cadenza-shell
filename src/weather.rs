@@ -70,7 +70,7 @@ pub async fn start_weather_polling() {
     }
 }
 
-pub fn parse_time_12h(s: &str) -> Option<(u32, u32)> {
+fn parse_time_12h(s: &str) -> Option<(u32, u32)> {
     let (time, mer) = s.split_once(' ')?;
     let (h, m) = time.split_once(':')?;
     let mut h: u32 = h.parse().ok()?;
@@ -149,9 +149,19 @@ async fn fetch_wttr(client: &reqwest::Client) -> anyhow::Result<WeatherState> {
         .first()
         .map(|d| d.value.clone())
         .unwrap_or_else(|| "Unknown".into());
+    // sunrise and sunset are local to the forecast location, so compare them
+    // with the observation's local time rather than this machine's clock
+    let now = current
+        .local_obs_date_time
+        .split_once(' ')
+        .and_then(|(_, time)| parse_time_12h(time))
+        .unwrap_or_else(|| {
+            let now = Local::now();
+            (now.hour(), now.minute())
+        });
     let icon = map_icon(
         &current.weather_code,
-        is_dark_now(&astro.sunrise, &astro.sunset),
+        is_dark(now, &astro.sunrise, &astro.sunset),
     )
     .to_string();
 
@@ -162,13 +172,33 @@ async fn fetch_wttr(client: &reqwest::Client) -> anyhow::Result<WeatherState> {
     })
 }
 
-fn is_dark_now(sunrise: &str, sunset: &str) -> bool {
-    let now = Local::now();
-    let (sh, sm) = parse_time_12h(sunrise).unwrap_or((6, 0));
-    let (eh, em) = parse_time_12h(sunset).unwrap_or((18, 0));
-    let h = now.hour();
-    let m = now.minute();
-    let before_sunrise = h < sh || (h == sh && m < sm);
-    let after_sunset = h > eh || (h == eh && m > em);
-    before_sunrise || after_sunset
+/// Whether `now` (hours, minutes) is before sunrise or after sunset, given
+/// wttr.in's 12-hour times. Unparsable times fall back to 6 am and 6 pm.
+fn is_dark(now: (u32, u32), sunrise: &str, sunset: &str) -> bool {
+    let minutes = |(hours, minutes): (u32, u32)| hours * 60 + minutes;
+    let now = minutes(now);
+    let sunrise = minutes(parse_time_12h(sunrise).unwrap_or((6, 0)));
+    let sunset = minutes(parse_time_12h(sunset).unwrap_or((18, 0)));
+    now < sunrise || now > sunset
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_12_hour_times() {
+        assert_eq!(parse_time_12h("07:05 AM"), Some((7, 5)));
+        assert_eq!(parse_time_12h("12:30 AM"), Some((0, 30)));
+        assert_eq!(parse_time_12h("12:30 PM"), Some((12, 30)));
+        assert_eq!(parse_time_12h("05:45 PM"), Some((17, 45)));
+        assert_eq!(parse_time_12h("nonsense"), None);
+    }
+
+    #[test]
+    fn dark_before_sunrise_and_after_sunset() {
+        assert!(is_dark((5, 59), "06:00 AM", "06:00 PM"));
+        assert!(!is_dark((12, 0), "06:00 AM", "06:00 PM"));
+        assert!(is_dark((18, 1), "06:00 AM", "06:00 PM"));
+    }
 }
