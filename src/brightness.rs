@@ -12,8 +12,12 @@ pub static BRIGHTNESS_STATE: SharedState<Option<f64>> = SharedState::new();
 pub async fn start_brightness_watcher() {
     // read initial backlight properties. if any fail, we will not consider the
     // service available.
-    let Ok((interface, max_val, current_brightness)) = read_all() else {
-        return;
+    let (interface, max_val, current_brightness) = match read_all() {
+        Ok(values) => values,
+        Err(e) => {
+            tracing::warn!("brightness service unavailable: {e:#}");
+            return;
+        }
     };
 
     // send initial update
@@ -64,21 +68,51 @@ pub async fn start_brightness_watcher() {
     }
 }
 
+/// Picks the backlight interface to control, preferring firmware, then
+/// platform, then raw interfaces, the same order systemd-backlight and
+/// brightnessctl use. Ties are broken by name so the choice is stable.
 fn detect_interface() -> Result<String> {
     let backlight_path = Path::new("/sys/class/backlight");
-    let mut entries = fs::read_dir(backlight_path)?;
+    let candidates = fs::read_dir(backlight_path)?
+        .filter_map(|entry| entry.ok())
+        .map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let kind = fs::read_to_string(entry.path().join("type")).unwrap_or_default();
+            (name, kind.trim().to_string())
+        })
+        .collect::<Vec<_>>();
 
-    if let Some(entry) = entries.next() {
-        return Ok(entry?.file_name().to_string_lossy().to_string());
+    pick_interface(&candidates)
+        .map(str::to_owned)
+        .ok_or_else(|| anyhow::anyhow!("no backlight interface found in /sys/class/backlight"))
+}
+
+/// Chooses the preferred interface from `(name, type)` pairs.
+fn pick_interface(candidates: &[(String, String)]) -> Option<&str> {
+    fn rank(kind: &str) -> u8 {
+        match kind {
+            "firmware" => 0,
+            "platform" => 1,
+            "raw" => 2,
+            _ => 3,
+        }
     }
 
-    anyhow::bail!("no backlight interface found")
+    candidates
+        .iter()
+        .min_by(|(a_name, a_kind), (b_name, b_kind)| {
+            rank(a_kind)
+                .cmp(&rank(b_kind))
+                .then_with(|| a_name.cmp(b_name))
+        })
+        .map(|(name, _)| name.as_str())
 }
 
 fn read_max_brightness(interface: &str) -> Result<u32> {
     let max_path = format!("/sys/class/backlight/{}/max_brightness", interface);
     let max_content = fs::read_to_string(max_path)?;
     let max_val: u32 = max_content.trim().parse()?;
+    anyhow::ensure!(max_val > 0, "max_brightness is 0 for '{interface}'");
     Ok(max_val)
 }
 
@@ -98,4 +132,43 @@ fn read_all() -> Result<(String, u32, f64)> {
         .context("couldn't read current brightness value")?;
 
     Ok((interface, max_val, brightness))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn candidates(pairs: &[(&str, &str)]) -> Vec<(String, String)> {
+        pairs
+            .iter()
+            .map(|(name, kind)| (name.to_string(), kind.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn prefers_firmware_over_platform_and_raw() {
+        let list = candidates(&[
+            ("intel_backlight", "raw"),
+            ("acpi_video0", "firmware"),
+            ("platform0", "platform"),
+        ]);
+        assert_eq!(pick_interface(&list), Some("acpi_video0"));
+    }
+
+    #[test]
+    fn prefers_raw_over_unknown_types() {
+        let list = candidates(&[("mystery", ""), ("amdgpu_bl0", "raw")]);
+        assert_eq!(pick_interface(&list), Some("amdgpu_bl0"));
+    }
+
+    #[test]
+    fn breaks_ties_by_name() {
+        let list = candidates(&[("b", "raw"), ("a", "raw")]);
+        assert_eq!(pick_interface(&list), Some("a"));
+    }
+
+    #[test]
+    fn returns_none_without_candidates() {
+        assert_eq!(pick_interface(&[]), None);
+    }
 }
