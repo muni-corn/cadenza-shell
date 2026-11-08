@@ -6,12 +6,15 @@ use std::{
 use tokio::io::unix::{AsyncFd, AsyncFdReadyGuard};
 
 use super::{BATTERY_STATE, BatteryState, ChargingStatus};
-use crate::battery::{
-    READ_INTERVAL_SECONDS,
-    alerts::AlertState,
-    estimates::PowerModel,
-    sysfs::{detect_battery_path, read_battery_sysfs},
-    udev::{create_battery_monitor, is_battery_change},
+use crate::{
+    battery::{
+        READ_INTERVAL_SECONDS,
+        alerts::AlertState,
+        estimates::PowerModel,
+        sysfs::{detect_battery_path, read_battery_sysfs},
+        udev::{create_battery_monitor, is_battery_change},
+    },
+    sleep_monitor,
 };
 
 pub async fn start_battery_service() {
@@ -77,6 +80,9 @@ async fn watch_battery(
     // skip the first tick, which fires immediately
     poll_interval.tick().await;
 
+    // the poll interval pauses during suspend, so refresh as soon as we wake
+    let mut wake = sleep_monitor::subscribe_wake();
+
     loop {
         tokio::select! {
             ready = udev_readable(udev.as_ref()) => match ready {
@@ -101,6 +107,10 @@ async fn watch_battery(
             },
 
             _ = poll_interval.tick() => {
+                update_battery_state(battery_path, power_model, alert_state).await;
+            }
+
+            Ok(()) = wake.recv() => {
                 update_battery_state(battery_path, power_model, alert_state).await;
             }
         }
