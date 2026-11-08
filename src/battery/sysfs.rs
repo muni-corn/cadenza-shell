@@ -66,27 +66,34 @@ pub fn read_battery_sysfs(battery_path: &Path) -> Option<SysfsReading> {
         }
     };
 
-    // read other values, allowing them to be missing
-    let charge_now =
-        read_sysfs_u64(battery_path, "charge_now").map(BatteryCapacity::MicroAmpereHours);
-    let charge_full =
-        read_sysfs_u64(battery_path, "charge_full").map(BatteryCapacity::MicroAmpereHours);
-    let energy_now =
-        read_sysfs_u64(battery_path, "energy_now").map(BatteryCapacity::MicroWattHours);
-    let energy_full =
-        read_sysfs_u64(battery_path, "energy_full").map(BatteryCapacity::MicroWattHours);
-
-    let status = read_charging_status(battery_path);
+    // prefer watt-hours over amp-hours, but always take "now" and "full" in
+    // the same unit, since a mixed pair has no meaningful ratio
+    let energy = read_sysfs_u64(battery_path, "energy_now")
+        .zip(read_sysfs_u64(battery_path, "energy_full"))
+        .map(|(now, full)| {
+            (
+                BatteryCapacity::MicroWattHours(now),
+                BatteryCapacity::MicroWattHours(full),
+            )
+        });
+    let charge = || {
+        read_sysfs_u64(battery_path, "charge_now")
+            .zip(read_sysfs_u64(battery_path, "charge_full"))
+            .map(|(now, full)| {
+                (
+                    BatteryCapacity::MicroAmpereHours(now),
+                    BatteryCapacity::MicroAmpereHours(full),
+                )
+            })
+    };
+    let (capacity_now, capacity_full) = energy.or_else(charge)?;
 
     Some(SysfsReading {
         voltage_now,
         power_watts,
-        status,
-
-        // prefer watt-hours over amp-hours. if we only have amp-hours, we can
-        // calculate watt-hours with our voltage.
-        capacity_now: energy_now.or(charge_now)?,
-        capacity_full: energy_full.or(charge_full)?,
+        status: read_charging_status(battery_path),
+        capacity_now,
+        capacity_full,
     })
 }
 

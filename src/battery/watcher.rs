@@ -46,11 +46,13 @@ pub async fn start_battery_service() {
     let discharging_time_remaining =
         power_history.predict_time_to_empty(Local::now(), reading.remaining_wh());
 
-    *BATTERY_STATE.write() = Some(BatteryState {
-        percentage: reading.percentage().unwrap_or_default() as f32,
-        status: reading.status,
-        discharging_time_remaining,
-    });
+    if let Some(percentage) = reading.percentage() {
+        *BATTERY_STATE.write() = Some(BatteryState {
+            percentage: percentage as f32,
+            status: reading.status,
+            discharging_time_remaining,
+        });
+    }
 
     // set up udev monitor for immediate status change events
     let monitor = match create_battery_monitor() {
@@ -157,7 +159,12 @@ async fn update_battery_state(
     let discharging_time_remaining =
         power_history.predict_time_to_empty(Local::now(), reading.remaining_wh());
 
-    let percentage = reading.percentage().unwrap_or_default() as f32;
+    // an unknown level would show as 0% and fire the critical alert
+    let Some(percentage) = reading.percentage() else {
+        tracing::warn!("battery reported a full capacity of 0; skipping this reading");
+        return;
+    };
+    let percentage = percentage as f32;
     let status = reading.status;
 
     *BATTERY_STATE.write() = Some(BatteryState {
