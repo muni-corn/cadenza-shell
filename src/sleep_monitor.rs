@@ -1,8 +1,10 @@
-use std::sync::OnceLock;
+use std::{sync::OnceLock, time::Duration};
 
 use futures_lite::StreamExt;
 use tokio::sync::broadcast;
 use zbus::proxy;
+
+use crate::utils::backoff::Backoff;
 
 static WAKE_TX: OnceLock<broadcast::Sender<()>> = OnceLock::new();
 
@@ -33,41 +35,42 @@ trait Login1Manager {
 
 /// Subscribes to the logind `PrepareForSleep` D-Bus signal and broadcasts wake
 /// events to all subscribers obtained via [`subscribe_wake`].
+///
+/// Reconnects with a backoff if the system bus connection or the signal
+/// stream goes away.
 pub async fn run_sleep_monitor() {
-    let conn = match zbus::Connection::system().await {
-        Ok(c) => c,
-        Err(e) => {
-            tracing::error!("couldn't connect to system D-Bus for sleep monitor: {e}");
-            return;
+    let mut backoff = Backoff::new(Duration::from_secs(1), Duration::from_secs(60));
+    loop {
+        match watch_sleep().await {
+            Ok(()) => tracing::warn!("PrepareForSleep signal stream ended, reconnecting"),
+            Err(e) => tracing::warn!("sleep monitor failed, reconnecting: {e}"),
         }
-    };
+        tokio::time::sleep(backoff.next()).await;
+    }
+}
 
-    let proxy = match Login1ManagerProxy::new(&conn).await {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::error!("couldn't create login1 manager proxy: {e}");
-            return;
-        }
-    };
-
-    let mut stream = match proxy.receive_prepare_for_sleep().await {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::error!("couldn't subscribe to PrepareForSleep signal: {e}");
-            return;
-        }
-    };
+/// Forwards wake events until the signal stream ends.
+async fn watch_sleep() -> zbus::Result<()> {
+    let conn = zbus::Connection::system().await?;
+    let proxy = Login1ManagerProxy::new(&conn).await?;
+    let mut stream = proxy.receive_prepare_for_sleep().await?;
 
     while let Some(signal) = stream.next().await {
-        if let Ok(args) = signal.args() {
-            // start=false means the system has just woken up
-            if !args.start {
-                tracing::debug!("system wake detected, notifying subscribers");
-                // ignore send errors; no subscribers is fine
-                let _ = wake_tx().send(());
+        let args = match signal.args() {
+            Ok(args) => args,
+            Err(e) => {
+                tracing::warn!("couldn't read PrepareForSleep arguments: {e}");
+                continue;
             }
+        };
+
+        // start=false means the system has just woken up
+        if !args.start {
+            tracing::debug!("system wake detected, notifying subscribers");
+            // ignore send errors; no subscribers is fine
+            let _ = wake_tx().send(());
         }
     }
 
-    tracing::warn!("sleep monitor has stopped receiving PrepareForSleep signals");
+    Ok(())
 }
