@@ -186,15 +186,21 @@ pub async fn run_bluetooth_service() {
                 handle_command(cmd, &mut discovery_task).await;
             }
             // a failed registration at startup (e.g. bluetoothd wasn't up
-            // yet) is retried on every reconcile
-            BluetoothEvent::Reconcile if agent_handle.is_none() => {
+            // yet) is retried on every reconcile, and a missed AdapterAdded
+            // is healed by looking for an adapter again
+            event @ (BluetoothEvent::Wake | BluetoothEvent::Reconcile) => {
                 ensure_agent(&session, &mut agent_handle).await;
-                update(
-                    BluetoothEvent::Reconcile,
-                    &event_tx,
-                    &mut device_event_tasks,
-                )
-                .await;
+                if BLUETOOTH_STATE.read().is_none() {
+                    reinitialize_adapter(
+                        &session,
+                        &event_tx,
+                        &mut adapter_events_task,
+                        &mut device_event_tasks,
+                    )
+                    .await;
+                } else {
+                    update(event, &event_tx, &mut device_event_tasks).await;
+                }
             }
             other => update(other, &event_tx, &mut device_event_tasks).await,
         }
@@ -487,7 +493,12 @@ async fn reinitialize_adapter(
         if let Some(handle) = subscribe_device_events(address, device.clone(), event_tx).await {
             device_event_tasks.insert(address, handle);
         }
-        devices.insert(address, build_device_info(&device).await);
+        match build_device_info(&device).await {
+            Ok(info) => {
+                devices.insert(address, info);
+            }
+            Err(e) => tracing::debug!("couldn't read bluetooth device {address}: {e}"),
+        }
     }
 
     let state = BluetoothState {
@@ -508,11 +519,11 @@ async fn update(
     match input {
         BluetoothEvent::Wake => {
             tracing::debug!("system wake: refreshing bluetooth state");
-            reconcile_state().await;
+            reconcile_state(event_tx, device_event_tasks).await;
         }
         BluetoothEvent::Reconcile => {
             tracing::debug!("periodic reconcile: refreshing bluetooth state");
-            reconcile_state().await;
+            reconcile_state(event_tx, device_event_tasks).await;
         }
         // a newly added device needs its full property snapshot fetched
         // before it can be inserted, which requires an async round trip
@@ -568,54 +579,81 @@ async fn handle_device_added(
         old_handle.abort();
     }
 
-    let info = build_device_info(&device).await;
-    if let Some(ref mut state) = *BLUETOOTH_STATE.write() {
-        state.devices.insert(address, info);
+    match build_device_info(&device).await {
+        Ok(info) => {
+            if let Some(ref mut state) = *BLUETOOTH_STATE.write() {
+                state.devices.insert(address, info);
+            }
+        }
+        Err(e) => tracing::debug!("couldn't read new bluetooth device {address}: {e}"),
     }
 }
 
 /// Fetches a full property snapshot for a device.
-async fn build_device_info(device: &Device) -> DeviceInfo {
-    DeviceInfo {
+///
+/// Fails if the device can't be read (usually because bluez forgot it), so
+/// callers can drop it instead of showing made-up defaults.
+async fn build_device_info(device: &Device) -> bluer::Result<DeviceInfo> {
+    Ok(DeviceInfo {
         address: device.address(),
-        alias: device
-            .alias()
-            .await
-            .unwrap_or_else(|_| device.address().to_string()),
-        icon: device.icon().await.unwrap_or(None),
-        paired: device.is_paired().await.unwrap_or(false),
-        connected: device.is_connected().await.unwrap_or(false),
-    }
+        alias: device.alias().await?,
+        icon: device.icon().await?,
+        paired: device.is_paired().await?,
+        connected: device.is_connected().await?,
+    })
 }
 
-/// Re-polls adapter powered/discovering state and refreshes every device's
-/// property snapshot, self-healing anything a missed BlueZ event would
-/// otherwise have left stale. Used both after a system wake and on the
-/// periodic reconcile tick.
-async fn reconcile_state() {
-    // clone the adapter and known addresses without holding the write lock
-    // across the async re-fetch below
-    let (adapter, addresses) = {
-        let state = BLUETOOTH_STATE.read();
-        let Some(ref state) = *state else {
-            return;
-        };
-        (
-            state.adapter.clone(),
-            state.devices.keys().copied().collect::<Vec<_>>(),
-        )
+/// Re-polls adapter state and rebuilds the device list from the adapter's
+/// own, self-healing anything a missed BlueZ event would otherwise have left
+/// stale. Used both after a system wake and on the periodic reconcile tick.
+///
+/// The adapter's device list is the source of truth: devices it no longer
+/// knows are dropped along with their subscriptions, devices we never heard
+/// about are subscribed, and devices that can't be read are skipped.
+async fn reconcile_state(
+    event_tx: &UnboundedSender<BluetoothEvent>,
+    device_event_tasks: &mut HashMap<Address, tokio::task::AbortHandle>,
+) {
+    let Some(adapter) = BLUETOOTH_STATE.read().as_ref().map(|s| s.adapter.clone()) else {
+        return;
     };
 
-    let powered = adapter.is_powered().await.unwrap_or(false);
-    let discovering = adapter.is_discovering().await.unwrap_or(false);
+    let addresses = match adapter.device_addresses().await {
+        Ok(addresses) => addresses,
+        Err(e) => {
+            tracing::warn!("couldn't list bluetooth devices: {e}");
+            return;
+        }
+    };
+
+    device_event_tasks.retain(|address, handle| {
+        let known = addresses.contains(address);
+        if !known {
+            handle.abort();
+        }
+        known
+    });
 
     let mut devices = HashMap::with_capacity(addresses.len());
     for address in addresses {
         let Ok(device) = adapter.device(address) else {
             continue;
         };
-        devices.insert(address, build_device_info(&device).await);
+        if !device_event_tasks.contains_key(&address)
+            && let Some(handle) = subscribe_device_events(address, device.clone(), event_tx).await
+        {
+            device_event_tasks.insert(address, handle);
+        }
+        match build_device_info(&device).await {
+            Ok(info) => {
+                devices.insert(address, info);
+            }
+            Err(e) => tracing::debug!("couldn't read bluetooth device {address}: {e}"),
+        }
     }
+
+    let powered = adapter.is_powered().await.unwrap_or(false);
+    let discovering = adapter.is_discovering().await.unwrap_or(false);
 
     if let Some(ref mut state) = *BLUETOOTH_STATE.write() {
         state.powered = powered;
