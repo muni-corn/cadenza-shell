@@ -209,7 +209,9 @@ impl SimpleComponent for ActionPanel {
         if self.visible {
             let state = NOTIFICATIONS_STATE.read();
             let mut notifications: Vec<&Notification> = state.notifications.values().collect();
-            notifications.sort_by_key(|n| Reverse(n.timestamp));
+            // timestamps are whole seconds, so ties are broken by id (newer
+            // first)
+            notifications.sort_by_key(|n| Reverse((n.timestamp, n.id)));
 
             let mut guard = widgets.cards.guard();
             guard.clear();
