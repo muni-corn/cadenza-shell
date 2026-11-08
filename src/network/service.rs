@@ -53,6 +53,8 @@ pub enum NetworkPropertyChange {
     /// unique name and go silent when it disappears, so they must be torn
     /// down and re-established against the new owner.
     NetworkManagerRestarted,
+    /// NetworkManager left the bus without a replacement.
+    NetworkManagerVanished,
     /// A command issued by the UI (via `network::commands`).
     Command(NetworkCommand),
     /// The wifi device finished a scan (its `LastScan` advanced).
@@ -163,6 +165,8 @@ pub async fn run_network_service() {
     // arrive
     let mut tasks = SubscriptionTasks::default();
     let mut scan_watcher = None;
+    // reconciling while NetworkManager is gone would only fail and log
+    let mut nm_present = true;
     if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
         tracing::warn!("couldn't fetch initial network state: {e}");
     }
@@ -236,15 +240,26 @@ pub async fn run_network_service() {
                 }
             }
             NetworkPropertyChange::Reconcile => {
+                if !nm_present {
+                    continue;
+                }
                 tracing::debug!("periodic reconcile: refreshing network state");
                 if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
                     tracing::warn!("couldn't reconcile network state: {e}");
                 }
             }
+            NetworkPropertyChange::NetworkManagerVanished => {
+                tracing::warn!("networkmanager disappeared from the bus");
+                nm_present = false;
+                tasks.abort_all();
+                *NETWORK_STATE.write() = NetworkInfo::default();
+                *WIFI_SCAN_STATE.write() = Default::default();
+            }
             NetworkPropertyChange::NetworkManagerRestarted => {
                 tracing::info!(
                     "networkmanager reappeared on the bus, re-establishing subscriptions"
                 );
+                nm_present = true;
                 property_tasks.abort_all();
                 match spawn_property_watchers(&conn, &event_tx).await {
                     Ok(new_tasks) => property_tasks = new_tasks,
@@ -706,17 +721,18 @@ async fn handle_forget(
 /// access point signal strength changes and active-access-point changes if
 /// on WiFi.
 ///
-/// Any previously running subscription tasks are cancelled first.
+/// Previously running subscription tasks are replaced once the fetch
+/// succeeds; a failed fetch leaves them running.
 async fn handle_primary_change(
     conn: &zbus::Connection,
     event_tx: &UnboundedSender<NetworkPropertyChange>,
     tasks: &mut SubscriptionTasks,
 ) -> anyhow::Result<()> {
-    tasks.abort_all();
-
     let nm_proxy = NetworkManagerProxy::new(conn).await?;
     let primary_path = nm_proxy.primary_connection().await?;
     let (info, ap_path, wifi_device_path) = fetch_network_info(conn, primary_path).await?;
+
+    tasks.abort_all();
 
     tracing::debug!("fetched network info: {:?}", info);
     *NETWORK_STATE.write() = info;
@@ -916,7 +932,11 @@ async fn spawn_name_owner_watcher(
                         tracing::error!("couldn't send networkmanager restart event: {e}")
                     });
             } else {
-                tracing::warn!("networkmanager disappeared from the bus");
+                event_tx
+                    .send(NetworkPropertyChange::NetworkManagerVanished)
+                    .unwrap_or_else(|e| {
+                        tracing::error!("couldn't send networkmanager vanished event: {e}")
+                    });
             }
         }
         tracing::warn!("stream for NameOwnerChanged has closed");
