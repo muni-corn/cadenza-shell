@@ -34,7 +34,3 @@ inputs:
         follows: nixpkgs
 imports:
   - musicaloft-shell
-secretspec:
-  enable: true
-  profile: default
-  provider: keyring
