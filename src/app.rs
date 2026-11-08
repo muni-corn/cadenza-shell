@@ -371,7 +371,12 @@ impl CadenzaShellModel {
             if self.bars.iter().any(|bar| bar.monitor == monitor) {
                 continue;
             }
-            self.create_bar(monitor.clone(), sender).await;
+            self.create_bar(monitor, sender).await;
+        }
+
+        // keep popups available after their monitor is unplugged by moving
+        // the panel to any remaining monitor
+        if let Some(monitor) = self.bars.first().map(|bar| bar.monitor.clone()) {
             self.ensure_fresh_panel(monitor, sender);
         }
     }
