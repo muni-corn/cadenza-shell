@@ -135,17 +135,20 @@ pub async fn run_bluetooth_service() {
                     .as_ref()
                     .is_some_and(|state| state.adapter.name() == name);
                 if is_ours {
-                    tracing::warn!("bluetooth adapter '{name}' disappeared, clearing state");
-                    if let Some(handle) = adapter_events_task.take() {
-                        handle.abort();
-                    }
-                    for (_, handle) in device_event_tasks.drain() {
-                        handle.abort();
-                    }
+                    tracing::warn!("bluetooth adapter '{name}' disappeared");
                     if let Some(handle) = discovery_task.take() {
                         handle.abort();
                     }
                     *BLUETOOTH_STATE.write() = None;
+
+                    // switch to any other adapter that's still present
+                    reinitialize_adapter(
+                        &session,
+                        &event_tx,
+                        &mut adapter_events_task,
+                        &mut device_event_tasks,
+                    )
+                    .await;
                 }
             }
             BluetoothEvent::Session(SessionEvent::AdapterAdded(name)) => {
