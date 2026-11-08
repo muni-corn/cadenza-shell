@@ -27,8 +27,10 @@ impl SimpleComponent for WeatherTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // subscribe to the global weather state
+        // subscribe to the global weather state, and render whatever already
+        // exists, since the next fetch can be ten minutes away
         WEATHER_STATE.subscribe(sender.input_sender(), |_| ());
+        sender.input(());
 
         // Initialize the Tile component
         let tile = Tile::builder().launch(Default::default()).detach();

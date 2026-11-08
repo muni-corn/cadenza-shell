@@ -55,6 +55,8 @@ impl SimpleComponent for NotificationsTile {
             tile: Tile::builder()
                 .launch(TileInit {
                     icon_name: Some(BELL.to_string()),
+                    primary: count_text(notification_count),
+                    attention: count_attention(notification_count),
                     ..Default::default()
                 })
                 .forward(sender.input_sender(), |TileOutput::Clicked| {
@@ -92,23 +94,29 @@ impl SimpleComponent for NotificationsTile {
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        let primary_text = if self.notification_count > 0 {
-            Some(self.notification_count.to_string())
-        } else {
-            None
-        };
-
-        let attention = if self.notification_count > 0 {
-            Attention::Normal
-        } else {
-            Attention::Dim
-        };
-
-        widgets.tile.emit(TileMsg::SetPrimary(primary_text));
-        widgets.tile.emit(TileMsg::SetAttention(attention));
+        widgets
+            .tile
+            .emit(TileMsg::SetPrimary(count_text(self.notification_count)));
+        widgets.tile.emit(TileMsg::SetAttention(count_attention(
+            self.notification_count,
+        )));
     }
 
     fn init_root() -> Self::Root {
         gtk::Box::builder().visible(true).build()
+    }
+}
+
+/// The badge text: the count, or nothing when there are no notifications.
+fn count_text(count: usize) -> Option<String> {
+    (count > 0).then(|| count.to_string())
+}
+
+/// The bell is dimmed when there's nothing to see.
+fn count_attention(count: usize) -> Attention {
+    if count > 0 {
+        Attention::Normal
+    } else {
+        Attention::Dim
     }
 }
