@@ -70,42 +70,63 @@ pub async fn start_event_listener() {
             .unwrap_or_else(|e| tracing::error!("error getting initial niri state: {e}"));
 
         loop {
-            if let Ok(mut stream) = UnixStream::connect(&socket_path).await {
-                let json = serde_json::to_string(&Request::EventStream).unwrap();
-                if stream.write_all(json.as_bytes()).await.is_ok() {
-                    stream.write_all(b"\n").await.ok();
-                    stream.shutdown().await.ok(); // close write end
-
-                    let mut reader = BufReader::new(stream);
-                    let mut line = String::new();
-                    while reader.read_line(&mut line).await.is_ok() {
-                        match serde_json::from_str::<Event>(line.trim()) {
-                            Ok(event) => {
-                                tracing::debug!("niri event received: {:?}", event);
-                                match event {
-                                    Event::WorkspacesChanged { .. }
-                                    | Event::WorkspaceActivated { .. }
-                                    | Event::WorkspaceActiveWindowChanged { .. }
-                                    | Event::WindowsChanged { .. }
-                                    | Event::WindowOpenedOrChanged { .. }
-                                    | Event::WindowClosed { .. }
-                                    | Event::WindowFocusChanged { .. } => {
-                                        fetch_and_update(&socket_path).await.unwrap_or_else(|e| {
-                                            tracing::error!("couldn't update niri state: {}", e)
-                                        });
-                                    }
-                                    _ => (),
-                                }
-                            }
-                            Err(e) => tracing::error!("error parsing niri message: {}", e),
-                        }
-                        line.clear();
-                    }
-                }
+            if let Err(e) = run_event_stream(&socket_path).await {
+                tracing::warn!("niri event stream ended: {e}");
             }
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         }
     } else {
         tracing::warn!("NIRI_SOCKET env var is not available; niri service won't start");
+    }
+}
+
+/// Reads niri's event stream until the socket closes or errors.
+async fn run_event_stream(socket_path: &str) -> anyhow::Result<()> {
+    let mut stream = UnixStream::connect(socket_path).await?;
+    let json = serde_json::to_string(&Request::EventStream)?;
+    stream.write_all(json.as_bytes()).await?;
+    stream.write_all(b"\n").await?;
+    stream.shutdown().await?; // close write end
+
+    let mut reader = BufReader::new(stream);
+    let mut line = String::new();
+
+    // niri answers the request itself before streaming events
+    if reader.read_line(&mut line).await? == 0 {
+        anyhow::bail!("niri closed the socket before replying");
+    }
+    if let Err(e) = serde_json::from_str::<Reply>(line.trim())? {
+        anyhow::bail!("niri refused the event stream request: {e}");
+    }
+
+    loop {
+        line.clear();
+        if reader.read_line(&mut line).await? == 0 {
+            anyhow::bail!("niri closed the event stream");
+        }
+
+        let event = match serde_json::from_str::<Event>(line.trim()) {
+            Ok(event) => event,
+            Err(e) => {
+                tracing::error!("error parsing niri message: {e}");
+                continue;
+            }
+        };
+
+        tracing::debug!("niri event received: {:?}", event);
+        match event {
+            Event::WorkspacesChanged { .. }
+            | Event::WorkspaceActivated { .. }
+            | Event::WorkspaceActiveWindowChanged { .. }
+            | Event::WindowsChanged { .. }
+            | Event::WindowOpenedOrChanged { .. }
+            | Event::WindowClosed { .. }
+            | Event::WindowFocusChanged { .. } => {
+                fetch_and_update(socket_path)
+                    .await
+                    .unwrap_or_else(|e| tracing::error!("couldn't update niri state: {e}"));
+            }
+            _ => (),
+        }
     }
 }
