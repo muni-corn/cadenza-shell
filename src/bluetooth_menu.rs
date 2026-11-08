@@ -16,6 +16,10 @@ pub struct BluetoothMenu {
     paired_devices: FactoryVecDeque<BluetoothDeviceWidget>,
     nearby_devices: FactoryVecDeque<BluetoothDeviceWidget>,
     pairing_prompt: Option<PairingPrompt>,
+    /// Why the last PIN or passkey entry was rejected, if it was.
+    pairing_error: Option<&'static str>,
+    /// Set when a new prompt arrives, so the entry is cleared and focused.
+    reset_pairing_entry: bool,
     /// Set when new state arrives, so the switch only snaps to the real
     /// value then and not right after the user flips it.
     resync_power_switch: bool,
@@ -46,6 +50,7 @@ pub struct BluetoothMenuWidgets {
     pairing_box: gtk::Box,
     pairing_label: gtk::Label,
     pairing_entry: gtk::Entry,
+    pairing_error_label: gtk::Label,
     pairing_confirm_button: gtk::Button,
     pairing_cancel_button: gtk::Button,
 }
@@ -94,6 +99,8 @@ impl SimpleComponent for BluetoothMenu {
             paired_devices,
             nearby_devices,
             pairing_prompt: PAIRING_PROMPT.read().clone(),
+            pairing_error: None,
+            reset_pairing_entry: true,
             resync_power_switch: false,
         };
 
@@ -187,6 +194,12 @@ impl SimpleComponent for BluetoothMenu {
             .activates_default(true)
             .build();
 
+        let pairing_error_label = gtk::Label::builder()
+            .halign(gtk::Align::Start)
+            .css_classes(["warning"])
+            .visible(false)
+            .build();
+
         let pairing_buttons_box = gtk::Box::builder().spacing(8).build();
 
         let pairing_cancel_button = gtk::Button::builder().label("Cancel").build();
@@ -223,6 +236,7 @@ impl SimpleComponent for BluetoothMenu {
 
         pairing_box.append(&pairing_label);
         pairing_box.append(&pairing_entry);
+        pairing_box.append(&pairing_error_label);
         pairing_box.append(&pairing_buttons_box);
 
         // paired devices section
@@ -257,6 +271,7 @@ impl SimpleComponent for BluetoothMenu {
             pairing_box,
             pairing_label,
             pairing_entry,
+            pairing_error_label,
             pairing_confirm_button,
             pairing_cancel_button,
         };
@@ -277,6 +292,7 @@ impl SimpleComponent for BluetoothMenu {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         self.resync_power_switch = false;
+        self.reset_pairing_entry = false;
         match msg {
             BluetoothMenuMsg::UpdateState(state) => {
                 self.resync_power_switch = true;
@@ -286,6 +302,8 @@ impl SimpleComponent for BluetoothMenu {
             }
             BluetoothMenuMsg::UpdatePairingPrompt(prompt) => {
                 self.pairing_prompt = prompt;
+                self.pairing_error = None;
+                self.reset_pairing_entry = true;
             }
             BluetoothMenuMsg::ToggleBluetooth(enabled) => {
                 if self
@@ -355,25 +373,25 @@ impl SimpleComponent for BluetoothMenu {
                 bluetooth::remove(addr);
             }
             BluetoothMenuMsg::PairingSubmit(text) => {
-                if let Some(prompt) = &self.pairing_prompt {
-                    match prompt.request {
-                        PairingRequest::PinCode => {
-                            bluetooth::pairing_reply(PairingReply::Text(text));
-                        }
-                        PairingRequest::Passkey => match text.parse::<u32>() {
-                            Ok(passkey) => {
-                                bluetooth::pairing_reply(PairingReply::Number(passkey));
-                            }
-                            Err(_) => {
-                                tracing::debug!("passkey entry '{text}' isn't a valid number");
-                            }
-                        },
-                        // the entry isn't shown for these; nothing to submit
-                        PairingRequest::ConfirmPasskey(_)
-                        | PairingRequest::Authorize
-                        | PairingRequest::DisplayPinCode(_)
-                        | PairingRequest::DisplayPasskey { .. } => {}
+                let Some(prompt) = &self.pairing_prompt else {
+                    return;
+                };
+                let reply = match prompt.request {
+                    PairingRequest::PinCode => parse_pin_code(&text).map(PairingReply::Text),
+                    PairingRequest::Passkey => parse_passkey(&text).map(PairingReply::Number),
+                    // the entry isn't shown for these; nothing to submit
+                    PairingRequest::ConfirmPasskey(_)
+                    | PairingRequest::Authorize
+                    | PairingRequest::DisplayPinCode(_)
+                    | PairingRequest::DisplayPasskey { .. } => return,
+                };
+
+                match reply {
+                    Ok(reply) => {
+                        self.pairing_error = None;
+                        bluetooth::pairing_reply(reply);
                     }
+                    Err(problem) => self.pairing_error = Some(problem),
                 }
             }
             BluetoothMenuMsg::PairingConfirm => {
@@ -460,46 +478,72 @@ fn render_pairing_prompt(model: &BluetoothMenu, widgets: &mut BluetoothMenuWidge
 
     widgets.pairing_box.set_visible(true);
 
+    let device = device_name(&model.bluetooth_state, prompt.address);
     let (label, show_entry, show_buttons) = match &prompt.request {
-        PairingRequest::PinCode => (
-            format!("Enter the PIN code for {}", prompt.address),
-            true,
-            true,
-        ),
-        PairingRequest::Passkey => (
-            format!("Enter the passkey for {}", prompt.address),
-            true,
-            true,
-        ),
+        PairingRequest::PinCode => (format!("Enter the PIN code for {device}"), true, true),
+        PairingRequest::Passkey => (format!("Enter the passkey for {device}"), true, true),
         PairingRequest::ConfirmPasskey(passkey) => (
-            format!("Does {} show the passkey {passkey:06}?", prompt.address),
+            format!("Does {device} show the passkey {passkey:06}?"),
             false,
             true,
         ),
-        PairingRequest::Authorize => (
-            format!("Allow pairing with {}?", prompt.address),
-            false,
-            true,
-        ),
-        PairingRequest::DisplayPinCode(pin) => (
-            format!("PIN code for {}: {pin}", prompt.address),
-            false,
-            false,
-        ),
-        PairingRequest::DisplayPasskey { passkey, entered } => (
-            format!(
-                "Passkey for {}: {passkey:06} ({entered} digit(s) entered)",
-                prompt.address
-            ),
-            false,
-            false,
-        ),
+        PairingRequest::Authorize => (format!("Allow pairing with {device}?"), false, true),
+        PairingRequest::DisplayPinCode(pin) => (format!("Enter {pin} on {device}"), false, false),
+        PairingRequest::DisplayPasskey { passkey, entered } => {
+            let digits = if *entered == 1 { "digit" } else { "digits" };
+            (
+                format!("Enter {passkey:06} on {device} ({entered} {digits} entered)"),
+                false,
+                false,
+            )
+        }
     };
 
     widgets.pairing_label.set_label(&label);
     widgets.pairing_entry.set_visible(show_entry);
     widgets.pairing_confirm_button.set_visible(show_buttons);
     widgets.pairing_cancel_button.set_visible(show_buttons);
+
+    widgets
+        .pairing_error_label
+        .set_visible(model.pairing_error.is_some());
+    widgets
+        .pairing_error_label
+        .set_label(model.pairing_error.unwrap_or_default());
+
+    if model.reset_pairing_entry {
+        widgets.pairing_entry.set_text("");
+        if show_entry {
+            widgets.pairing_entry.grab_focus();
+        }
+    }
+}
+
+/// The device's alias if it's known, otherwise its address.
+fn device_name(state: &Option<BluetoothState>, address: Address) -> String {
+    state
+        .iter()
+        .flat_map(|state| state.devices())
+        .find(|device| device.address == address)
+        .map_or_else(|| address.to_string(), |device| device.alias.clone())
+}
+
+/// Validates a legacy PIN code, which bluez accepts as 1 to 16 characters.
+fn parse_pin_code(text: &str) -> Result<String, &'static str> {
+    if (1..=16).contains(&text.chars().count()) {
+        Ok(text.to_string())
+    } else {
+        Err("PIN codes are 1 to 16 characters")
+    }
+}
+
+/// Validates a numeric passkey, which is at most six digits.
+fn parse_passkey(text: &str) -> Result<u32, &'static str> {
+    text.trim()
+        .parse::<u32>()
+        .ok()
+        .filter(|passkey| *passkey <= 999_999)
+        .ok_or("Passkeys are numbers from 0 to 999999")
 }
 
 fn get_icon(state: &Option<BluetoothState>) -> &str {
@@ -688,5 +732,24 @@ impl FactoryComponent for BluetoothDeviceWidget {
         widgets.device_label.set_label(&self.info.alias);
         widgets.status_label.set_visible(self.info.connected);
         widgets.remove_button.set_visible(self.info.paired);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pin_codes_are_1_to_16_characters() {
+        assert!(parse_pin_code("").is_err());
+        assert_eq!(parse_pin_code("0000"), Ok("0000".to_string()));
+        assert!(parse_pin_code(&"1".repeat(17)).is_err());
+    }
+
+    #[test]
+    fn passkeys_are_at_most_six_digits() {
+        assert_eq!(parse_passkey(" 123456 "), Ok(123_456));
+        assert!(parse_passkey("1000000").is_err());
+        assert!(parse_passkey("abc").is_err());
     }
 }
