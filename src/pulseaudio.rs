@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::{cell::RefCell, rc::Rc};
 
 use pulse::{
     callbacks::ListResult,
@@ -15,22 +15,16 @@ use relm4::SharedState;
 
 pub static VOLUME_STATE: SharedState<PulseAudioData> = SharedState::new();
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PulseAudioData {
     pub volume: f64,
     pub muted: bool,
     pub default_sink_name: Option<String>,
 }
 
-impl Default for PulseAudioData {
-    fn default() -> Self {
-        Self {
-            volume: 0.0,
-            muted: false,
-            default_sink_name: None,
-        }
-    }
-}
+/// The context is only ever touched from the session thread, so shared
+/// ownership between callbacks doesn't need a lock.
+type SharedContext = Rc<RefCell<Context>>;
 
 /// Runs the pulseaudio client until its session ends.
 ///
@@ -68,7 +62,7 @@ fn run_session() {
         return;
     };
 
-    let context = Arc::new(Mutex::new(context));
+    let context = Rc::new(RefCell::new(context));
 
     let state_callback = Box::new({
         let context = context.clone();
@@ -76,15 +70,15 @@ fn run_session() {
     });
 
     context
-        .lock()
-        .unwrap()
+        .borrow_mut()
         .set_state_callback(Some(state_callback));
 
-    if let Err(err) = context
-        .lock()
-        .unwrap()
-        .connect(None, FlagSet::NOAUTOSPAWN, None)
-    {
+    // bind the result first so the mutable borrow ends before the state
+    // callback can run again
+    let connected = context
+        .borrow_mut()
+        .connect(None, FlagSet::NOAUTOSPAWN, None);
+    if let Err(err) = connected {
         tracing::error!("failed to connect to pulse: {}", err);
         return;
     }
@@ -101,8 +95,9 @@ fn run_session() {
     }
 }
 
-fn on_state_change(context: &Arc<Mutex<Context>>) {
-    let Ok(state) = context.try_lock().map(|lock| lock.get_state()) else {
+fn on_state_change(context: &SharedContext) {
+    // connect() can report state changes while it still holds the borrow
+    let Ok(state) = context.try_borrow().map(|context| context.get_state()) else {
         return;
     };
 
@@ -110,7 +105,7 @@ fn on_state_change(context: &Arc<Mutex<Context>>) {
         State::Ready => {
             tracing::info!("connected to pulseaudio server");
 
-            let introspect = context.lock().unwrap().introspect();
+            let introspect = context.borrow().introspect();
 
             // get default sink info
             introspect.get_server_info({
@@ -126,14 +121,9 @@ fn on_state_change(context: &Arc<Mutex<Context>>) {
                 move |facility, op, _i| on_event(&context, facility, op)
             });
 
-            context
-                .lock()
-                .unwrap()
-                .set_subscribe_callback(Some(subscribe_callback));
-            context
-                .lock()
-                .unwrap()
-                .subscribe(InterestMaskSet::SERVER | InterestMaskSet::SINK, |_| ());
+            let mut context = context.borrow_mut();
+            context.set_subscribe_callback(Some(subscribe_callback));
+            context.subscribe(InterestMaskSet::SERVER | InterestMaskSet::SINK, |_| ());
         }
         State::Failed => {
             tracing::error!("failed to connect to pulseaudio server");
@@ -146,7 +136,7 @@ fn on_state_change(context: &Arc<Mutex<Context>>) {
     }
 }
 
-fn on_server_info(server_info: &ServerInfo, context: &Arc<Mutex<Context>>) {
+fn on_server_info(server_info: &ServerInfo, context: &SharedContext) {
     let default_sink_name = server_info
         .default_sink_name
         .as_ref()
@@ -159,7 +149,7 @@ fn on_server_info(server_info: &ServerInfo, context: &Arc<Mutex<Context>>) {
 
     // get sink info for the default sink
     if let Some(ref sink_name) = default_sink_name {
-        let introspect = context.lock().unwrap().introspect();
+        let introspect = context.borrow().introspect();
         introspect.get_sink_info_by_name(sink_name, on_sink_info);
     }
 }
@@ -176,14 +166,14 @@ fn on_sink_info(sink_info: ListResult<&SinkInfo>) {
     data_guard.muted = info.mute;
 }
 
-fn on_event(context: &Arc<Mutex<Context>>, facility: Option<Facility>, _op: Option<Operation>) {
+fn on_event(context: &SharedContext, facility: Option<Facility>, _op: Option<Operation>) {
     let Some(facility) = facility else {
         return;
     };
 
     match facility {
         Facility::Server => {
-            let introspect = context.lock().unwrap().introspect();
+            let introspect = context.borrow().introspect();
             introspect.get_server_info({
                 let context = context.clone();
 
@@ -193,7 +183,7 @@ fn on_event(context: &Arc<Mutex<Context>>, facility: Option<Facility>, _op: Opti
         Facility::Sink => {
             // update default sink info
             if let Some(sink_name) = VOLUME_STATE.read().default_sink_name.clone() {
-                let introspect = context.lock().unwrap().introspect();
+                let introspect = context.borrow().introspect();
                 introspect.get_sink_info_by_name(&sink_name, {
                     move |sink_info| on_sink_info(sink_info)
                 });
