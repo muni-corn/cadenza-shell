@@ -3,7 +3,7 @@ use relm4::prelude::*;
 
 use crate::{
     icon_names::{MEDIA_PLAYBACK_PAUSE, MUSIC_NOTE_SINGLE},
-    mpris::{MPRIS_STATE, MprisState},
+    mpris::{MPRIS_STATE, MprisState, PlaybackStatus},
     widgets::tile::{Tile, TileMsg},
 };
 
@@ -59,7 +59,7 @@ impl SimpleComponent for MprisTile {
                 status,
             }) => {
                 let icon = match status {
-                    mpris::PlaybackStatus::Playing => MUSIC_NOTE_SINGLE,
+                    PlaybackStatus::Playing => MUSIC_NOTE_SINGLE,
                     _ => MEDIA_PLAYBACK_PAUSE,
                 }
                 .to_string();
