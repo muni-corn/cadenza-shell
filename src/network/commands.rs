@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 use tokio::sync::mpsc::UnboundedSender;
 use zbus::zvariant::OwnedObjectPath;
 
-use crate::network::types::ApSecurity;
+use crate::network::security::ApSecurity;
 
 /// Commands the UI can send to the network service.
 ///

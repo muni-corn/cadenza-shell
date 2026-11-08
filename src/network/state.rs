@@ -2,8 +2,9 @@ use relm4::SharedState;
 use zbus::zvariant::OwnedObjectPath;
 
 use crate::{
-    network::types::{
-        ApSecurity, ConnectivityState, NM_DEVICE_TYPE_ETHERNET, NM_DEVICE_TYPE_WIFI, State,
+    network::{
+        security::ApSecurity,
+        types::{ConnectivityState, NM_DEVICE_TYPE_ETHERNET, NM_DEVICE_TYPE_WIFI, State},
     },
     utils::icons::{
         NETWORK_WIFI_CONNECTING, NETWORK_WIFI_DISABLED, NETWORK_WIFI_DISCONNECTED,

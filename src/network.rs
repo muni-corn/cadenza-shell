@@ -2,6 +2,7 @@ pub mod commands;
 pub mod dbus;
 pub mod events;
 pub mod scan;
+pub mod security;
 pub mod service;
 pub mod state;
 pub mod types;

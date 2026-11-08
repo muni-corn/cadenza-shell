@@ -6,8 +6,8 @@ use relm4::prelude::*;
 use crate::{
     network::{
         self, AccessPointSummary, ConnectFailureReason, NETWORK_STATE, NetworkEvent, NetworkInfo,
-        WIFI_SCAN_STATE, WifiScanState, get_icon, get_strength_icon, subscribe_events,
-        types::ApSecurity,
+        WIFI_SCAN_STATE, WifiScanState, get_icon, get_strength_icon, security::ApSecurity,
+        subscribe_events,
     },
     settings,
 };

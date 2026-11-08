@@ -4,8 +4,8 @@ use zbus::zvariant::OwnedObjectPath;
 
 use crate::network::{
     dbus::{AccessPointProxy, SettingsConnectionProxy, SettingsProxy, WirelessDeviceProxy},
+    security::ApSecurity,
     state::AccessPointSummary,
-    types::ApSecurity,
 };
 
 /// A single access point reading, before deduplication by SSID.

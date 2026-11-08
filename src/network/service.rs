@@ -13,10 +13,11 @@ use crate::{
         },
         events::{self, ConnectFailureReason, NetworkEvent},
         scan,
+        security::ApSecurity,
         state::{DeviceKind, NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE},
         types::{
-            ApSecurity, NM_DEVICE_STATE_ACTIVATED, NM_DEVICE_STATE_FAILED,
-            NM_DEVICE_STATE_REASON_NO_SECRETS, NM_DEVICE_TYPE_ETHERNET, NM_DEVICE_TYPE_WIFI, State,
+            NM_DEVICE_STATE_ACTIVATED, NM_DEVICE_STATE_FAILED, NM_DEVICE_STATE_REASON_NO_SECRETS,
+            NM_DEVICE_TYPE_ETHERNET, NM_DEVICE_TYPE_WIFI, State,
         },
     },
     settings, sleep_monitor,
