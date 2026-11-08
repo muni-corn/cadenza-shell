@@ -1,4 +1,4 @@
-use std::{collections::HashSet, time::Duration};
+use std::time::Duration;
 
 use gtk4::prelude::*;
 use relm4::prelude::*;
@@ -339,7 +339,11 @@ impl Component for NetworkMenu {
             is_open: false,
             rescan_generation: 0,
         };
-        update_ap_rows(&mut model.access_points, &current_scan_state.access_points);
+        update_ap_rows(
+            &mut model.access_points,
+            &current_scan_state.access_points,
+            model.network_state.wifi_ssid().as_deref(),
+        );
         model.scan_state = current_scan_state;
 
         let widgets = NetworkMenuWidgets {
@@ -366,9 +370,18 @@ impl Component for NetworkMenu {
         match msg {
             NetworkMenuMsg::UpdateState(state) => {
                 self.network_state = state;
+                update_ap_rows(
+                    &mut self.access_points,
+                    &self.scan_state.access_points,
+                    self.network_state.wifi_ssid().as_deref(),
+                );
             }
             NetworkMenuMsg::UpdateScanState(state) => {
-                update_ap_rows(&mut self.access_points, &state.access_points);
+                update_ap_rows(
+                    &mut self.access_points,
+                    &state.access_points,
+                    self.network_state.wifi_ssid().as_deref(),
+                );
                 self.scan_state = state;
             }
             NetworkMenuMsg::ToggleWifi(enabled) => {
@@ -392,7 +405,7 @@ impl Component for NetworkMenu {
             }
             NetworkMenuMsg::ApClicked(summary) => {
                 self.connect_error = None;
-                if summary.is_active {
+                if self.network_state.wifi_ssid().as_deref() == Some(summary.ssid.as_str()) {
                     // already connected to this network; nothing to do here,
                     // the Disconnect button handles leaving it
                 } else if summary.security == ApSecurity::Enterprise && !summary.is_saved() {
@@ -572,35 +585,39 @@ impl NetworkMenu {
     }
 }
 
-/// Diffs the factory's current rows against the latest scan results: removes
-/// rows for networks no longer in range, updates existing rows in place, and
-/// inserts new ones - instead of clearing and rebuilding the whole list on
-/// every scan (which would destroy and recreate every row's widgets even
-/// when nothing about them changed).
+/// Syncs the factory's rows with the latest scan results, with the connected
+/// network first and the rest by descending strength.
 ///
-/// Doesn't reorder existing rows to match a changed sort order (e.g. if a
-/// network's signal strength overtakes another between scans); this is a
-/// minor, self-correcting staleness rather than a correctness issue.
-fn update_ap_rows(rows: &mut FactoryVecDeque<AccessPointRow>, summaries: &[AccessPointSummary]) {
-    let new_ssids: HashSet<&str> = summaries.iter().map(|s| s.ssid.as_str()).collect();
+/// Rows are updated in place when the order is unchanged, which is the
+/// common case between scans; otherwise the list is rebuilt so the order is
+/// always right.
+fn update_ap_rows(
+    rows: &mut FactoryVecDeque<AccessPointRow>,
+    summaries: &[AccessPointSummary],
+    active_ssid: Option<&str>,
+) {
+    let mut ordered: Vec<(AccessPointSummary, bool)> = summaries
+        .iter()
+        .map(|summary| (summary.clone(), Some(summary.ssid.as_str()) == active_ssid))
+        .collect();
+    // stable, so the strength order from the scan is kept
+    ordered.sort_by_key(|(_, active)| !active);
 
-    let current_ssids: Vec<String> = rows.iter().map(|r| r.summary.ssid.clone()).collect();
-    {
-        let mut guard = rows.guard();
-        for (index, ssid) in current_ssids.iter().enumerate().rev() {
-            if !new_ssids.contains(ssid.as_str()) {
-                guard.remove(index);
-            }
+    let same_order = rows.len() == ordered.len()
+        && rows
+            .iter()
+            .zip(&ordered)
+            .all(|(row, (summary, _))| row.summary.ssid == summary.ssid);
+
+    if same_order {
+        for (index, (summary, active)) in ordered.into_iter().enumerate() {
+            rows.send(index, AccessPointRowMsg::Update(summary, active));
         }
-    }
-
-    for summary in summaries {
-        let existing_index = rows.iter().position(|r| r.summary.ssid == summary.ssid);
-        match existing_index {
-            Some(index) => rows.send(index, AccessPointRowMsg::UpdateSummary(summary.clone())),
-            None => {
-                rows.guard().push_back(summary.clone());
-            }
+    } else {
+        let mut guard = rows.guard();
+        guard.clear();
+        for row in ordered {
+            guard.push_back(row);
         }
     }
 }
@@ -609,13 +626,15 @@ fn update_ap_rows(rows: &mut FactoryVecDeque<AccessPointRow>, summaries: &[Acces
 #[derive(Debug)]
 struct AccessPointRow {
     summary: AccessPointSummary,
+    /// Whether the wifi device is connected to this network.
+    active: bool,
 }
 
 #[derive(Debug)]
 enum AccessPointRowMsg {
     Clicked,
     ForgetClicked,
-    UpdateSummary(AccessPointSummary),
+    Update(AccessPointSummary, bool),
 }
 
 #[derive(Debug)]
@@ -634,7 +653,8 @@ struct AccessPointRowWidgets {
 impl FactoryComponent for AccessPointRow {
     type CommandOutput = ();
     type Index = DynamicIndex;
-    type Init = AccessPointSummary;
+    /// The network and whether it's the connected one.
+    type Init = (AccessPointSummary, bool);
     type Input = AccessPointRowMsg;
     type Output = AccessPointRowOutput;
     type ParentWidget = gtk::Box;
@@ -642,11 +662,11 @@ impl FactoryComponent for AccessPointRow {
     type Widgets = AccessPointRowWidgets;
 
     fn init_model(
-        summary: Self::Init,
+        (summary, active): Self::Init,
         _index: &DynamicIndex,
         _sender: FactorySender<Self>,
     ) -> Self {
-        Self { summary }
+        Self { summary, active }
     }
 
     fn init_root(&self) -> Self::Root {
@@ -716,8 +736,9 @@ impl FactoryComponent for AccessPointRow {
             AccessPointRowMsg::ForgetClicked => {
                 let _ = sender.output(AccessPointRowOutput::ForgetClicked(self.summary.clone()));
             }
-            AccessPointRowMsg::UpdateSummary(summary) => {
+            AccessPointRowMsg::Update(summary, active) => {
                 self.summary = summary;
+                self.active = active;
             }
         }
     }
@@ -734,7 +755,7 @@ impl AccessPointRow {
             .set_icon_name(Some(get_strength_icon(self.summary.strength)));
         widgets.ssid_label.set_label(&self.summary.ssid);
 
-        let status = if self.summary.is_active {
+        let status = if self.active {
             "Connected"
         } else if self.summary.is_saved() {
             "Saved"

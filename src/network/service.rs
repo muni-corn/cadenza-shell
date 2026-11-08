@@ -402,8 +402,7 @@ async fn refresh_access_points(
     conn: &zbus::Connection,
     device_path: &OwnedObjectPath,
 ) -> anyhow::Result<()> {
-    let active_ssid = NETWORK_STATE.read().wifi_ssid();
-    let access_points = scan::fetch_access_points(conn, device_path, active_ssid.as_deref())
+    let access_points = scan::fetch_access_points(conn, device_path)
         .await
         .inspect_err(|e| tracing::warn!("couldn't fetch access points: {e}"))
         .unwrap_or_default();

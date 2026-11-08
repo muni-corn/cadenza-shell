@@ -24,8 +24,8 @@ pub static WIFI_SCAN_STATE: SharedState<WifiScanState> = SharedState::new();
 
 #[derive(Debug, Clone, Default)]
 pub struct WifiScanState {
-    /// Access points, deduplicated by SSID and sorted with the active
-    /// connection first, then by descending signal strength.
+    /// Access points, deduplicated by SSID and sorted by descending signal
+    /// strength.
     pub access_points: Vec<AccessPointSummary>,
     /// Whether a scan (`RequestScan`) is currently in flight.
     pub scanning: bool,
@@ -40,8 +40,6 @@ pub struct AccessPointSummary {
     /// as a percentage.
     pub strength: u8,
     pub security: ApSecurity,
-    /// Whether this is the network the active connection is on.
-    pub is_active: bool,
     /// The object path of a saved connection profile matching this SSID, if
     /// one exists. `Some` means connecting won't need a password (NM already
     /// has the secrets); it's also required to "forget" the network.

@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::{cmp::Reverse, collections::HashMap};
 
 use zbus::zvariant::OwnedObjectPath;
 
@@ -22,7 +22,6 @@ struct RawApReading {
 pub async fn fetch_access_points(
     conn: &zbus::Connection,
     device_path: &OwnedObjectPath,
-    active_ssid: Option<&str>,
 ) -> anyhow::Result<Vec<AccessPointSummary>> {
     let wifi_proxy = WirelessDeviceProxy::builder(conn)
         .path(device_path)?
@@ -47,7 +46,7 @@ pub async fn fetch_access_points(
             HashMap::new()
         });
 
-    Ok(dedupe_and_sort(readings, active_ssid, &saved))
+    Ok(dedupe_and_sort(readings, &saved))
 }
 
 /// Reads a single access point's SSID, strength, and security. Returns
@@ -119,11 +118,10 @@ async fn fetch_saved_wifi_connections(
 }
 
 /// Groups raw per-BSSID readings by SSID (keeping only the strongest signal
-/// for each), attaches active/saved status, and sorts with the active
-/// connection first, then by descending signal strength.
+/// for each), attaches saved status, and sorts by descending signal
+/// strength.
 fn dedupe_and_sort(
     readings: Vec<RawApReading>,
-    active_ssid: Option<&str>,
     saved: &HashMap<String, OwnedObjectPath>,
 ) -> Vec<AccessPointSummary> {
     let mut strongest_by_ssid: HashMap<String, RawApReading> = HashMap::new();
@@ -141,7 +139,6 @@ fn dedupe_and_sort(
     let mut summaries: Vec<AccessPointSummary> = strongest_by_ssid
         .into_values()
         .map(|reading| AccessPointSummary {
-            is_active: active_ssid == Some(reading.ssid.as_str()),
             saved_connection: saved.get(&reading.ssid).cloned(),
             ssid: reading.ssid,
             strength: reading.strength,
@@ -149,11 +146,7 @@ fn dedupe_and_sort(
         })
         .collect();
 
-    summaries.sort_by(|a, b| {
-        b.is_active
-            .cmp(&a.is_active)
-            .then_with(|| b.strength.cmp(&a.strength))
-    });
+    summaries.sort_by_key(|summary| Reverse(summary.strength));
 
     summaries
 }
@@ -178,33 +171,21 @@ mod tests {
             reading("Home", 60),
         ];
 
-        let summaries = dedupe_and_sort(readings, None, &HashMap::new());
+        let summaries = dedupe_and_sort(readings, &HashMap::new());
 
         assert_eq!(summaries.len(), 1);
         assert_eq!(summaries[0].strength, 90);
     }
 
     #[test]
-    fn sorts_active_connection_first_regardless_of_strength() {
-        let readings = vec![reading("Strong", 100), reading("ActiveButWeak", 10)];
-
-        let summaries = dedupe_and_sort(readings, Some("ActiveButWeak"), &HashMap::new());
-
-        assert_eq!(summaries[0].ssid, "ActiveButWeak");
-        assert!(summaries[0].is_active);
-        assert_eq!(summaries[1].ssid, "Strong");
-        assert!(!summaries[1].is_active);
-    }
-
-    #[test]
-    fn sorts_remaining_networks_by_descending_strength() {
+    fn sorts_networks_by_descending_strength() {
         let readings = vec![
             reading("Weak", 20),
             reading("Strongest", 90),
             reading("Mid", 50),
         ];
 
-        let summaries = dedupe_and_sort(readings, None, &HashMap::new());
+        let summaries = dedupe_and_sort(readings, &HashMap::new());
 
         let ssids: Vec<&str> = summaries.iter().map(|s| s.ssid.as_str()).collect();
         assert_eq!(ssids, vec!["Strongest", "Mid", "Weak"]);
@@ -218,7 +199,7 @@ mod tests {
         saved.insert("Home".to_string(), path.clone());
 
         let readings = vec![reading("Home", 80), reading("Guest", 60)];
-        let summaries = dedupe_and_sort(readings, None, &saved);
+        let summaries = dedupe_and_sort(readings, &saved);
 
         let home = summaries.iter().find(|s| s.ssid == "Home").unwrap();
         let guest = summaries.iter().find(|s| s.ssid == "Guest").unwrap();
