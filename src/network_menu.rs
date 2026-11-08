@@ -23,6 +23,18 @@ pub struct NetworkMenu {
     /// owning tile via [`NetworkMenuMsg::SetOpen`]. Gates the periodic
     /// rescan so we don't poke the radio while nobody's looking.
     is_open: bool,
+    /// Bumped on every open and close so rescan ticks from an earlier open
+    /// period are ignored.
+    rescan_generation: u64,
+}
+
+/// Results of the menu's background commands.
+#[derive(Debug)]
+pub enum NetworkMenuCommand {
+    /// A connection attempt finished.
+    ConnectionEvent(NetworkEvent),
+    /// The rescan delay for the given open period elapsed.
+    RescanTick(u64),
 }
 
 #[derive(Debug, Clone)]
@@ -42,11 +54,8 @@ pub enum NetworkMenuMsg {
     CancelPassword,
     UpdateState(NetworkInfo),
     UpdateScanState(WifiScanState),
-    ConnectionEvent(NetworkEvent),
     /// Sent by the owning tile when its menu window opens or closes.
     SetOpen(bool),
-    /// Internal: periodic tick requesting a rescan while open.
-    PeriodicRescan,
 }
 
 #[derive(Debug)]
@@ -69,7 +78,8 @@ pub struct NetworkMenuWidgets {
     password_entry: gtk::Entry,
 }
 
-impl SimpleComponent for NetworkMenu {
+impl Component for NetworkMenu {
+    type CommandOutput = NetworkMenuCommand;
     type Init = ();
     type Input = NetworkMenuMsg;
     type Output = ();
@@ -112,36 +122,33 @@ impl SimpleComponent for NetworkMenu {
             NetworkMenuMsg::UpdateScanState(state.clone())
         });
 
-        // forward connection attempt outcomes into our own input channel
-        let sender_clone = sender.clone();
-        relm4::spawn(async move {
-            let mut rx = subscribe_events();
-            loop {
-                match rx.recv().await {
-                    Ok(event) => sender_clone.input(NetworkMenuMsg::ConnectionEvent(event)),
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                        tracing::warn!(
-                            "network menu lagged on connection event broadcast, missed {n} \
-                             event(s)"
-                        );
+        // forward connection attempt outcomes; the command is cancelled when
+        // the menu shuts down
+        sender.command(|out, shutdown| {
+            shutdown
+                .register(async move {
+                    let mut rx = subscribe_events();
+                    loop {
+                        match rx.recv().await {
+                            Ok(event) => {
+                                if out
+                                    .send(NetworkMenuCommand::ConnectionEvent(event))
+                                    .is_err()
+                                {
+                                    break;
+                                }
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                                tracing::warn!(
+                                    "network menu lagged on connection event broadcast, missed \
+                                     {n} event(s)"
+                                );
+                            }
+                            Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        }
                     }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
-                }
-            }
-        });
-
-        // periodically request a rescan while the menu is open; RequestScan
-        // only starts a scan, it doesn't return fresh results itself, so
-        // this is what eventually surfaces them once LastScan advances
-        let sender_clone = sender.clone();
-        relm4::spawn(async move {
-            let interval_secs = settings::get_config().network.scan_interval;
-            let mut interval = tokio::time::interval(Duration::from_secs(interval_secs));
-            interval.tick().await; // skip the immediate first tick
-            loop {
-                interval.tick().await;
-                sender_clone.input(NetworkMenuMsg::PeriodicRescan);
-            }
+                })
+                .drop_on_shutdown()
         });
 
         let current_state = NETWORK_STATE.read().clone();
@@ -328,6 +335,7 @@ impl SimpleComponent for NetworkMenu {
             password_prompt: None,
             connect_error: None,
             is_open: false,
+            rescan_generation: 0,
         };
         update_ap_rows(&mut model.access_points, &current_scan_state.access_points);
         model.scan_state = current_scan_state;
@@ -352,7 +360,7 @@ impl SimpleComponent for NetworkMenu {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         match msg {
             NetworkMenuMsg::UpdateState(state) => {
                 self.network_state = state;
@@ -369,15 +377,12 @@ impl SimpleComponent for NetworkMenu {
             }
             NetworkMenuMsg::SetOpen(open) => {
                 self.is_open = open;
+                self.rescan_generation = self.rescan_generation.wrapping_add(1);
                 if open {
                     // fetch fresh results right away instead of waiting for
                     // the next periodic tick
                     network::scan();
-                }
-            }
-            NetworkMenuMsg::PeriodicRescan => {
-                if self.is_open {
-                    network::scan();
+                    self.schedule_rescan(&sender);
                 }
             }
             NetworkMenuMsg::Disconnect => {
@@ -411,36 +416,24 @@ impl SimpleComponent for NetworkMenu {
                 self.password_prompt = None;
                 self.connect_error = None;
             }
-            NetworkMenuMsg::ConnectionEvent(event) => match event {
-                NetworkEvent::ConnectionSucceeded { ssid } => {
-                    tracing::debug!("connected to {ssid}");
-                    self.password_prompt = None;
-                    self.connect_error = None;
-                }
-                NetworkEvent::ConnectionFailed { ssid, reason } => {
-                    self.connect_error = Some(match reason {
-                        ConnectFailureReason::WrongPassword => {
-                            format!("Wrong password for {ssid}")
-                        }
-                        ConnectFailureReason::Other => format!("Couldn't connect to {ssid}"),
-                    });
+        }
+    }
 
-                    // reopen the password prompt so the user can retry,
-                    // rather than leaving them nowhere after a wrong
-                    // password
-                    if reason == ConnectFailureReason::WrongPassword {
-                        let security = self
-                            .scan_state
-                            .access_points
-                            .iter()
-                            .find(|ap| ap.ssid == ssid)
-                            .map(|ap| ap.security);
-                        if let Some(security) = security {
-                            self.password_prompt = Some(PasswordPrompt { ssid, security });
-                        }
-                    }
+    fn update_cmd(
+        &mut self,
+        command: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match command {
+            NetworkMenuCommand::ConnectionEvent(event) => self.handle_connection_event(event),
+            NetworkMenuCommand::RescanTick(generation) => {
+                // ticks from an earlier open period are stale
+                if self.is_open && generation == self.rescan_generation {
+                    network::scan();
+                    self.schedule_rescan(&sender);
                 }
-            },
+            }
         }
     }
 
@@ -499,6 +492,53 @@ impl SimpleComponent for NetworkMenu {
         } else {
             widgets.password_box.set_visible(false);
             widgets.password_entry.set_text("");
+        }
+    }
+}
+
+impl NetworkMenu {
+    /// Requests another scan after `network.scan_interval` while the menu
+    /// stays open. RequestScan only starts a scan, so repeating it is what
+    /// eventually surfaces fresh results.
+    fn schedule_rescan(&self, sender: &ComponentSender<Self>) {
+        let generation = self.rescan_generation;
+        let interval = Duration::from_secs(settings::get_config().network.scan_interval);
+        sender.oneshot_command(async move {
+            tokio::time::sleep(interval).await;
+            NetworkMenuCommand::RescanTick(generation)
+        });
+    }
+
+    fn handle_connection_event(&mut self, event: NetworkEvent) {
+        match event {
+            NetworkEvent::ConnectionSucceeded { ssid } => {
+                tracing::debug!("connected to {ssid}");
+                self.password_prompt = None;
+                self.connect_error = None;
+            }
+            NetworkEvent::ConnectionFailed { ssid, reason } => {
+                self.connect_error = Some(match reason {
+                    ConnectFailureReason::WrongPassword => {
+                        format!("Wrong password for {ssid}")
+                    }
+                    ConnectFailureReason::Other => format!("Couldn't connect to {ssid}"),
+                });
+
+                // reopen the password prompt so the user can retry,
+                // rather than leaving them nowhere after a wrong
+                // password
+                if reason == ConnectFailureReason::WrongPassword {
+                    let security = self
+                        .scan_state
+                        .access_points
+                        .iter()
+                        .find(|ap| ap.ssid == ssid)
+                        .map(|ap| ap.security);
+                    if let Some(security) = security {
+                        self.password_prompt = Some(PasswordPrompt { ssid, security });
+                    }
+                }
+            }
         }
     }
 }
