@@ -24,7 +24,7 @@ impl NiriState {
     fn from_event_stream(state: &EventStreamState) -> Self {
         let mut workspaces: Vec<NiriWorkspace> =
             state.workspaces.workspaces.values().cloned().collect();
-        workspaces.sort_by_key(|workspace| workspace.id);
+        workspaces.sort_by_key(|workspace| workspace.idx);
 
         let focused_window_title = state
             .windows

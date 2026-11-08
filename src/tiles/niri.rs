@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use gdk4::Monitor;
 use gtk4::prelude::*;
 use niri_ipc::Workspace;
@@ -14,7 +12,7 @@ pub struct NiriInit {
 
 #[derive(Debug)]
 pub struct NiriTile {
-    pub monitor_connector_name: Option<String>,
+    monitor_connector_name: Option<String>,
 
     workspaces: FactoryVecDeque<NiriWorkspaceIndicator>,
 }
@@ -85,65 +83,25 @@ impl SimpleComponent for NiriTile {
             return;
         };
 
-        // collects only the workspaces for this tile's monitor
-        let monitor_workspaces: Vec<&Workspace> = state
+        // this monitor's workspaces in on-screen order
+        let mut monitor_workspaces: Vec<&Workspace> = state
             .workspaces
             .iter()
             .filter(|w| w.output == self.monitor_connector_name)
             .collect();
+        monitor_workspaces.sort_by_key(|w| w.idx);
 
-        let new_ids: HashSet<u64> = monitor_workspaces.iter().map(|w| w.id).collect();
-
-        // first, remove stale workspaces
-        {
-            let mut guard = self.workspaces.guard();
-            let to_remove: Vec<usize> = guard
-                .iter()
-                .enumerate()
-                .filter_map(|(i, ws)| {
-                    if !new_ids.contains(&ws.inner.id) {
-                        Some(i)
-                    } else {
-                        None
-                    }
-                })
-                .collect();
-
-            for index in to_remove.into_iter().rev() {
-                guard.remove(index);
-            }
-        }
-
-        // then, update existing workspaces; any workspaces not found in the
-        // existing collection are returned as new workspaces
-        let new_workspaces: Vec<_> = {
-            let guard = self.workspaces.guard();
-            monitor_workspaces
-                .into_iter()
-                .filter(|ws| {
-                    if let Some(index) =
-                        guard.iter().position(|existing| existing.inner.id == ws.id)
-                    {
-                        // update existing workspaces and filter them out
-                        guard.send(index, NiriWorkspaceMsg::Update((*ws).to_owned()));
-                        false
-                    } else {
-                        // this is a new workspace; add it
-                        true
-                    }
-                })
-                .collect()
-        };
-
-        // finally, add new workspaces, sorted by idx
+        // dots differ only in whether they're active, so reuse them by
+        // position; that keeps their css transitions and handles reordering
         let mut guard = self.workspaces.guard();
-        for new_ws in new_workspaces.into_iter() {
-            let maybe_index = guard.iter().position(|ws| new_ws.idx == ws.inner.idx - 1);
-            if let Some(index) = maybe_index {
-                // idk why we have to subtract 1 here but bleh
-                guard.insert(index.saturating_sub(1), new_ws.clone());
+        while guard.len() > monitor_workspaces.len() {
+            guard.pop_back();
+        }
+        for (index, workspace) in monitor_workspaces.into_iter().enumerate() {
+            if index < guard.len() {
+                guard.send(index, NiriWorkspaceMsg::Update(workspace.clone()));
             } else {
-                guard.push_back(new_ws.clone());
+                guard.push_back(workspace.clone());
             }
         }
     }
