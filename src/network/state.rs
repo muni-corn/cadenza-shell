@@ -99,6 +99,17 @@ pub struct NetworkInfo {
     /// The device kind backing the active or in-progress connection. See
     /// [`DeviceKind`] for how this differs from `specific_info`.
     pub device_kind: Option<DeviceKind>,
+    /// The network the wifi device is connected to, whether or not it's the
+    /// primary connection (e.g. wifi stays up while ethernet is primary).
+    pub wifi: Option<WifiConnection>,
+}
+
+/// The access point the wifi device is currently associated with.
+#[derive(Debug, Clone, PartialEq)]
+pub struct WifiConnection {
+    pub ssid: String,
+    /// Signal strength as a percentage.
+    pub strength: u8,
 }
 
 impl Default for NetworkInfo {
@@ -109,17 +120,15 @@ impl Default for NetworkInfo {
             specific_info: None,
             wifi_enabled: true,
             device_kind: None,
+            wifi: None,
         }
     }
 }
 
 impl NetworkInfo {
+    /// The SSID the wifi device is connected to, if any.
     pub fn wifi_ssid(&self) -> Option<String> {
-        if let Some(SpecificNetworkInfo::WiFi { ref wifi_ssid, .. }) = self.specific_info {
-            Some(wifi_ssid.clone())
-        } else {
-            None
-        }
+        self.wifi.as_ref().map(|wifi| wifi.ssid.clone())
     }
 
     /// Whether the connectivity check indicates a full route to the
@@ -224,6 +233,7 @@ mod get_icon_tests {
             }),
             wifi_enabled: true,
             device_kind: Some(DeviceKind::WiFi),
+            wifi: None,
         }
     }
 
@@ -234,6 +244,7 @@ mod get_icon_tests {
             specific_info: Some(SpecificNetworkInfo::Wired),
             wifi_enabled: true,
             device_kind: Some(DeviceKind::Wired),
+            wifi: None,
         }
     }
 

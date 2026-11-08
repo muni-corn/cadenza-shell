@@ -14,7 +14,10 @@ use crate::{
         events::{self, ConnectFailureReason, NetworkEvent},
         scan,
         security::ApSecurity,
-        state::{DeviceKind, NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE},
+        state::{
+            DeviceKind, NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE,
+            WifiConnection,
+        },
         types::{
             NM_ACTIVE_CONNECTION_STATE_ACTIVATED, NM_ACTIVE_CONNECTION_STATE_DEACTIVATED,
             NM_ACTIVE_CONNECTION_STATE_REASON_NO_SECRETS, NM_DEVICE_TYPE_ETHERNET,
@@ -203,6 +206,9 @@ pub async fn run_network_service() {
             }
             NetworkPropertyChange::Strength(strength) => {
                 let mut state = NETWORK_STATE.write();
+                if let Some(wifi) = &mut state.wifi {
+                    wifi.strength = strength;
+                }
                 if let Some(SpecificNetworkInfo::WiFi {
                     ref mut wifi_strength,
                     ..
@@ -824,10 +830,10 @@ async fn spawn_name_owner_watcher(
 
 /// Fetches full network info for the given primary connection path.
 ///
-/// Returns the `NetworkInfo` and, if connected via WiFi, the active access
-/// point object path (for setting up a strength subscription) and the
-/// wireless device's object path (for setting up an active-access-point
-/// subscription).
+/// Returns the `NetworkInfo`, the wifi device's active access point object
+/// path if it's associated (for setting up a strength subscription), and the
+/// wireless device's object path if there is one (for setting up an
+/// active-access-point subscription).
 ///
 /// Only fails if the overall connection state and connectivity themselves
 /// can't be read (i.e. NetworkManager itself is unreachable). If the
@@ -886,12 +892,34 @@ async fn fetch_network_info(
         State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal
     );
 
-    let (specific_info, ap_path, wifi_device_path) = match (is_connected, resolved_device) {
-        (true, Some((device_path, device_type))) => {
-            fetch_specific_info(conn, device_path, device_type).await
-        }
-        _ => (None, None, None),
+    // the wifi device is read on its own so the menu still sees the wifi
+    // network while ethernet or a vpn is primary; prefer the device behind
+    // the primary connection on machines with several wifi cards
+    let wifi_device_path = match &resolved_device {
+        Some((path, NM_DEVICE_TYPE_WIFI)) => Some(path.clone()),
+        _ => find_wireless_device(conn).await.ok(),
     };
+    let wifi = match &wifi_device_path {
+        Some(path) => get_wifi_info(conn, path)
+            .await
+            .inspect_err(|e| tracing::debug!("couldn't fetch wifi access point info: {e}"))
+            .ok(),
+        None => None,
+    };
+
+    let specific_info = match (is_connected, &resolved_device) {
+        (true, Some((_, NM_DEVICE_TYPE_ETHERNET))) => Some(SpecificNetworkInfo::Wired),
+        (true, Some((_, NM_DEVICE_TYPE_WIFI))) => {
+            wifi.as_ref()
+                .map(|(ssid, strength, _)| SpecificNetworkInfo::WiFi {
+                    wifi_ssid: ssid.clone(),
+                    wifi_strength: *strength,
+                })
+        }
+        _ => None,
+    };
+    let ap_path = wifi.as_ref().map(|(_, _, ap_path)| ap_path.clone());
+    let wifi = wifi.map(|(ssid, strength, _)| WifiConnection { ssid, strength });
 
     Ok((
         NetworkInfo {
@@ -900,6 +928,7 @@ async fn fetch_network_info(
             specific_info,
             wifi_enabled,
             device_kind,
+            wifi,
         },
         ap_path,
         wifi_device_path,
@@ -934,48 +963,6 @@ async fn resolve_active_device(
     let device_type = device_proxy.device_type().await?;
 
     Ok(Some((device_path.clone(), device_type)))
-}
-
-/// Builds the connected device's type-specific info (wired or wifi) for an
-/// already-resolved device.
-///
-/// Returns `(None, None, None)` for a device type we don't render
-/// distinctly (e.g. mobile broadband). The third element is the wireless
-/// device's own object path, present whenever the connected device is wifi
-/// regardless of whether an access point could be read.
-async fn fetch_specific_info(
-    conn: &zbus::Connection,
-    device_path: OwnedObjectPath,
-    device_type: u32,
-) -> (
-    Option<SpecificNetworkInfo>,
-    Option<OwnedObjectPath>,
-    Option<OwnedObjectPath>,
-) {
-    match device_type {
-        NM_DEVICE_TYPE_ETHERNET => (Some(SpecificNetworkInfo::Wired), None, None),
-        NM_DEVICE_TYPE_WIFI => {
-            // always report the wifi device path so the caller can subscribe
-            // to ActiveAccessPoint changes even if there's no access point to
-            // read yet (e.g. mid-association); otherwise we'd never notice
-            // once one becomes available until an unrelated event fires
-            match get_wifi_info(conn, &device_path).await {
-                Ok((ssid, strength, ap_path)) => (
-                    Some(SpecificNetworkInfo::WiFi {
-                        wifi_ssid: ssid,
-                        wifi_strength: strength,
-                    }),
-                    Some(ap_path),
-                    Some(device_path),
-                ),
-                Err(e) => {
-                    tracing::debug!("couldn't fetch wifi access point info: {e}");
-                    (None, None, Some(device_path))
-                }
-            }
-        }
-        _ => (None, None, None),
-    }
 }
 
 /// Returns the SSID, current strength, and object path of the active access
