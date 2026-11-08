@@ -14,7 +14,7 @@ use crate::network::{password::Password, security::ApSecurity};
 #[derive(Clone, Debug)]
 pub(crate) enum NetworkCommand {
     SetWifiEnabled(bool),
-    /// Requests a rescan. A no-op if a scan is already in flight.
+    /// Requests a rescan. Skipped while the wifi radio is off.
     Scan,
     /// Connects to a wifi network by SSID.
     ///

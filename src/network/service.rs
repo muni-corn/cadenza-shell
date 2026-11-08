@@ -49,10 +49,10 @@ pub enum NetworkPropertyChange {
     /// forever, the same way battery::watcher's poll interval does.
     Reconcile,
     /// NetworkManager (re)appeared on the bus under a new unique name (e.g.
-    /// `systemctl restart NetworkManager`, or it starting after us). Existing
-    /// property-change subscriptions are bound to the previous owner's
-    /// unique name and go silent when it disappears, so they must be torn
-    /// down and re-established against the new owner.
+    /// `systemctl restart NetworkManager`, or it starting after us). The
+    /// existing proxies filled their property caches from the previous
+    /// owner and can't refill them, so their property streams stop
+    /// producing values; the watchers are rebuilt against the new owner.
     NetworkManagerRestarted,
     /// NetworkManager left the bus without a replacement.
     NetworkManagerVanished,
@@ -812,9 +812,8 @@ async fn setup_property_watching() -> anyhow::Result<(
 /// `event_tx`.
 ///
 /// Callable both at startup and again after a `NetworkManagerRestarted`
-/// event, since the resulting signal subscriptions are bound to whichever
-/// unique name currently owns the `org.freedesktop.NetworkManager` bus name
-/// at subscribe time.
+/// event, since each proxy's property cache is filled once from whichever
+/// process owned `org.freedesktop.NetworkManager` when it was built.
 async fn spawn_property_watchers(
     conn: &zbus::Connection,
     event_tx: &UnboundedSender<NetworkPropertyChange>,
@@ -947,8 +946,8 @@ async fn spawn_name_owner_watcher(
 
             // a non-empty new_owner means NetworkManager is now owned by
             // some process (either it just started, or it restarted under a
-            // new unique name); either way our existing subscriptions need
-            // to be re-established against the current owner
+            // new unique name); either way the property caches need to be
+            // refilled from the current owner
             if args.new_owner.is_some() {
                 event_tx
                     .send(NetworkPropertyChange::NetworkManagerRestarted)
