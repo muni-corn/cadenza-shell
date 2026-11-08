@@ -323,7 +323,17 @@ async fn handle_set_wifi_enabled(conn: &zbus::Connection, enabled: bool) -> anyh
 /// `LastScan` advances.
 async fn handle_scan(conn: &zbus::Connection) -> anyhow::Result<()> {
     WIFI_SCAN_STATE.write().scanning = true;
+    let result = scan_and_refresh(conn).await;
 
+    // reset even on early errors so the menu doesn't show "Scanning..." forever
+    WIFI_SCAN_STATE.write().scanning = false;
+
+    result
+}
+
+/// Requests a scan from the wireless device and refreshes the access point
+/// list.
+async fn scan_and_refresh(conn: &zbus::Connection) -> anyhow::Result<()> {
     let device_path = find_wireless_device(conn).await?;
     let wifi_proxy = WirelessDeviceProxy::builder(conn)
         .path(&device_path)?
@@ -339,8 +349,6 @@ async fn handle_scan(conn: &zbus::Connection) -> anyhow::Result<()> {
     if let Err(e) = refresh_access_points(conn, &device_path).await {
         tracing::warn!("couldn't refresh access points after scan request: {e}");
     }
-
-    WIFI_SCAN_STATE.write().scanning = false;
 
     scan_result.map_err(anyhow::Error::from)
 }
