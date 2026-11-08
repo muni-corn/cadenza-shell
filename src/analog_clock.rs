@@ -1,7 +1,7 @@
 // temporary until we figure things out
 #![allow(dead_code)]
 
-use std::{f64::consts::PI, time::Duration};
+use std::{cell::Cell, f64::consts::PI};
 
 use chrono::Timelike;
 use gtk4::{glib, prelude::*};
@@ -12,6 +12,9 @@ use relm4::{
 };
 
 use crate::settings;
+
+/// Minimum time between redraws, in microseconds of frame clock time.
+const REDRAW_INTERVAL_US: i64 = 100_000;
 
 #[derive(Debug)]
 pub struct AnalogClock {
@@ -125,12 +128,20 @@ impl SimpleComponent for AnalogClock {
 
         let widgets = view_output!();
 
-        // Start the timer for updates - directly update the drawing area
-        let drawing_area_clone = widgets.drawing_area.clone();
-        glib::timeout_add_local(Duration::from_millis(100), move || {
-            drawing_area_clone.queue_draw();
-            glib::ControlFlow::Continue
-        });
+        // tick callbacks only run while the clock is mapped and die with the
+        // widget; throttle to keep the smooth second hand without redrawing
+        // on every frame
+        let last_draw_us = Cell::new(0_i64);
+        widgets
+            .drawing_area
+            .add_tick_callback(move |drawing_area, frame_clock| {
+                let now_us = frame_clock.frame_time();
+                if now_us - last_draw_us.get() >= REDRAW_INTERVAL_US {
+                    last_draw_us.set(now_us);
+                    drawing_area.queue_draw();
+                }
+                glib::ControlFlow::Continue
+            });
 
         ComponentParts { model, widgets }
     }
