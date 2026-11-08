@@ -3,21 +3,14 @@ use std::time::Duration;
 use relm4::SharedState;
 
 mod alerts;
-mod discharging;
+mod estimates;
 mod sysfs;
 mod udev;
 mod watcher;
 
-use chrono::TimeDelta;
 pub use watcher::start_battery_service;
 
 pub static BATTERY_STATE: SharedState<Option<BatteryState>> = SharedState::new();
-
-/// For a moving average over 10 readings.
-const STATISTICS_ALPHA: f64 = 1.0 / 10.0;
-
-/// How often to save profiles to disk.
-const SAVE_INTERVAL: TimeDelta = TimeDelta::seconds(30);
 
 /// How often to read the battery state.
 const READ_INTERVAL_SECONDS: u32 = 10;

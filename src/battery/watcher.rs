@@ -1,13 +1,15 @@
-use std::{path::Path, time::Duration};
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
 
-use chrono::Local;
 use tokio::io::unix::{AsyncFd, AsyncFdReadyGuard};
 
 use super::{BATTERY_STATE, BatteryState, ChargingStatus};
 use crate::battery::{
     READ_INTERVAL_SECONDS,
     alerts::AlertState,
-    discharging::DischargeProfile,
+    estimates::PowerModel,
     sysfs::{detect_battery_path, read_battery_sysfs},
     udev::{create_battery_monitor, is_battery_change},
 };
@@ -21,17 +23,7 @@ pub async fn start_battery_service() {
 
     tracing::info!("battery device: {}", battery_path.display());
 
-    // load or create power usage history
-    let mut power_history = match DischargeProfile::read_from_disk() {
-        Ok(p) => {
-            tracing::info!("loaded power history from previous session");
-            p
-        }
-        Err(e) => {
-            tracing::info!("creating new power usage log: {}", e);
-            DischargeProfile::default()
-        }
-    };
+    let mut power_model = PowerModel::default();
 
     // read initial battery properties
     let Some(reading) = read_battery_sysfs(&battery_path) else {
@@ -42,9 +34,11 @@ pub async fn start_battery_service() {
         return;
     };
 
-    // get initial time estimate
+    if reading.status == ChargingStatus::Discharging {
+        power_model.update(reading.power_watts, Instant::now());
+    }
     let discharging_time_remaining =
-        power_history.predict_time_to_empty(Local::now(), reading.remaining_wh());
+        power_model.time_to_empty(reading.remaining_wh(), reading.capacity_wh());
 
     if let Some(percentage) = reading.percentage() {
         *BATTERY_STATE.write() = Some(BatteryState {
@@ -66,7 +60,7 @@ pub async fn start_battery_service() {
 
     let mut alert_state = AlertState::default();
 
-    watch_battery(&battery_path, udev, &mut power_history, &mut alert_state).await;
+    watch_battery(&battery_path, udev, &mut power_model, &mut alert_state).await;
 }
 
 /// Updates the battery state on every udev change event for the battery and
@@ -74,7 +68,7 @@ pub async fn start_battery_service() {
 async fn watch_battery(
     battery_path: &Path,
     mut udev: Option<AsyncFd<udev::MonitorSocket>>,
-    power_history: &mut DischargeProfile,
+    power_model: &mut PowerModel,
     alert_state: &mut AlertState,
 ) {
     let mut poll_interval =
@@ -97,7 +91,7 @@ async fn watch_battery(
                     guard.clear_ready();
 
                     if battery_changed {
-                        update_battery_state(battery_path, power_history, alert_state).await;
+                        update_battery_state(battery_path, power_model, alert_state).await;
                     }
                 }
                 Err(e) => {
@@ -107,7 +101,7 @@ async fn watch_battery(
             },
 
             _ = poll_interval.tick() => {
-                update_battery_state(battery_path, power_history, alert_state).await;
+                update_battery_state(battery_path, power_model, alert_state).await;
             }
         }
     }
@@ -127,7 +121,7 @@ async fn udev_readable(
 /// fire any low-battery alerts that have not yet been triggered this session.
 async fn update_battery_state(
     battery_path: &Path,
-    power_history: &mut DischargeProfile,
+    power_model: &mut PowerModel,
     alert_state: &mut AlertState,
 ) {
     let Some(reading) = read_battery_sysfs(battery_path) else {
@@ -135,12 +129,13 @@ async fn update_battery_state(
         return;
     };
 
-    if let ChargingStatus::Discharging = reading.status {
-        power_history.update(&reading);
+    if reading.status == ChargingStatus::Discharging {
+        power_model.update(reading.power_watts, Instant::now());
     }
 
+    // while charging this is how long the battery would last if unplugged
     let discharging_time_remaining =
-        power_history.predict_time_to_empty(Local::now(), reading.remaining_wh());
+        power_model.time_to_empty(reading.remaining_wh(), reading.capacity_wh());
 
     // an unknown level would show as 0% and fire the critical alert
     let Some(percentage) = reading.percentage() else {

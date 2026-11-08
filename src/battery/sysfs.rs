@@ -33,6 +33,11 @@ impl SysfsReading {
         self.capacity_now.as_wh(self.voltage_now)
     }
 
+    /// Returns the total capacity of this reading, in Wh.
+    pub fn capacity_wh(&self) -> f64 {
+        self.capacity_full.as_wh(self.voltage_now)
+    }
+
     /// Calculate precise percentage remaining.
     /// Returns None if charge values are unavailable or incompatible.
     pub fn percentage(&self) -> Option<f64> {
