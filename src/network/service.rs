@@ -55,6 +55,8 @@ pub enum NetworkPropertyChange {
     NetworkManagerRestarted,
     /// A command issued by the UI (via `network::commands`).
     Command(NetworkCommand),
+    /// The wifi device finished a scan (its `LastScan` advanced).
+    ScanCompleted,
 }
 
 /// Tracks the abort handles for the top-level NetworkManager property
@@ -160,6 +162,7 @@ pub async fn run_network_service() {
     // fetch initial state immediately so the tile is correct before any events
     // arrive
     let mut tasks = SubscriptionTasks::default();
+    let mut scan_watcher = None;
     if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
         tracing::warn!("couldn't fetch initial network state: {e}");
     }
@@ -254,7 +257,28 @@ pub async fn run_network_service() {
                 }
             }
             NetworkPropertyChange::Command(cmd) => {
+                // results only arrive once LastScan advances, so make sure
+                // something is listening before a scan is requested
+                if matches!(cmd, NetworkCommand::Scan) {
+                    ensure_scan_watcher(&conn, &event_tx, &mut scan_watcher).await;
+                }
+
+                let changes_saved_networks = matches!(
+                    cmd,
+                    NetworkCommand::Connect { .. }
+                        | NetworkCommand::Disconnect
+                        | NetworkCommand::Forget(_)
+                );
                 handle_command(&conn, cmd).await;
+
+                // saved and connected markers in the menu changed
+                if changes_saved_networks {
+                    refresh_wifi_access_points(&conn).await;
+                }
+            }
+            NetworkPropertyChange::ScanCompleted => {
+                tracing::debug!("wifi scan completed, refreshing access points");
+                refresh_wifi_access_points(&conn).await;
             }
         }
     }
@@ -337,10 +361,9 @@ async fn handle_set_wifi_enabled(conn: &zbus::Connection, enabled: bool) -> anyh
 /// Requests a scan, then refetches and publishes the access point list.
 ///
 /// `RequestScan` only asks NetworkManager to *start* scanning; it doesn't
-/// wait for completion, so the immediate refetch below will usually still
-/// show pre-scan results. The menu re-requests a scan periodically while
-/// open (see a following commit) to eventually pick up fresh results once
-/// `LastScan` advances.
+/// wait for completion, so the immediate refetch below shows the previous
+/// results. Fresh results are published once `LastScan` advances (see
+/// [`ensure_scan_watcher`]).
 async fn handle_scan(conn: &zbus::Connection) -> anyhow::Result<()> {
     WIFI_SCAN_STATE.write().scanning = true;
     let result = scan_and_refresh(conn).await;
@@ -373,8 +396,8 @@ async fn scan_and_refresh(conn: &zbus::Connection) -> anyhow::Result<()> {
     scan_result.map_err(anyhow::Error::from)
 }
 
-/// Refetches the access point list and `LastScan` timestamp for the given
-/// wireless device and publishes them to [`WIFI_SCAN_STATE`].
+/// Refetches the access point list for the given wireless device and
+/// publishes it to [`WIFI_SCAN_STATE`].
 async fn refresh_access_points(
     conn: &zbus::Connection,
     device_path: &OwnedObjectPath,
@@ -388,6 +411,68 @@ async fn refresh_access_points(
     WIFI_SCAN_STATE.write().access_points = access_points;
 
     Ok(())
+}
+
+/// Refetches the access point list for the wifi device, if there is one.
+async fn refresh_wifi_access_points(conn: &zbus::Connection) {
+    let result = match find_wireless_device(conn).await {
+        Ok(device_path) => refresh_access_points(conn, &device_path).await,
+        Err(e) => Err(e),
+    };
+    if let Err(e) = result {
+        tracing::debug!("couldn't refresh access points: {e}");
+    }
+}
+
+/// Starts watching the wifi device's `LastScan` property, unless a watcher
+/// for the same device is already running, so each completed scan
+/// publishes fresh results.
+async fn ensure_scan_watcher(
+    conn: &zbus::Connection,
+    event_tx: &UnboundedSender<NetworkPropertyChange>,
+    watcher: &mut Option<(OwnedObjectPath, tokio::task::AbortHandle)>,
+) {
+    let Ok(device_path) = find_wireless_device(conn).await else {
+        return;
+    };
+    if let Some((watched_path, handle)) = watcher
+        && *watched_path == device_path
+        && !handle.is_finished()
+    {
+        return;
+    }
+    if let Some((_, handle)) = watcher.take() {
+        handle.abort();
+    }
+
+    let conn = conn.clone();
+    let tx = event_tx.clone();
+    let path = device_path.clone();
+    let handle = relm4::spawn(async move {
+        let proxy = match WirelessDeviceProxy::builder(&conn).path(&path) {
+            Ok(builder) => builder.build().await,
+            Err(e) => Err(e),
+        };
+        let proxy = match proxy {
+            Ok(proxy) => proxy,
+            Err(e) => {
+                tracing::warn!("couldn't watch wifi scans on {path}: {e}");
+                return;
+            }
+        };
+
+        let mut changes = proxy.receive_last_scan_changed().await;
+        // the first item is the current value, not a completed scan
+        changes.next().await;
+        while changes.next().await.is_some() {
+            if tx.send(NetworkPropertyChange::ScanCompleted).is_err() {
+                break;
+            }
+        }
+    })
+    .abort_handle();
+
+    *watcher = Some((device_path, handle));
 }
 
 /// Connects to a wifi network by SSID.
