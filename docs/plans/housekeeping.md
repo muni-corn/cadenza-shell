@@ -36,22 +36,22 @@ without waiting for a merge. If an earlier phase has already been merged into
 
 ```bash
 # from /home/muni/code/cadenza/cadenza_shell
-git worktree add ../cadenza_shell-phase-1 -b housekeeping/phase-1-crashes main
-git worktree add ../cadenza_shell-phase-2 -b housekeeping/phase-2-hotplug housekeeping/phase-1-crashes
+git wt housekeeping/phase-1-crashes main
+git wt housekeeping/phase-2-hotplug housekeeping/phase-1-crashes
 # ...and so on for each phase
 ```
 
-| Phase | Branch                                   | Worktree                   |
-| ----- | ---------------------------------------- | -------------------------- |
-| 1     | `housekeeping/phase-1-crashes`           | `../cadenza_shell-phase-1` |
-| 2     | `housekeeping/phase-2-hotplug`           | `../cadenza_shell-phase-2` |
-| 3     | `housekeeping/phase-3-async-services`    | `../cadenza_shell-phase-3` |
-| 4     | `housekeeping/phase-4-dead-code`         | `../cadenza_shell-phase-4` |
-| 5     | `housekeeping/phase-5-network-bluetooth` | `../cadenza_shell-phase-5` |
-| 6     | `housekeeping/phase-6-services`          | `../cadenza_shell-phase-6` |
-| 7     | `housekeeping/phase-7-notification-caps` | `../cadenza_shell-phase-7` |
-| 8     | `housekeeping/phase-8-structure`         | `../cadenza_shell-phase-8` |
-| 9     | `housekeeping/phase-9-features`          | `../cadenza_shell-phase-9` |
+| Phase | Branch                                   | Worktree                                                                   |
+| ----- | ---------------------------------------- | -------------------------------------------------------------------------- |
+| 1     | `housekeeping/phase-1-crashes`           | `../.git/modules/cadenza-shell/.wt/housekeeping/phase-1-crashes`           |
+| 2     | `housekeeping/phase-2-hotplug`           | `../.git/modules/cadenza-shell/.wt/housekeeping/phase-2-hotplug`           |
+| 3     | `housekeeping/phase-3-async-services`    | `../.git/modules/cadenza-shell/.wt/housekeeping/phase-3-async-services`    |
+| 4     | `housekeeping/phase-4-dead-code`         | `../.git/modules/cadenza-shell/.wt/housekeeping/phase-4-dead-code`         |
+| 5     | `housekeeping/phase-5-network-bluetooth` | `../.git/modules/cadenza-shell/.wt/housekeeping/phase-5-network-bluetooth` |
+| 6     | `housekeeping/phase-6-services`          | `../.git/modules/cadenza-shell/.wt/housekeeping/phase-6-services`          |
+| 7     | `housekeeping/phase-7-notification-caps` | `../.git/modules/cadenza-shell/.wt/housekeeping/phase-7-notification-caps` |
+| 8     | `housekeeping/phase-8-structure`         | `../.git/modules/cadenza-shell/.wt/housekeeping/phase-8-structure`         |
+| 9     | `housekeeping/phase-9-features`          | `../.git/modules/cadenza-shell/.wt/housekeeping/phase-9-features`          |
 
 If a later phase branch needs fixes from a rewritten earlier branch, rebase it
 onto the new tip rather than merging.
