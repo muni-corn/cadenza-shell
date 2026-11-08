@@ -29,8 +29,7 @@ use tracing_subscriber::{EnvFilter, fmt};
 
 use crate::{app::CadenzaShellModel, style::compile_styles};
 
-#[tokio::main]
-async fn main() -> glib::ExitCode {
+fn main() -> glib::ExitCode {
     // default to info; bump notifications to debug for richer diagnostics
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
         EnvFilter::new(
@@ -47,6 +46,12 @@ async fn main() -> glib::ExitCode {
     // initialize configuration system
     if let Err(e) = settings::init() {
         tracing::error!("failed to initialize settings: {}", e);
+    }
+
+    // set_global_css needs a display, so gtk has to be up first
+    if let Err(e) = gtk4::init() {
+        tracing::error!("couldn't initialize gtk: {e}");
+        return glib::ExitCode::FAILURE;
     }
 
     match compile_styles() {
