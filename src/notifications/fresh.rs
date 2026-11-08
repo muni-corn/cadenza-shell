@@ -88,11 +88,13 @@ impl Component for FreshNotifications {
         widgets.window.init_layer_shell();
         widgets.window.set_layer(Layer::Overlay);
         widgets.window.set_namespace(Some("notifications"));
-        widgets.window.set_exclusive_zone(-1); // don't reserve space
         widgets.window.set_anchor(Edge::Top, true);
         widgets.window.set_anchor(Edge::Right, true);
         widgets.window.set_monitor(Some(&model.monitor));
-        widgets.window.set_margin(Edge::Top, 32);
+        // the default exclusive zone of 0 keeps popups below the bar, so only
+        // a small gap is needed here
+        widgets.window.set_margin(Edge::Top, 8);
+        widgets.window.set_margin(Edge::Right, 8);
 
         ComponentParts { model, widgets }
     }

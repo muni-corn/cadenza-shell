@@ -3,8 +3,6 @@ use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, KeyboardMode, Layer, LayerShell};
 use relm4::prelude::*;
 
-use crate::settings;
-
 /// A small dropdown-style layer-shell window for quick-settings-like menus
 /// (e.g. the wifi and bluetooth dropdowns).
 ///
@@ -74,9 +72,6 @@ impl SimpleComponent for MenuWindow {
         window: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // sit just below the bar, regardless of the configured bar height
-        let top_margin = settings::get_config().bar.height + 4;
-
         window.init_layer_shell();
         if let Some(monitor) = &init.monitor {
             window.set_monitor(Some(monitor));
@@ -86,7 +81,9 @@ impl SimpleComponent for MenuWindow {
         window.set_keyboard_mode(KeyboardMode::OnDemand);
         window.set_anchor(Edge::Top, true);
         window.set_anchor(Edge::Right, true);
-        window.set_margin(Edge::Top, top_margin);
+        // the default exclusive zone of 0 already places the surface below
+        // the bar's exclusive zone, so only a small gap is needed here
+        window.set_margin(Edge::Top, 8);
         window.set_margin(Edge::Right, 8);
         window.set_width_request(init.width);
 
