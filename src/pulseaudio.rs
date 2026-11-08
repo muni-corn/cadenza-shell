@@ -1,5 +1,10 @@
-use std::{cell::RefCell, rc::Rc};
+use std::{
+    cell::RefCell,
+    rc::Rc,
+    time::{Duration, Instant},
+};
 
+use anyhow::{Context as _, bail};
 use pulse::{
     callbacks::ListResult,
     context::{
@@ -12,6 +17,8 @@ use pulse::{
     volume::{ChannelVolumes, Volume},
 };
 use relm4::SharedState;
+
+use crate::utils::backoff::Backoff;
 
 pub static VOLUME_STATE: SharedState<PulseAudioData> = SharedState::new();
 
@@ -26,49 +33,58 @@ pub struct PulseAudioData {
 /// ownership between callbacks doesn't need a lock.
 type SharedContext = Rc<RefCell<Context>>;
 
-/// Runs the pulseaudio client until its session ends.
+/// A session that lasts this long is considered healthy, so the reconnect
+/// backoff starts over afterwards.
+const STABLE_SESSION: Duration = Duration::from_secs(60);
+
+/// Runs the pulseaudio client forever, reconnecting whenever the sound
+/// server goes away (e.g. pipewire-pulse restarting or not running yet at
+/// login).
 ///
-/// libpulse's standard main loop blocks while it waits for events, so it runs
-/// on a dedicated blocking thread instead of a relm4 runtime worker.
+/// libpulse's standard main loop blocks while it waits for events, so each
+/// session runs on a dedicated blocking thread instead of a relm4 runtime
+/// worker.
 pub async fn run_pulseaudio_loop() {
-    if let Err(e) = tokio::task::spawn_blocking(run_session).await {
-        tracing::error!("pulseaudio session thread panicked: {e}");
+    let mut backoff = Backoff::new(Duration::from_secs(1), Duration::from_secs(60));
+
+    loop {
+        let started = Instant::now();
+        match tokio::task::spawn_blocking(run_session).await {
+            Ok(Ok(())) => tracing::info!("pulseaudio session ended"),
+            Ok(Err(e)) => tracing::warn!("pulseaudio session ended: {e:#}"),
+            Err(e) => tracing::error!("pulseaudio session thread panicked: {e}"),
+        }
+
+        // hide the volume tile until we're connected again
+        *VOLUME_STATE.write() = PulseAudioData::default();
+
+        if started.elapsed() >= STABLE_SESSION {
+            backoff.reset();
+        }
+        tokio::time::sleep(backoff.next()).await;
     }
 }
 
 /// Connects to the sound server and drives the main loop on the current
-/// thread.
-fn run_session() {
-    let Some(mut proplist) = Proplist::new() else {
-        tracing::error!("failed to create pulseaudio proplist");
-        return;
-    };
-
+/// thread until the connection fails or terminates.
+fn run_session() -> anyhow::Result<()> {
+    let mut proplist = Proplist::new().context("couldn't create a pulseaudio proplist")?;
     if proplist
         .set_str("APPLICATION_NAME", "cadenza-shell")
         .is_err()
     {
-        tracing::error!("failed to update pulseaudio proplist");
-        return;
+        bail!("couldn't set the pulseaudio application name");
     }
 
-    let Some(mut mainloop) = Mainloop::new() else {
-        tracing::error!("failed to create pulseaudio mainloop");
-        return;
-    };
-
-    let Some(context) = Context::new_with_proplist(&mainloop, "cadenza-shell", &proplist) else {
-        tracing::error!("failed to create pulseaudio context");
-        return;
-    };
-
+    let mut mainloop = Mainloop::new().context("couldn't create a pulseaudio main loop")?;
+    let context = Context::new_with_proplist(&mainloop, "cadenza-shell", &proplist)
+        .context("couldn't create a pulseaudio context")?;
     let context = Rc::new(RefCell::new(context));
 
     let state_callback = Box::new({
         let context = context.clone();
         move || on_state_change(&context)
     });
-
     context
         .borrow_mut()
         .set_state_callback(Some(state_callback));
@@ -78,19 +94,35 @@ fn run_session() {
     let connected = context
         .borrow_mut()
         .connect(None, FlagSet::NOAUTOSPAWN, None);
-    if let Err(err) = connected {
-        tracing::error!("failed to connect to pulse: {}", err);
-        return;
-    }
 
-    // run mainloop
+    let result = match connected {
+        Ok(()) => drive(&mut mainloop, &context),
+        Err(e) => Err(anyhow::anyhow!("couldn't connect to the sound server: {e}")),
+    };
+
+    // the callbacks hold clones of the context, so clear them to break the
+    // reference cycle before the next session starts
+    let mut context = context.borrow_mut();
+    context.set_state_callback(None);
+    context.set_subscribe_callback(None);
+    context.disconnect();
+
+    result
+}
+
+/// Iterates the main loop until the context fails or terminates.
+fn drive(mainloop: &mut Mainloop, context: &SharedContext) -> anyhow::Result<()> {
     loop {
         match mainloop.iterate(true) {
             IterateResult::Success(_) => {}
-            IterateResult::Err(err) => {
-                tracing::error!("pulse mainloop error: {:?}", err);
-            }
-            IterateResult::Quit(_) => break,
+            IterateResult::Err(e) => bail!("pulseaudio main loop error: {e}"),
+            IterateResult::Quit(_) => return Ok(()),
+        }
+
+        match context.borrow().get_state() {
+            State::Failed => bail!("lost the connection to the sound server"),
+            State::Terminated => return Ok(()),
+            _ => {}
         }
     }
 }
@@ -101,39 +133,30 @@ fn on_state_change(context: &SharedContext) {
         return;
     };
 
-    match state {
-        State::Ready => {
-            tracing::info!("connected to pulseaudio server");
-
-            let introspect = context.borrow().introspect();
-
-            // get default sink info
-            introspect.get_server_info({
-                let context = context.clone();
-
-                move |server_info| on_server_info(server_info, &context)
-            });
-
-            // subscribe to changes
-            let subscribe_callback = Box::new({
-                let context = context.clone();
-
-                move |facility, op, _i| on_event(&context, facility, op)
-            });
-
-            let mut context = context.borrow_mut();
-            context.set_subscribe_callback(Some(subscribe_callback));
-            context.subscribe(InterestMaskSet::SERVER | InterestMaskSet::SINK, |_| ());
-        }
-        State::Failed => {
-            tracing::error!("failed to connect to pulseaudio server");
-            VOLUME_STATE.write().default_sink_name = None;
-        }
-        State::Terminated => {
-            tracing::warn!("connection to pulseaudio server terminated");
-        }
-        _ => {}
+    // the main loop notices failure and termination and ends the session
+    if state != State::Ready {
+        return;
     }
+
+    tracing::info!("connected to pulseaudio server");
+
+    let introspect = context.borrow().introspect();
+
+    // get default sink info
+    introspect.get_server_info({
+        let context = context.clone();
+        move |server_info| on_server_info(server_info, &context)
+    });
+
+    // subscribe to changes
+    let subscribe_callback = Box::new({
+        let context = context.clone();
+        move |facility, op, _i| on_event(&context, facility, op)
+    });
+
+    let mut context = context.borrow_mut();
+    context.set_subscribe_callback(Some(subscribe_callback));
+    context.subscribe(InterestMaskSet::SERVER | InterestMaskSet::SINK, |_| ());
 }
 
 fn on_server_info(server_info: &ServerInfo, context: &SharedContext) {
