@@ -32,7 +32,19 @@ impl Default for PulseAudioData {
     }
 }
 
+/// Runs the pulseaudio client until its session ends.
+///
+/// libpulse's standard main loop blocks while it waits for events, so it runs
+/// on a dedicated blocking thread instead of a relm4 runtime worker.
 pub async fn run_pulseaudio_loop() {
+    if let Err(e) = tokio::task::spawn_blocking(run_session).await {
+        tracing::error!("pulseaudio session thread panicked: {e}");
+    }
+}
+
+/// Connects to the sound server and drives the main loop on the current
+/// thread.
+fn run_session() {
     let Some(mut proplist) = Proplist::new() else {
         tracing::error!("failed to create pulseaudio proplist");
         return;
