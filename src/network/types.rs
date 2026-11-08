@@ -92,14 +92,15 @@ pub const NM_DEVICE_TYPE_ETHERNET: u32 = 1;
 /// `NMDeviceType` value for wifi devices.
 pub const NM_DEVICE_TYPE_WIFI: u32 = 2;
 
-/// `NMDeviceState` value for a fully activated device.
-pub const NM_DEVICE_STATE_ACTIVATED: u32 = 100;
-/// `NMDeviceState` value for a device that failed to connect.
-pub const NM_DEVICE_STATE_FAILED: u32 = 120;
+/// `NMActiveConnectionState` value for a fully activated connection.
+pub const NM_ACTIVE_CONNECTION_STATE_ACTIVATED: u32 = 2;
+/// `NMActiveConnectionState` value for a connection that has gone away,
+/// including attempts that failed.
+pub const NM_ACTIVE_CONNECTION_STATE_DEACTIVATED: u32 = 4;
 
-/// `NMDeviceStateReason` value for missing or rejected secrets, which is how
-/// a wrong wifi password surfaces.
-pub const NM_DEVICE_STATE_REASON_NO_SECRETS: u32 = 7;
+/// `NMActiveConnectionStateReason` value for missing or rejected secrets,
+/// which is how a wrong wifi password surfaces.
+pub const NM_ACTIVE_CONNECTION_STATE_REASON_NO_SECRETS: u32 = 9;
 
 #[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum ConnectivityState {

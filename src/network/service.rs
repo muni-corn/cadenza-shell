@@ -16,8 +16,9 @@ use crate::{
         security::ApSecurity,
         state::{DeviceKind, NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE},
         types::{
-            NM_DEVICE_STATE_ACTIVATED, NM_DEVICE_STATE_FAILED, NM_DEVICE_STATE_REASON_NO_SECRETS,
-            NM_DEVICE_TYPE_ETHERNET, NM_DEVICE_TYPE_WIFI, State,
+            NM_ACTIVE_CONNECTION_STATE_ACTIVATED, NM_ACTIVE_CONNECTION_STATE_DEACTIVATED,
+            NM_ACTIVE_CONNECTION_STATE_REASON_NO_SECRETS, NM_DEVICE_TYPE_ETHERNET,
+            NM_DEVICE_TYPE_WIFI, State,
         },
     },
     settings, sleep_monitor,
@@ -396,10 +397,10 @@ async fn handle_connect(
     let no_specific_object = ObjectPath::try_from("/")?;
 
     if let (Some(saved), None) = (&saved_connection, password) {
-        nm_proxy
+        let active_connection = nm_proxy
             .activate_connection(saved, &device_path, &no_specific_object)
             .await?;
-        spawn_outcome_watcher(conn, device_path, ssid, None);
+        spawn_outcome_watcher(conn, active_connection, ssid, None);
         return Ok(());
     }
 
@@ -422,10 +423,10 @@ async fn handle_connect(
         );
     }
 
-    let (profile, _active_connection) = nm_proxy
+    let (profile, active_connection) = nm_proxy
         .add_and_activate_connection(connection_settings, &device_path, &no_specific_object)
         .await?;
-    spawn_outcome_watcher(conn, device_path, ssid, Some(profile));
+    spawn_outcome_watcher(conn, active_connection, ssid, Some(profile));
 
     Ok(())
 }
@@ -438,14 +439,25 @@ async fn handle_connect(
 /// don't leave profiles behind.
 fn spawn_outcome_watcher(
     conn: &zbus::Connection,
-    device_path: OwnedObjectPath,
+    active_connection: OwnedObjectPath,
     ssid: &str,
     created_profile: Option<OwnedObjectPath>,
 ) {
     let conn = conn.clone();
     let ssid = ssid.to_string();
     relm4::spawn(async move {
-        let failed = watch_connect_outcome(&conn, device_path, ssid.clone()).await;
+        let outcome = watch_connect_outcome(&conn, &active_connection, &ssid)
+            .await
+            .unwrap_or_else(|e| {
+                tracing::warn!("couldn't watch the connection attempt for {ssid}: {e}");
+                None
+            });
+
+        let failed = matches!(outcome, Some(NetworkEvent::ConnectionFailed { .. }));
+        if let Some(event) = outcome {
+            let _ = events::event_tx().send(event);
+        }
+
         if failed
             && let Some(profile) = created_profile
             && let Err(e) = handle_forget(&conn, &profile).await
@@ -455,91 +467,80 @@ fn spawn_outcome_watcher(
     });
 }
 
-/// Watches a wireless device's `StateChanged` signal until it reaches
-/// `Activated` or `Failed` (or a timeout elapses), then broadcasts the
-/// outcome as a [`NetworkEvent`].
+/// Watches one activation attempt until it activates or fails.
 ///
-/// A `Failed` transition with reason `NoSecrets` specifically means the
-/// password was missing, wrong, or otherwise rejected; anything else is
-/// reported as a generic failure. Returns whether the attempt failed.
+/// The active connection object belongs to this attempt alone, unlike the
+/// device, so concurrent attempts can't be confused with each other. A
+/// failure with reason `NO_SECRETS` means the password was missing, wrong,
+/// or otherwise rejected; anything else is a generic failure. Returns
+/// `None` if the attempt is still going when the timeout elapses (e.g. slow
+/// DHCP), since that isn't a failure.
 async fn watch_connect_outcome(
     conn: &zbus::Connection,
-    device_path: OwnedObjectPath,
-    ssid: String,
-) -> bool {
-    const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
+    active_connection: &OwnedObjectPath,
+    ssid: &str,
+) -> anyhow::Result<Option<NetworkEvent>> {
+    const CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
 
-    let builder = match NetworkDeviceProxy::builder(conn).path(&device_path) {
-        Ok(b) => b,
-        Err(e) => {
-            tracing::warn!("invalid device path {device_path} while watching connect outcome: {e}");
-            return false;
-        }
+    let succeeded = || NetworkEvent::ConnectionSucceeded {
+        ssid: ssid.to_string(),
     };
-    let device_proxy = match builder.build().await {
-        Ok(p) => p,
-        Err(e) => {
-            tracing::warn!("couldn't build device proxy to watch connect outcome: {e}");
-            return false;
-        }
+    let failed = |reason| NetworkEvent::ConnectionFailed {
+        ssid: ssid.to_string(),
+        reason,
     };
 
-    let mut stream = match device_proxy.receive_device_state_changed().await {
-        Ok(s) => s,
-        Err(e) => {
-            tracing::warn!("couldn't subscribe to device state changes for {ssid}: {e}");
-            return false;
+    // read the state uncached and only after subscribing, so a transition in
+    // between can't be missed
+    let proxy = ActiveConnectionProxy::builder(conn)
+        .path(active_connection)?
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()
+        .await?;
+    let mut changes = proxy.receive_active_state_changed().await?;
+
+    match proxy.state().await {
+        Ok(NM_ACTIVE_CONNECTION_STATE_ACTIVATED) => return Ok(Some(succeeded())),
+        Ok(NM_ACTIVE_CONNECTION_STATE_DEACTIVATED) => {
+            return Ok(Some(failed(ConnectFailureReason::Other)));
         }
-    };
+        Ok(_) => {}
+        // the object disappears once a failed attempt is torn down
+        Err(_) => return Ok(Some(failed(ConnectFailureReason::Other))),
+    }
 
     let outcome = tokio::time::timeout(CONNECT_TIMEOUT, async {
-        while let Some(signal) = stream.next().await {
+        while let Some(signal) = changes.next().await {
             let Ok(args) = signal.args() else {
                 continue;
             };
 
-            match args.new_state {
-                NM_DEVICE_STATE_ACTIVATED => {
-                    return Some(NetworkEvent::ConnectionSucceeded { ssid: ssid.clone() });
-                }
-                NM_DEVICE_STATE_FAILED => {
-                    let reason = if args.reason == NM_DEVICE_STATE_REASON_NO_SECRETS {
+            match args.state {
+                NM_ACTIVE_CONNECTION_STATE_ACTIVATED => return Some(succeeded()),
+                NM_ACTIVE_CONNECTION_STATE_DEACTIVATED => {
+                    let reason = if args.reason == NM_ACTIVE_CONNECTION_STATE_REASON_NO_SECRETS {
                         ConnectFailureReason::WrongPassword
                     } else {
                         ConnectFailureReason::Other
                     };
-                    return Some(NetworkEvent::ConnectionFailed {
-                        ssid: ssid.clone(),
-                        reason,
-                    });
+                    return Some(failed(reason));
                 }
-                // still working through intermediate states (Prepare,
-                // Config, NeedAuth, IpConfig, ...)
+                // still activating or deactivating
                 _ => continue,
             }
         }
-        None
+        // the object went away without a final state change
+        Some(failed(ConnectFailureReason::Other))
     })
     .await;
 
-    let event = match outcome {
-        Ok(Some(event)) => event,
-        Ok(None) => {
-            tracing::debug!("connect outcome stream for {ssid} ended without a definitive result");
-            return false;
-        }
+    match outcome {
+        Ok(event) => Ok(event),
         Err(_) => {
-            tracing::debug!("timed out waiting for a connect outcome for {ssid}");
-            NetworkEvent::ConnectionFailed {
-                ssid,
-                reason: ConnectFailureReason::Other,
-            }
+            tracing::debug!("{ssid} is still connecting after {CONNECT_TIMEOUT:?}");
+            Ok(None)
         }
-    };
-
-    let failed = matches!(event, NetworkEvent::ConnectionFailed { .. });
-    let _ = events::event_tx().send(event);
-    failed
+    }
 }
 
 /// Builds the `802-11-wireless-security` settings dict for a password-based

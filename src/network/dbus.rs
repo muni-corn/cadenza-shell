@@ -73,18 +73,6 @@ pub trait NetworkDevice {
     /// The device's `NMDeviceType`.
     #[zbus(property)]
     fn device_type(&self) -> zbus::Result<u32>;
-
-    /// Emitted whenever the device's state changes, carrying both the new
-    /// and old state plus the reason for the transition (e.g. a failed
-    /// connection attempt due to missing/incorrect secrets).
-    ///
-    /// Named differently from the `State` property's auto-generated
-    /// `receive_state_changed` to avoid colliding with it; NM exposes both a
-    /// standard property-change notification for `State` and this separate,
-    /// richer legacy signal of the same D-Bus name.
-    #[zbus(signal, name = "StateChanged")]
-    fn device_state_changed(&self, new_state: u32, old_state: u32, reason: u32)
-    -> zbus::Result<()>;
 }
 
 #[proxy(
@@ -150,6 +138,18 @@ pub trait ActiveConnection {
     /// connection.
     #[zbus(property)]
     fn devices(&self) -> zbus::Result<Vec<zvariant::OwnedObjectPath>>;
+
+    /// The `NMActiveConnectionState` of this active connection.
+    #[zbus(property)]
+    fn state(&self) -> zbus::Result<u32>;
+
+    /// Emitted whenever the active connection's state changes, with the
+    /// `NMActiveConnectionStateReason` for the transition.
+    ///
+    /// Named differently from the `State` property's auto-generated
+    /// `receive_state_changed` to avoid colliding with it.
+    #[zbus(signal, name = "StateChanged")]
+    fn active_state_changed(&self, state: u32, reason: u32) -> zbus::Result<()>;
 }
 
 #[proxy(
