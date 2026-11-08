@@ -9,6 +9,9 @@ use system_tray::{
     menu::{MenuItem, MenuType, TrayMenu},
 };
 
+/// Size of tray icons in logical pixels.
+const ICON_SIZE: i32 = 16;
+
 #[derive(Debug)]
 pub struct TrayItem {
     inner: StatusNotifierItem,
@@ -220,11 +223,13 @@ impl TrayItem {
         }
         button.set_tooltip_text(Some(tooltip_text.trim()));
 
+        // pick the pixmap that best fits the icon at the current scale
+        let target_size = ICON_SIZE * button.scale_factor();
         let texture = self
             .inner
             .icon_pixmap
             .as_deref()
-            .and_then(pixmap_to_texture);
+            .and_then(|pixmaps| pixmap_to_texture(pixmaps, target_size));
         let image = match (&self.inner.icon_name, texture) {
             (Some(icon_name), _) if !icon_name.is_empty() => {
                 Some(gtk::Image::from_icon_name(icon_name))
@@ -235,7 +240,7 @@ impl TrayItem {
 
         match image {
             Some(image) => {
-                image.set_pixel_size(16);
+                image.set_pixel_size(ICON_SIZE);
                 image.set_halign(gtk::Align::Center);
                 image.set_valign(gtk::Align::Center);
                 button.set_child(Some(&image));
@@ -352,17 +357,19 @@ fn create_menu_from_items(
     (menu, action_group)
 }
 
-fn pixmap_to_texture(pixmaps: &[IconPixmap]) -> Option<gdk4::Texture> {
-    let pixmap = pixmaps.first()?;
+/// Converts the status notifier pixmap closest to `target_size` pixels wide
+/// into a texture.
+///
+/// Pixmaps are ARGB32 in network byte order, which is exactly gdk's
+/// `A8r8g8b8` memory format, so the bytes can be uploaded as they are.
+fn pixmap_to_texture(pixmaps: &[IconPixmap], target_size: i32) -> Option<gdk4::Texture> {
+    let pixmap = pixmaps
+        .iter()
+        .filter(|pixmap| pixmap.width > 0 && pixmap.height > 0)
+        .min_by_key(|pixmap| (pixmap.width - target_size).abs())?;
 
-    if pixmap.width <= 0 || pixmap.height <= 0 {
-        return None;
-    }
-
-    let width = pixmap.width as usize;
-    let height = pixmap.height as usize;
-    let expected_len = width * height * 4;
-
+    let stride = pixmap.width as usize * 4;
+    let expected_len = stride * pixmap.height as usize;
     if pixmap.pixels.len() != expected_len {
         tracing::warn!(
             "pixmap size mismatch: expected {} bytes, got {}",
@@ -372,27 +379,12 @@ fn pixmap_to_texture(pixmaps: &[IconPixmap]) -> Option<gdk4::Texture> {
         return None;
     }
 
-    let mut rgba_data = Vec::with_capacity(expected_len);
-
-    for chunk in pixmap.pixels.as_chunks::<4>().0 {
-        let a = chunk[0];
-        let r = chunk[1];
-        let g = chunk[2];
-        let b = chunk[3];
-
-        rgba_data.push(r);
-        rgba_data.push(g);
-        rgba_data.push(b);
-        rgba_data.push(a);
-    }
-
-    let bytes = glib::Bytes::from_owned(rgba_data);
     let texture = gdk4::MemoryTexture::new(
         pixmap.width,
         pixmap.height,
-        gdk4::MemoryFormat::R8g8b8a8,
-        &bytes,
-        (pixmap.width * 4) as usize,
+        gdk4::MemoryFormat::A8r8g8b8,
+        &glib::Bytes::from(&pixmap.pixels[..]),
+        stride,
     );
 
     Some(texture.upcast())
