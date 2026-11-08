@@ -65,6 +65,8 @@ pub(crate) enum CadenzaShellMsg {
 pub(crate) enum CadenzaShellCommandOutput {
     TrayEvent(TrayEvent),
     NotificationEvent(NotificationEvent),
+    /// Some notification events were missed, so popups may be stale.
+    NotificationEventsMissed,
 }
 
 impl AsyncComponent for CadenzaShellModel {
@@ -124,6 +126,8 @@ impl AsyncComponent for CadenzaShellModel {
                                     missed_events = n,
                                     "app lagged on notification broadcast receiver"
                                 );
+                                let _ =
+                                    out.send(CadenzaShellCommandOutput::NotificationEventsMissed);
                             }
                             Err(tokio::sync::broadcast::error::RecvError::Closed) => {
                                 tracing::warn!(
@@ -320,6 +324,11 @@ impl AsyncComponent for CadenzaShellModel {
             }
             Self::CommandOutput::NotificationEvent(event) => {
                 sender.input(CadenzaShellMsg::NotificationEvent(event));
+            }
+            Self::CommandOutput::NotificationEventsMissed => {
+                if let Some(panel) = &self.fresh_panel {
+                    panel.controller.emit(FreshNotificationsMsg::Resync);
+                }
             }
         }
     }

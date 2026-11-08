@@ -7,6 +7,7 @@ use relm4::{factory::FactoryVecDeque, prelude::*};
 
 use crate::{
     notifications::{
+        NOTIFICATIONS_STATE,
         card::{NotificationCard, NotificationCardOutput},
         types::Notification,
     },
@@ -26,6 +27,9 @@ pub struct FreshNotifications {
 pub enum FreshNotificationsMsg {
     NewNotification(Notification),
     RemoveNotification(u32),
+    /// Drops popups whose notification is gone, after close events were
+    /// missed.
+    Resync,
     NotificationAction(u32, String), // notification_id, action_id
     DismissNotification(u32),        // notification_id
 }
@@ -149,6 +153,19 @@ impl Component for FreshNotifications {
                         tokio::time::sleep(duration).await;
                         (notification_id, generation)
                     });
+                }
+            }
+            FreshNotificationsMsg::Resync => {
+                let stale: Vec<u32> = {
+                    let state = NOTIFICATIONS_STATE.read();
+                    self.cards
+                        .iter()
+                        .map(NotificationCard::notification_id)
+                        .filter(|id| !state.notifications.contains_key(id))
+                        .collect()
+                };
+                for id in stale {
+                    sender.input(FreshNotificationsMsg::RemoveNotification(id));
                 }
             }
             FreshNotificationsMsg::RemoveNotification(id) => {
