@@ -21,7 +21,6 @@ pub struct TrayItem {
 pub struct TrayItemWidgets {
     button: gtk::Button,
     popover: gtk::PopoverMenu,
-    action_group: gio::SimpleActionGroup,
 }
 
 impl TrayItem {
@@ -95,9 +94,7 @@ impl FactoryComponent for TrayItem {
                 UpdateEvent::Menu(tray_menu) => self.menu = Some(tray_menu),
                 UpdateEvent::MenuDiff(menu_diffs) => {
                     if let Some(menu) = self.menu.as_mut() {
-                        for _diff in &menu_diffs {
-                            apply_menu_diffs(menu, &menu_diffs);
-                        }
+                        apply_menu_diffs(menu, &menu_diffs);
                     }
                 }
                 UpdateEvent::MenuConnect(menu_path) => {
@@ -140,7 +137,7 @@ impl FactoryComponent for TrayItem {
 
         self.render_appearance(&root);
 
-        // TODO: Left click - activate
+        // left click activates the item
         let address_clone = self.address.clone();
         let sender_clone = sender.clone();
         root.connect_clicked(move |_| {
@@ -178,7 +175,6 @@ impl FactoryComponent for TrayItem {
         TrayItemWidgets {
             button: root,
             popover,
-            action_group,
         }
     }
 
@@ -192,14 +188,18 @@ impl FactoryComponent for TrayItem {
                 menu.as_menu_with_actions(&sender, &self.address, menu_path);
             widgets.popover.set_menu_model(Some(&menu_model));
 
-            // replace the old action group with the new one
-            if let Some(parent) = widgets.popover.parent() {
-                parent.insert_action_group("tray", Some(&new_action_group));
-            }
-            widgets.action_group = new_action_group;
+            // the button keeps the action group alive once it's inserted
+            widgets
+                .button
+                .insert_action_group("tray", Some(&new_action_group));
         } else {
             widgets.popover.set_menu_model(None::<&gio::Menu>);
         }
+    }
+
+    fn shutdown(&mut self, widgets: &mut Self::Widgets, _output: relm4::Sender<Self::Output>) {
+        // gtk warns when a widget is finalized with children still attached
+        widgets.popover.unparent();
     }
 }
 
