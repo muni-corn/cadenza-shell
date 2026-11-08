@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use zbus::{proxy, zvariant};
 
-use crate::network::types::{ConnectivityState, DeviceType, State};
+use crate::network::types::{ConnectivityState, State};
 
 #[proxy(
     interface = "org.freedesktop.NetworkManager",
@@ -83,8 +83,9 @@ pub trait NetworkManager {
     default_service = "org.freedesktop.NetworkManager"
 )]
 pub trait NetworkDevice {
+    /// The device's `NMDeviceType`.
     #[zbus(property)]
-    fn device_type(&self) -> zbus::Result<DeviceType>;
+    fn device_type(&self) -> zbus::Result<u32>;
 
     /// Emitted whenever the device's state changes, carrying both the new
     /// and old state plus the reason for the transition (e.g. a failed

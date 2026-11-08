@@ -14,7 +14,10 @@ use crate::{
         events::{self, ConnectFailureReason, NetworkEvent},
         scan,
         state::{DeviceKind, NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE},
-        types::{ApSecurity, DeviceState, DeviceStateReason, DeviceType, State},
+        types::{
+            ApSecurity, NM_DEVICE_STATE_ACTIVATED, NM_DEVICE_STATE_FAILED,
+            NM_DEVICE_STATE_REASON_NO_SECRETS, NM_DEVICE_TYPE_ETHERNET, NM_DEVICE_TYPE_WIFI, State,
+        },
     },
     settings, sleep_monitor,
 };
@@ -300,7 +303,7 @@ async fn find_wireless_device(conn: &zbus::Connection) -> anyhow::Result<OwnedOb
         let Ok(device_proxy) = NetworkDeviceProxy::builder(conn).path(&path)?.build().await else {
             continue;
         };
-        if let Ok(DeviceType::Wifi) = device_proxy.device_type().await {
+        if let Ok(NM_DEVICE_TYPE_WIFI) = device_proxy.device_type().await {
             return Ok(path);
         }
     }
@@ -465,17 +468,16 @@ async fn watch_connect_outcome(conn: zbus::Connection, device_path: OwnedObjectP
                 continue;
             };
 
-            match DeviceState::from(args.new_state) {
-                DeviceState::Activated => {
+            match args.new_state {
+                NM_DEVICE_STATE_ACTIVATED => {
                     return Some(NetworkEvent::ConnectionSucceeded { ssid: ssid.clone() });
                 }
-                DeviceState::Failed => {
-                    let reason =
-                        if DeviceStateReason::from(args.reason) == DeviceStateReason::NoSecrets {
-                            ConnectFailureReason::WrongPassword
-                        } else {
-                            ConnectFailureReason::Other
-                        };
+                NM_DEVICE_STATE_FAILED => {
+                    let reason = if args.reason == NM_DEVICE_STATE_REASON_NO_SECRETS {
+                        ConnectFailureReason::WrongPassword
+                    } else {
+                        ConnectFailureReason::Other
+                    };
                     return Some(NetworkEvent::ConnectionFailed {
                         ssid: ssid.clone(),
                         reason,
@@ -875,7 +877,7 @@ async fn fetch_network_info(
 async fn resolve_active_device(
     conn: &zbus::Connection,
     connection_path: &OwnedObjectPath,
-) -> anyhow::Result<Option<(OwnedObjectPath, DeviceType)>> {
+) -> anyhow::Result<Option<(OwnedObjectPath, u32)>> {
     let active_conn_proxy = ActiveConnectionProxy::builder(conn)
         .path(connection_path)?
         .build()
@@ -908,15 +910,15 @@ async fn resolve_active_device(
 async fn fetch_specific_info(
     conn: &zbus::Connection,
     device_path: OwnedObjectPath,
-    device_type: DeviceType,
+    device_type: u32,
 ) -> anyhow::Result<(
     Option<SpecificNetworkInfo>,
     Option<OwnedObjectPath>,
     Option<OwnedObjectPath>,
 )> {
     match device_type {
-        DeviceType::Ethernet => Ok((Some(SpecificNetworkInfo::Wired), None, None)),
-        DeviceType::Wifi => {
+        NM_DEVICE_TYPE_ETHERNET => Ok((Some(SpecificNetworkInfo::Wired), None, None)),
+        NM_DEVICE_TYPE_WIFI => {
             // always report the wifi device path so the caller can subscribe
             // to ActiveAccessPoint changes even if there's no access point to
             // read yet (e.g. mid-association); otherwise we'd never notice

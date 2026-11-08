@@ -2,7 +2,9 @@ use relm4::SharedState;
 use zbus::zvariant::OwnedObjectPath;
 
 use crate::{
-    network::types::{ApSecurity, ConnectivityState, DeviceType, State},
+    network::types::{
+        ApSecurity, ConnectivityState, NM_DEVICE_TYPE_ETHERNET, NM_DEVICE_TYPE_WIFI, State,
+    },
     utils::icons::{
         NETWORK_WIFI_CONNECTING, NETWORK_WIFI_DISABLED, NETWORK_WIFI_DISCONNECTED,
         NETWORK_WIFI_ICON_NAMES, NETWORK_WIFI_NO_ROUTE, NETWORK_WIRED_CONNECTED,
@@ -76,10 +78,10 @@ impl DeviceKind {
     /// Maps a NetworkManager device type to a `DeviceKind`, or `None` for
     /// device types this shell doesn't render distinctly (e.g. mobile
     /// broadband).
-    pub fn from_device_type(device_type: DeviceType) -> Option<Self> {
+    pub fn from_device_type(device_type: u32) -> Option<Self> {
         match device_type {
-            DeviceType::Ethernet => Some(Self::Wired),
-            DeviceType::Wifi => Some(Self::WiFi),
+            NM_DEVICE_TYPE_ETHERNET => Some(Self::Wired),
+            NM_DEVICE_TYPE_WIFI => Some(Self::WiFi),
             _ => None,
         }
     }
