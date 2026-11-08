@@ -17,6 +17,33 @@ pub struct CadenzaShellConfig {
     pub bluetooth: BluetoothConfig,
 }
 
+impl CadenzaShellConfig {
+    /// Raises polling intervals to at least one second.
+    ///
+    /// `tokio::time::interval` panics on a zero period, so a zero in the
+    /// config file would otherwise crash the services that poll.
+    fn clamp_intervals(&mut self) {
+        let intervals = [
+            (
+                "network.reconcile_interval",
+                &mut self.network.reconcile_interval,
+            ),
+            ("network.scan_interval", &mut self.network.scan_interval),
+            (
+                "bluetooth.reconcile_interval",
+                &mut self.bluetooth.reconcile_interval,
+            ),
+        ];
+
+        for (name, value) in intervals {
+            if *value == 0 {
+                tracing::warn!("{name} can't be 0; using 1 second instead");
+                *value = 1;
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UiConfig {
@@ -254,7 +281,7 @@ static CONFIG: OnceLock<Mutex<CadenzaShellConfig>> = OnceLock::new();
 
 /// Initialize the global configuration manager
 pub fn init() -> Result<()> {
-    let config = match ConfigManager::new() {
+    let mut config = match ConfigManager::new() {
         Ok(manager) => manager.config,
         Err(e) => {
             tracing::error!("failed to load configuration: {}", e);
@@ -262,6 +289,7 @@ pub fn init() -> Result<()> {
             CadenzaShellConfig::default()
         }
     };
+    config.clamp_intervals();
 
     CONFIG
         .set(Mutex::new(config))
@@ -307,4 +335,33 @@ pub fn reload_config() -> Result<()> {
         tracing::info!("reloaded configuration from file");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zero_intervals_are_raised_to_one_second() {
+        let mut config = CadenzaShellConfig::default();
+        config.network.reconcile_interval = 0;
+        config.network.scan_interval = 0;
+        config.bluetooth.reconcile_interval = 0;
+
+        config.clamp_intervals();
+
+        assert_eq!(config.network.reconcile_interval, 1);
+        assert_eq!(config.network.scan_interval, 1);
+        assert_eq!(config.bluetooth.reconcile_interval, 1);
+    }
+
+    #[test]
+    fn nonzero_intervals_are_kept() {
+        let mut config = CadenzaShellConfig::default();
+        config.network.scan_interval = 42;
+
+        config.clamp_intervals();
+
+        assert_eq!(config.network.scan_interval, 42);
+    }
 }
