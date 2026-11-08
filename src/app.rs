@@ -199,7 +199,18 @@ impl AsyncComponent for CadenzaShellModel {
                                             )
                                         });
                                 }
-                                Err(e) => tracing::error!("error receiving tray event: {}", e),
+                                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
+                                    tracing::warn!(
+                                        missed_events = n,
+                                        "app lagged on tray event receiver"
+                                    );
+                                }
+                                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
+                                    tracing::warn!(
+                                        "tray event channel closed; app listener stopping"
+                                    );
+                                    break;
+                                }
                             }
                         }
                     })
