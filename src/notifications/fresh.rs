@@ -115,8 +115,26 @@ impl Component for FreshNotifications {
                 let duration =
                     notification.popup_duration(settings::get_config().notifications.timeout);
 
-                // add to the beginning (top) of the list
-                self.cards.guard().push_front(notification);
+                // a replacement takes its predecessor's place, so there's never
+                // more than one popup per id; anything new goes on top
+                let existing = self
+                    .cards
+                    .iter()
+                    .position(|card| card.notification_id() == notification_id);
+                let mut cards = self.cards.guard();
+                match existing {
+                    Some(index) => {
+                        cards.remove(index);
+                        cards.insert(index, notification);
+                    }
+                    None => {
+                        cards.push_front(notification);
+                    }
+                }
+                drop(cards);
+
+                // the replaced popup's timer must not hide the new one
+                self.auto_dismiss_timeouts.remove(&notification_id);
 
                 // hide the popup after its timeout; the notification itself
                 // stays in the action panel until it's closed
