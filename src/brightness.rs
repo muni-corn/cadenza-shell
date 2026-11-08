@@ -1,6 +1,7 @@
 use std::{fs, path::Path};
 
 use anyhow::{Context, Result};
+use futures_lite::StreamExt;
 use inotify::{Inotify, WatchMask};
 use relm4::SharedState;
 
@@ -19,9 +20,8 @@ pub async fn start_brightness_watcher() {
     *BRIGHTNESS_STATE.write() = Some(current_brightness);
 
     let brightness_path = format!("/sys/class/backlight/{}/brightness", interface);
-    let interface_clone = interface.clone();
 
-    let mut inotify = match Inotify::init() {
+    let inotify = match Inotify::init() {
         Ok(inotify) => inotify,
         Err(e) => {
             tracing::error!("failed to init inotify: {}", e);
@@ -38,25 +38,28 @@ pub async fn start_brightness_watcher() {
         return;
     };
 
-    let mut buffer = [0; 1024];
-    loop {
-        match inotify.read_events_blocking(&mut buffer) {
-            Ok(events) => {
-                for _ in events {
-                    // when the brightness file is closed after writing, read
-                    // the new value
-                    match read_current_brightness_percentage(&interface_clone, max_val) {
-                        Ok(percentage) => {
-                            set_if_changed(&BRIGHTNESS_STATE, Some(percentage));
-                        }
-                        Err(e) => tracing::error!("couldn't update brightness info: {}", e),
-                    }
-                }
+    // the async stream yields to the runtime between events instead of
+    // parking a worker thread on a blocking read
+    let mut events = match inotify.into_event_stream([0; 1024]) {
+        Ok(events) => events,
+        Err(e) => {
+            tracing::error!("couldn't stream inotify events for brightness: {e}");
+            return;
+        }
+    };
+
+    while let Some(event) = events.next().await {
+        if let Err(e) = event {
+            tracing::error!("error while reading inotify events: {e}");
+            break;
+        }
+
+        // when the brightness file is closed after writing, read the new value
+        match read_current_brightness_percentage(&interface, max_val) {
+            Ok(percentage) => {
+                set_if_changed(&BRIGHTNESS_STATE, Some(percentage));
             }
-            Err(e) => {
-                tracing::error!("error while reading inotify events: {}", e);
-                break;
-            }
+            Err(e) => tracing::error!("couldn't update brightness info: {e}"),
         }
     }
 }
