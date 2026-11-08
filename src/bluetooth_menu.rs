@@ -39,6 +39,10 @@ pub enum BluetoothMenuMsg {
 pub struct BluetoothMenuWidgets {
     icon: gtk::Image,
     toggle_switch: gtk::Switch,
+    toggle_switch_handler: glib::SignalHandlerId,
+    /// The `powered` value last pushed into the switch, so it's only resynced
+    /// when the real state changes rather than after every message.
+    synced_powered: bool,
     status_label: gtk::Label,
     scan_button: gtk::Button,
     pairing_box: gtk::Box,
@@ -110,11 +114,11 @@ impl SimpleComponent for BluetoothMenu {
             .build();
 
         // connect toggle switch handler
-        toggle_switch.connect_state_set({
+        let toggle_switch_handler = toggle_switch.connect_state_set({
             let sender = sender.clone();
             move |_, state| {
                 sender.input(BluetoothMenuMsg::ToggleBluetooth(state));
-                glib::Propagation::Stop
+                glib::Propagation::Proceed
             }
         });
 
@@ -246,7 +250,9 @@ impl SimpleComponent for BluetoothMenu {
 
         let mut widgets = BluetoothMenuWidgets {
             icon,
+            synced_powered: toggle_switch.is_active(),
             toggle_switch,
+            toggle_switch_handler,
             status_label,
             scan_button,
             pairing_box,
@@ -281,6 +287,14 @@ impl SimpleComponent for BluetoothMenu {
                 self.pairing_prompt = prompt;
             }
             BluetoothMenuMsg::ToggleBluetooth(enabled) => {
+                if self
+                    .bluetooth_state
+                    .as_ref()
+                    .is_some_and(|s| s.powered == enabled)
+                {
+                    return;
+                }
+
                 let state_clone = self.bluetooth_state.clone();
                 sender.oneshot_command(async move {
                     if let Some(state) = state_clone
@@ -369,7 +383,18 @@ impl SimpleComponent for BluetoothMenu {
             .set_icon_name(Some(get_icon(&self.bluetooth_state)));
 
         let is_powered = self.bluetooth_state.as_ref().map_or_default(|s| s.powered);
-        widgets.toggle_switch.set_active(is_powered);
+
+        // set_active emits state-set, which would send ToggleBluetooth again
+        if widgets.synced_powered != is_powered {
+            widgets.synced_powered = is_powered;
+            widgets
+                .toggle_switch
+                .block_signal(&widgets.toggle_switch_handler);
+            widgets.toggle_switch.set_active(is_powered);
+            widgets
+                .toggle_switch
+                .unblock_signal(&widgets.toggle_switch_handler);
+        }
 
         widgets
             .status_label
