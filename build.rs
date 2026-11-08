@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 fn main() {
     relm4_icons_build::bundle_icons(
         // name of the file that will be generated at `OUT_DIR`
