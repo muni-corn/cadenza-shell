@@ -58,5 +58,5 @@ async fn main() -> glib::ExitCode {
         .visible_on_activate(false)
         .run_async::<CadenzaShellModel>(());
 
-    gtk4::glib::ExitCode::FAILURE
+    gtk4::glib::ExitCode::SUCCESS
 }
