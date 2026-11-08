@@ -16,16 +16,17 @@ pub(crate) enum NetworkCommand {
     SetWifiEnabled(bool),
     /// Requests a rescan. A no-op if a scan is already in flight.
     Scan,
-    /// Connects to a wifi network by SSID. If NetworkManager already has a
-    /// saved connection profile for this SSID, `password` is ignored and the
-    /// saved secrets are used; otherwise a new profile is created. `security`
-    /// determines what key-mgmt scheme to configure if `password` is given
-    /// (ignored for `Open`/`Enterprise`, since those don't take an inline
-    /// password).
+    /// Connects to a wifi network by SSID.
+    ///
+    /// Without a password, `saved_connection` is activated as-is. With a
+    /// password, any `saved_connection` is replaced by a new profile using
+    /// it, since its stored secrets were evidently rejected. `security`
+    /// determines what key-mgmt scheme to configure for the password.
     Connect {
         ssid: String,
         security: ApSecurity,
         password: Option<String>,
+        saved_connection: Option<OwnedObjectPath>,
     },
     /// Deactivates the current primary connection, if any.
     Disconnect,
@@ -64,15 +65,20 @@ pub fn request_scan() {
 
 /// Connects to a wifi network by SSID.
 ///
-/// If NetworkManager already has a saved connection for this SSID,
-/// `password` is ignored. Otherwise a new connection profile is created,
-/// using `password` (and `security` to pick the key-mgmt scheme) if the
-/// network requires one.
-pub fn connect(ssid: String, security: ApSecurity, password: Option<String>) {
+/// Pass the network's `saved_connection` (if any) and no password to
+/// activate the saved profile. Pass a password to create a new profile with
+/// it, replacing `saved_connection` if one is given.
+pub fn connect(
+    ssid: String,
+    security: ApSecurity,
+    password: Option<String>,
+    saved_connection: Option<OwnedObjectPath>,
+) {
     send(NetworkCommand::Connect {
         ssid,
         security,
         password,
+        saved_connection,
     });
 }
 

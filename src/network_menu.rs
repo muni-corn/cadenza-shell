@@ -2,6 +2,7 @@ use std::{collections::HashSet, time::Duration};
 
 use gtk4::prelude::*;
 use relm4::prelude::*;
+use zbus::zvariant::OwnedObjectPath;
 
 use crate::{
     network::{
@@ -40,6 +41,8 @@ pub enum NetworkMenuCommand {
 struct PasswordPrompt {
     ssid: String,
     security: ApSecurity,
+    /// The profile whose secrets were rejected, replaced on submit.
+    saved_connection: Option<OwnedObjectPath>,
 }
 
 #[derive(Debug)]
@@ -396,9 +399,15 @@ impl Component for NetworkMenu {
                     self.password_prompt = Some(PasswordPrompt {
                         ssid: summary.ssid,
                         security: summary.security,
+                        saved_connection: None,
                     });
                 } else {
-                    network::connect(summary.ssid, summary.security, None);
+                    network::connect(
+                        summary.ssid,
+                        summary.security,
+                        None,
+                        summary.saved_connection,
+                    );
                 }
             }
             NetworkMenuMsg::ForgetClicked(summary) => {
@@ -408,7 +417,12 @@ impl Component for NetworkMenu {
             }
             NetworkMenuMsg::PasswordSubmitted(password) => {
                 if let Some(prompt) = self.password_prompt.take() {
-                    network::connect(prompt.ssid, prompt.security, Some(password));
+                    network::connect(
+                        prompt.ssid,
+                        prompt.security,
+                        Some(password),
+                        prompt.saved_connection,
+                    );
                 }
             }
             NetworkMenuMsg::CancelPassword => {
@@ -527,14 +541,18 @@ impl NetworkMenu {
                 // rather than leaving them nowhere after a wrong
                 // password
                 if reason == ConnectFailureReason::WrongPassword {
-                    let security = self
+                    let network = self
                         .scan_state
                         .access_points
                         .iter()
                         .find(|ap| ap.ssid == ssid)
-                        .map(|ap| ap.security);
-                    if let Some(security) = security {
-                        self.password_prompt = Some(PasswordPrompt { ssid, security });
+                        .map(|ap| (ap.security, ap.saved_connection.clone()));
+                    if let Some((security, saved_connection)) = network {
+                        self.password_prompt = Some(PasswordPrompt {
+                            ssid,
+                            security,
+                            saved_connection,
+                        });
                     }
                 }
             }

@@ -273,8 +273,11 @@ async fn handle_command(conn: &zbus::Connection, cmd: NetworkCommand) {
             ssid,
             security,
             password,
+            saved_connection,
         } => {
-            if let Err(e) = handle_connect(conn, &ssid, security, password.as_deref()).await {
+            if let Err(e) =
+                handle_connect(conn, &ssid, security, password.as_deref(), saved_connection).await
+            {
                 tracing::error!("couldn't connect to {ssid}: {e}");
             }
         }
@@ -373,23 +376,38 @@ async fn refresh_access_points(
     Ok(())
 }
 
-/// Connects to a wifi network by SSID, letting NetworkManager reuse a saved
-/// connection profile if one matches, or create a new one otherwise.
+/// Connects to a wifi network by SSID.
 ///
-/// Passing a partial settings dict (just the SSID, plus security settings if
-/// a password was given) rather than a fully-specified connection is
-/// intentional: `AddAndActivateConnection` completes it against any existing
-/// matching profile, so this same call handles both "connect to a saved
-/// network" and "connect to a new one" without needing to track which case
-/// applies ourselves.
+/// A saved profile is activated directly when no password is given;
+/// `AddAndActivateConnection` always creates a new profile, so using it for
+/// saved networks would pile up duplicates without their secrets. With a
+/// password, a new profile is created from a partial settings dict that
+/// NetworkManager completes, and any saved profile for the network is
+/// deleted first because its secrets were rejected.
 async fn handle_connect(
     conn: &zbus::Connection,
     ssid: &str,
     security: ApSecurity,
     password: Option<&str>,
+    saved_connection: Option<OwnedObjectPath>,
 ) -> anyhow::Result<()> {
     let device_path = find_wireless_device(conn).await?;
     let nm_proxy = NetworkManagerProxy::new(conn).await?;
+    let no_specific_object = ObjectPath::try_from("/")?;
+
+    if let (Some(saved), None) = (&saved_connection, password) {
+        nm_proxy
+            .activate_connection(saved, &device_path, &no_specific_object)
+            .await?;
+        spawn_outcome_watcher(conn, device_path, ssid, None);
+        return Ok(());
+    }
+
+    if let Some(saved) = saved_connection
+        && let Err(e) = handle_forget(conn, &saved).await
+    {
+        tracing::warn!("couldn't delete the rejected profile for {ssid}: {e}");
+    }
 
     let mut wireless_settings: HashMap<String, Value<'_>> = HashMap::new();
     wireless_settings.insert("ssid".to_string(), Value::new(ssid.as_bytes().to_vec()));
@@ -404,21 +422,37 @@ async fn handle_connect(
         );
     }
 
-    let no_specific_object = ObjectPath::try_from("/")?;
-    nm_proxy
+    let (profile, _active_connection) = nm_proxy
         .add_and_activate_connection(connection_settings, &device_path, &no_specific_object)
         .await?;
-
-    // report the outcome once NetworkManager finishes trying, so the menu
-    // can show something more useful than a connect button that silently
-    // does nothing on a wrong password
-    let conn_clone = conn.clone();
-    let ssid_owned = ssid.to_string();
-    relm4::spawn(async move {
-        watch_connect_outcome(conn_clone, device_path, ssid_owned).await;
-    });
+    spawn_outcome_watcher(conn, device_path, ssid, Some(profile));
 
     Ok(())
+}
+
+/// Reports the outcome of a connection attempt once NetworkManager finishes
+/// trying, so the menu can show something more useful than a connect button
+/// that silently does nothing on a wrong password.
+///
+/// `created_profile` is deleted if the attempt fails, so wrong passwords
+/// don't leave profiles behind.
+fn spawn_outcome_watcher(
+    conn: &zbus::Connection,
+    device_path: OwnedObjectPath,
+    ssid: &str,
+    created_profile: Option<OwnedObjectPath>,
+) {
+    let conn = conn.clone();
+    let ssid = ssid.to_string();
+    relm4::spawn(async move {
+        let failed = watch_connect_outcome(&conn, device_path, ssid.clone()).await;
+        if failed
+            && let Some(profile) = created_profile
+            && let Err(e) = handle_forget(&conn, &profile).await
+        {
+            tracing::warn!("couldn't delete the failed profile for {ssid}: {e}");
+        }
+    });
 }
 
 /// Watches a wireless device's `StateChanged` signal until it reaches
@@ -427,22 +461,26 @@ async fn handle_connect(
 ///
 /// A `Failed` transition with reason `NoSecrets` specifically means the
 /// password was missing, wrong, or otherwise rejected; anything else is
-/// reported as a generic failure.
-async fn watch_connect_outcome(conn: zbus::Connection, device_path: OwnedObjectPath, ssid: String) {
+/// reported as a generic failure. Returns whether the attempt failed.
+async fn watch_connect_outcome(
+    conn: &zbus::Connection,
+    device_path: OwnedObjectPath,
+    ssid: String,
+) -> bool {
     const CONNECT_TIMEOUT: Duration = Duration::from_secs(20);
 
-    let builder = match NetworkDeviceProxy::builder(&conn).path(&device_path) {
+    let builder = match NetworkDeviceProxy::builder(conn).path(&device_path) {
         Ok(b) => b,
         Err(e) => {
             tracing::warn!("invalid device path {device_path} while watching connect outcome: {e}");
-            return;
+            return false;
         }
     };
     let device_proxy = match builder.build().await {
         Ok(p) => p,
         Err(e) => {
             tracing::warn!("couldn't build device proxy to watch connect outcome: {e}");
-            return;
+            return false;
         }
     };
 
@@ -450,7 +488,7 @@ async fn watch_connect_outcome(conn: zbus::Connection, device_path: OwnedObjectP
         Ok(s) => s,
         Err(e) => {
             tracing::warn!("couldn't subscribe to device state changes for {ssid}: {e}");
-            return;
+            return false;
         }
     };
 
@@ -488,7 +526,7 @@ async fn watch_connect_outcome(conn: zbus::Connection, device_path: OwnedObjectP
         Ok(Some(event)) => event,
         Ok(None) => {
             tracing::debug!("connect outcome stream for {ssid} ended without a definitive result");
-            return;
+            return false;
         }
         Err(_) => {
             tracing::debug!("timed out waiting for a connect outcome for {ssid}");
@@ -499,7 +537,9 @@ async fn watch_connect_outcome(conn: zbus::Connection, device_path: OwnedObjectP
         }
     };
 
+    let failed = matches!(event, NetworkEvent::ConnectionFailed { .. });
     let _ = events::event_tx().send(event);
+    failed
 }
 
 /// Builds the `802-11-wireless-security` settings dict for a password-based

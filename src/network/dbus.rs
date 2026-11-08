@@ -32,19 +32,6 @@ pub trait NetworkManager {
         specific_object: &zvariant::ObjectPath<'_>,
     ) -> zbus::Result<(zvariant::OwnedObjectPath, zvariant::OwnedObjectPath)>;
 
-    /// Adds a new connection and activates it with additional options.
-    fn add_and_activate_connection2(
-        &self,
-        connection: HashMap<String, HashMap<String, zvariant::Value<'_>>>,
-        device: &zvariant::ObjectPath<'_>,
-        specific_object: &zvariant::ObjectPath<'_>,
-        options: HashMap<String, zvariant::Value<'_>>,
-    ) -> zbus::Result<(
-        zvariant::OwnedObjectPath,
-        zvariant::OwnedObjectPath,
-        HashMap<String, zvariant::OwnedValue>,
-    )>;
-
     /// Deactivate an active connection.
     fn deactivate_connection(
         &self,
