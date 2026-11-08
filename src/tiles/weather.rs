@@ -48,7 +48,9 @@ impl SimpleComponent for WeatherTile {
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         if let Some(data) = WEATHER_STATE.read().clone() {
             // Update the tile with new data
-            widgets.tile.emit(TileMsg::SetIcon(Some(data.icon)));
+            widgets
+                .tile
+                .emit(TileMsg::SetIcon(Some(data.icon.to_string())));
             widgets
                 .tile
                 .emit(TileMsg::SetPrimary(Some(format!("{}°", data.temperature))));

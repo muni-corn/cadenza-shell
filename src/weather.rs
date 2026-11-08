@@ -8,8 +8,8 @@ use tokio::time::sleep;
 
 use crate::{
     icon_names::{
-        DISPLAY_BRIGHTNESS, FEW_CLOUDS, FOG, MOON, MOON_CLOUD, RAIN, RAINDROPS, ROUND_CLOUD, SNOW,
-        SNOWFLAKE, STORM,
+        FEW_CLOUDS, FOG, MOON, MOON_CLOUD, RAIN, RAINDROPS, ROUND_CLOUD, SNOW, SNOWFLAKE, STORM,
+        WEATHER_SUNNY_REGULAR,
     },
     sleep_monitor,
     utils::{backoff::Backoff, shared_state::set_if_changed},
@@ -91,7 +91,7 @@ fn map_icon(code: &str, dark: bool) -> &'static str {
             if dark {
                 MOON
             } else {
-                DISPLAY_BRIGHTNESS
+                WEATHER_SUNNY_REGULAR
             }
         }
         "116" => {
@@ -106,9 +106,13 @@ fn map_icon(code: &str, dark: bool) -> &'static str {
         "176" | "263" | "266" | "293" | "296" | "353" => RAIN,
         "299" | "302" | "305" | "308" | "311" | "314" | "356" | "359" => RAINDROPS,
         "200" | "386" | "389" | "392" | "395" => STORM,
-        "182" | "185" | "317" | "320" | "350" | "362" | "365" => SNOW,
-        "179" | "223" | "227" | "230" | "323" | "326" | "329" | "332" | "335" | "338" | "368"
-        | "371" => SNOWFLAKE,
+        // sleet, ice pellets and freezing drizzle
+        "182" | "185" | "281" | "284" | "317" | "320" | "350" | "362" | "365" | "374" | "377" => {
+            SNOW
+        }
+        "179" | "227" | "230" | "323" | "326" | "329" | "332" | "335" | "338" | "368" | "371" => {
+            SNOWFLAKE
+        }
         _ => {
             if dark {
                 MOON_CLOUD
@@ -143,7 +147,10 @@ async fn fetch_wttr(client: &reqwest::Client) -> anyhow::Result<WeatherState> {
         .astronomy
         .first()
         .ok_or_else(|| anyhow::anyhow!("missing astronomy[0]"))?;
-    let temp_f = current.temp_f.parse::<i32>().unwrap_or(0);
+    let temp_f = current
+        .temp_f
+        .parse::<i32>()
+        .map_err(|e| anyhow::anyhow!("couldn't parse temperature '{}': {e}", current.temp_f))?;
     let desc = current
         .weather_desc
         .first()
@@ -162,8 +169,7 @@ async fn fetch_wttr(client: &reqwest::Client) -> anyhow::Result<WeatherState> {
     let icon = map_icon(
         &current.weather_code,
         is_dark(now, &astro.sunrise, &astro.sunset),
-    )
-    .to_string();
+    );
 
     Ok(WeatherState {
         temperature: temp_f,

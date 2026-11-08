@@ -4,7 +4,7 @@ use serde::Deserialize;
 pub struct WeatherState {
     pub temperature: i32,
     pub condition: String,
-    pub icon: String,
+    pub icon: &'static str,
 }
 
 #[derive(Deserialize, Debug)]

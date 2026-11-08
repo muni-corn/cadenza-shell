@@ -45,6 +45,7 @@ fn main() {
             // clock
             "clock",
             // weather
+            "weather-sunny-regular",
             "moon",
             "few-clouds",
             "round-cloud",
