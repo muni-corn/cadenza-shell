@@ -57,8 +57,8 @@ pub fn set_wifi_enabled(enabled: bool) {
     send(NetworkCommand::SetWifiEnabled(enabled));
 }
 
-/// Requests a wifi scan. Has no effect if a scan is already in progress.
-pub fn scan() {
+/// Requests a wifi scan.
+pub fn request_scan() {
     send(NetworkCommand::Scan);
 }
 

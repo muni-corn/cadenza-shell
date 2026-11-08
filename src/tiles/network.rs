@@ -3,7 +3,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    network::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, get_icon, types::State},
+    network::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, State, get_icon},
     network_menu::{NetworkMenu, NetworkMenuMsg},
     tiles::Attention,
     widgets::{
@@ -183,7 +183,7 @@ fn get_attention(info: &NetworkInfo) -> Attention {
 #[cfg(test)]
 mod get_attention_tests {
     use super::*;
-    use crate::network::types::ConnectivityState;
+    use crate::network::ConnectivityState;
 
     fn info(connection_state: State, connectivity: ConnectivityState) -> NetworkInfo {
         NetworkInfo {

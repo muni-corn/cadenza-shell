@@ -5,9 +5,8 @@ use relm4::prelude::*;
 
 use crate::{
     network::{
-        self, AccessPointSummary, ConnectFailureReason, NETWORK_STATE, NetworkEvent, NetworkInfo,
-        WIFI_SCAN_STATE, WifiScanState, get_icon, get_strength_icon, security::ApSecurity,
-        subscribe_events,
+        self, AccessPointSummary, ApSecurity, ConnectFailureReason, NETWORK_STATE, NetworkEvent,
+        NetworkInfo, WIFI_SCAN_STATE, WifiScanState, get_icon, get_strength_icon, subscribe_events,
     },
     settings,
 };
@@ -373,7 +372,7 @@ impl Component for NetworkMenu {
                 network::set_wifi_enabled(enabled);
             }
             NetworkMenuMsg::Rescan => {
-                network::scan();
+                network::request_scan();
             }
             NetworkMenuMsg::SetOpen(open) => {
                 self.is_open = open;
@@ -381,7 +380,7 @@ impl Component for NetworkMenu {
                 if open {
                     // fetch fresh results right away instead of waiting for
                     // the next periodic tick
-                    network::scan();
+                    network::request_scan();
                     self.schedule_rescan(&sender);
                 }
             }
@@ -430,7 +429,7 @@ impl Component for NetworkMenu {
             NetworkMenuCommand::RescanTick(generation) => {
                 // ticks from an earlier open period are stale
                 if self.is_open && generation == self.rescan_generation {
-                    network::scan();
+                    network::request_scan();
                     self.schedule_rescan(&sender);
                 }
             }

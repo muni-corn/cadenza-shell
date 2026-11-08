@@ -23,13 +23,12 @@ use crate::{
     settings, sleep_monitor,
 };
 
-#[allow(dead_code)]
 #[derive(Clone, Debug)]
 pub enum NetworkPropertyChange {
     State(State),
     Connectivity(crate::network::types::ConnectivityState),
     /// The primary connection object path changed; triggers a full refetch.
-    Primary(OwnedObjectPath),
+    Primary,
     /// The active access point's signal strength changed.
     Strength(u8),
     /// The wireless device's active access point changed (e.g. NetworkManager
@@ -196,7 +195,7 @@ pub async fn run_network_service() {
             NetworkPropertyChange::Connectivity(connectivity) => {
                 NETWORK_STATE.write().connectivity = connectivity
             }
-            NetworkPropertyChange::Primary(_) => {
+            NetworkPropertyChange::Primary => {
                 if let Err(e) = handle_primary_change(&conn, &event_tx, &mut tasks).await {
                     tracing::error!("couldn't handle primary connection change: {e}");
                 }
@@ -369,15 +368,7 @@ async fn refresh_access_points(
         .inspect_err(|e| tracing::warn!("couldn't fetch access points: {e}"))
         .unwrap_or_default();
 
-    let wifi_proxy = WirelessDeviceProxy::builder(conn)
-        .path(device_path)?
-        .build()
-        .await?;
-    let last_scan_ms = wifi_proxy.last_scan().await.unwrap_or(-1);
-
-    let mut state = WIFI_SCAN_STATE.write();
-    state.access_points = access_points;
-    state.last_scan_ms = last_scan_ms;
+    WIFI_SCAN_STATE.write().access_points = access_points;
 
     Ok(())
 }
@@ -682,15 +673,16 @@ async fn spawn_property_watchers(
     let event_tx_clone = event_tx.clone();
     let primary = relm4::spawn(async move {
         while let Some(change) = primary_connection_stream.next().await {
-            if let Ok(new_primary_connection_path) = change.get().await.inspect_err(|e| {
-                tracing::error!("couldn't get primary connection change value: {e}")
-            }) {
-                event_tx_clone
-                    .send(NetworkPropertyChange::Primary(new_primary_connection_path))
-                    .unwrap_or_else(|e| {
-                        tracing::error!("couldn't send primary connection path change: {e}")
-                    });
+            // the new path itself isn't needed; any change triggers a refetch
+            if let Err(e) = change.get().await {
+                tracing::error!("couldn't get primary connection change value: {e}");
+                continue;
             }
+            event_tx_clone
+                .send(NetworkPropertyChange::Primary)
+                .unwrap_or_else(|e| {
+                    tracing::error!("couldn't send primary connection change: {e}")
+                });
         }
         tracing::warn!("stream for primary connection state changes has closed");
     })
@@ -848,12 +840,7 @@ async fn fetch_network_info(
 
     let (specific_info, ap_path, wifi_device_path) = match (is_connected, resolved_device) {
         (true, Some((device_path, device_type))) => {
-            fetch_specific_info(conn, device_path, device_type)
-                .await
-                .unwrap_or_else(|e| {
-                    tracing::debug!("couldn't fetch device-specific network info: {e}");
-                    (None, None, None)
-                })
+            fetch_specific_info(conn, device_path, device_type).await
         }
         _ => (None, None, None),
     };
@@ -904,7 +891,7 @@ async fn resolve_active_device(
 /// Builds the connected device's type-specific info (wired or wifi) for an
 /// already-resolved device.
 ///
-/// Returns `Ok((None, None, None))` for a device type we don't render
+/// Returns `(None, None, None)` for a device type we don't render
 /// distinctly (e.g. mobile broadband). The third element is the wireless
 /// device's own object path, present whenever the connected device is wifi
 /// regardless of whether an access point could be read.
@@ -912,34 +899,34 @@ async fn fetch_specific_info(
     conn: &zbus::Connection,
     device_path: OwnedObjectPath,
     device_type: u32,
-) -> anyhow::Result<(
+) -> (
     Option<SpecificNetworkInfo>,
     Option<OwnedObjectPath>,
     Option<OwnedObjectPath>,
-)> {
+) {
     match device_type {
-        NM_DEVICE_TYPE_ETHERNET => Ok((Some(SpecificNetworkInfo::Wired), None, None)),
+        NM_DEVICE_TYPE_ETHERNET => (Some(SpecificNetworkInfo::Wired), None, None),
         NM_DEVICE_TYPE_WIFI => {
             // always report the wifi device path so the caller can subscribe
             // to ActiveAccessPoint changes even if there's no access point to
             // read yet (e.g. mid-association); otherwise we'd never notice
             // once one becomes available until an unrelated event fires
             match get_wifi_info(conn, &device_path).await {
-                Ok((ssid, strength, ap_path)) => Ok((
+                Ok((ssid, strength, ap_path)) => (
                     Some(SpecificNetworkInfo::WiFi {
                         wifi_ssid: ssid,
                         wifi_strength: strength,
                     }),
                     Some(ap_path),
                     Some(device_path),
-                )),
+                ),
                 Err(e) => {
                     tracing::debug!("couldn't fetch wifi access point info: {e}");
-                    Ok((None, None, Some(device_path)))
+                    (None, None, Some(device_path))
                 }
             }
         }
-        _ => Ok((None, None, None)),
+        _ => (None, None, None),
     }
 }
 

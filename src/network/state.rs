@@ -29,9 +29,6 @@ pub struct WifiScanState {
     pub access_points: Vec<AccessPointSummary>,
     /// Whether a scan (`RequestScan`) is currently in flight.
     pub scanning: bool,
-    /// `WirelessDevice.LastScan`, in CLOCK_BOOTTIME milliseconds; `-1` if a
-    /// scan has never completed. Used to avoid rescanning too frequently.
-    pub last_scan_ms: i64,
 }
 
 /// A single wifi network as shown in the menu: one row per SSID, even if
