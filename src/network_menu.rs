@@ -26,6 +26,9 @@ pub struct NetworkMenu {
     /// Bumped on every open and close so rescan ticks from an earlier open
     /// period are ignored.
     rescan_generation: u64,
+    /// Set when new state arrives, so the switch only snaps to the real
+    /// value then and not right after the user flips it.
+    resync_wifi_switch: bool,
 }
 
 /// Results of the menu's background commands.
@@ -65,9 +68,6 @@ pub struct NetworkMenuWidgets {
     wifi_icon: gtk::Image,
     wifi_switch: gtk::Switch,
     wifi_switch_handler: glib::SignalHandlerId,
-    /// The `wifi_enabled` value last pushed into the switch, so it's only
-    /// resynced when the real state changes rather than after every message.
-    synced_wifi_enabled: bool,
     ssid_label: gtk::Label,
     connectivity_label: gtk::Label,
     connection_state_label: gtk::Label,
@@ -338,6 +338,7 @@ impl Component for NetworkMenu {
             connect_error: None,
             is_open: false,
             rescan_generation: 0,
+            resync_wifi_switch: false,
         };
         update_ap_rows(
             &mut model.access_points,
@@ -350,7 +351,6 @@ impl Component for NetworkMenu {
             wifi_icon,
             wifi_switch,
             wifi_switch_handler,
-            synced_wifi_enabled: model.network_state.wifi_enabled,
             ssid_label,
             connectivity_label,
             connection_state_label,
@@ -367,9 +367,11 @@ impl Component for NetworkMenu {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
+        self.resync_wifi_switch = false;
         match msg {
             NetworkMenuMsg::UpdateState(state) => {
                 self.network_state = state;
+                self.resync_wifi_switch = true;
                 update_ap_rows(
                     &mut self.access_points,
                     &self.scan_state.access_points,
@@ -481,8 +483,9 @@ impl Component for NetworkMenu {
             .set_icon_name(Some(get_icon(&self.network_state)));
 
         // set_active emits state-set, which would send ToggleWifi again
-        if widgets.synced_wifi_enabled != self.network_state.wifi_enabled {
-            widgets.synced_wifi_enabled = self.network_state.wifi_enabled;
+        if self.resync_wifi_switch
+            && widgets.wifi_switch.is_active() != self.network_state.wifi_enabled
+        {
             widgets
                 .wifi_switch
                 .block_signal(&widgets.wifi_switch_handler);

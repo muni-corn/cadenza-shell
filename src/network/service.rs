@@ -308,6 +308,15 @@ async fn handle_command(conn: &zbus::Connection, cmd: NetworkCommand) {
         NetworkCommand::SetWifiEnabled(enabled) => {
             if let Err(e) = handle_set_wifi_enabled(conn, enabled).await {
                 tracing::error!("couldn't set wifi enabled to {enabled}: {e}");
+
+                // nothing changed on the bus, so republish the real value to
+                // move the menu's switch back
+                let actual = match NetworkManagerProxy::new(conn).await {
+                    Ok(nm_proxy) => nm_proxy.wireless_enabled().await.ok(),
+                    Err(_) => None,
+                };
+                let mut state = NETWORK_STATE.write();
+                state.wifi_enabled = actual.unwrap_or(state.wifi_enabled);
             }
         }
         NetworkCommand::Scan => {
