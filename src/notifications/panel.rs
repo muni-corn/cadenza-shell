@@ -27,8 +27,6 @@ pub struct ActionPanel {
 #[derive(Debug)]
 pub enum ActionPanelMsg {
     Toggle,
-    // wired to a future "clear all" button in the notification center ui
-    #[allow(dead_code)]
     DismissAll,
     // payload is unused; update_view reads directly from the global
     StateUpdate,
@@ -44,6 +42,7 @@ pub struct ActionPanelWidgets {
     clock: Controller<AnalogClock>,
     time_label: gtk4::Label,
     date_label: gtk4::Label,
+    clear_all_button: gtk4::Button,
     clock_timer: Option<glib::SourceId>,
 }
 
@@ -128,7 +127,16 @@ impl SimpleComponent for ActionPanel {
                 .halign(gtk4::Align::Start)
                 .build(),
             clock_timer: None,
+            clear_all_button: gtk4::Button::builder()
+                .label("Clear all")
+                .halign(gtk4::Align::End)
+                .visible(false)
+                .build(),
         };
+        widgets.clear_all_button.connect_clicked({
+            let sender = sender.clone();
+            move |_| sender.input(ActionPanelMsg::DismissAll)
+        });
 
         // horizontal row holding both the analog clock and the digital
         // clock/date
@@ -152,6 +160,7 @@ impl SimpleComponent for ActionPanel {
         clock_row.append(&clock_text_box);
 
         widgets.panel.append(&clock_row);
+        widgets.panel.append(&widgets.clear_all_button);
         widgets.panel.append(widgets.cards.widget());
         widgets.window.set_child(Some(&widgets.panel));
 
@@ -208,6 +217,9 @@ impl SimpleComponent for ActionPanel {
 
         if self.visible {
             let state = NOTIFICATIONS_STATE.read();
+            widgets
+                .clear_all_button
+                .set_visible(!state.notifications.is_empty());
             let mut notifications: Vec<&Notification> = state.notifications.values().collect();
             // timestamps are whole seconds, so ties are broken by id (newer
             // first)
