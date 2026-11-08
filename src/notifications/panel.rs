@@ -95,7 +95,7 @@ impl SimpleComponent for ActionPanel {
         window.set_anchor(Edge::Right, true);
         window.set_anchor(Edge::Bottom, true);
         window.set_margin_all(8);
-        window.set_width_request(432);
+        window.set_width_request(settings::get_config().notifications.center_width);
 
         let mut widgets = ActionPanelWidgets {
             window,

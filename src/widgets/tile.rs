@@ -1,7 +1,7 @@
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::tiles::Attention;
+use crate::{settings, tiles::Attention};
 
 #[derive(Clone, Debug)]
 pub struct Tile {
@@ -81,8 +81,8 @@ impl SimpleComponent for Tile {
         // create widgets
         let icon = gtk::Image::builder()
             .css_classes(vec!["icon", model.attention.css_class()])
-            .pixel_size(16)
-            .width_request(16)
+            .pixel_size(settings::get_config().tiles.icon_size)
+            .width_request(settings::get_config().tiles.icon_size)
             .build();
 
         let primary_label = gtk::Label::builder()

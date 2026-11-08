@@ -1,13 +1,16 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, time::Duration};
 
 use gdk4::Monitor;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::{factory::FactoryVecDeque, prelude::*};
 
-use crate::notifications::{
-    card::{NotificationCard, NotificationCardOutput},
-    types::{Notification, NotificationUrgency},
+use crate::{
+    notifications::{
+        card::{NotificationCard, NotificationCardOutput},
+        types::{Notification, NotificationUrgency},
+    },
+    settings,
 };
 
 #[derive(Debug)]
@@ -51,7 +54,7 @@ impl Component for FreshNotifications {
             notifications_container -> gtk4::Box {
                 set_orientation: gtk4::Orientation::Vertical,
                 set_spacing: 8,
-                set_width_request: 400,
+                set_width_request: settings::get_config().notifications.popup_width,
             },
         }
     }
@@ -112,8 +115,10 @@ impl Component for FreshNotifications {
                 // add to the beginning (top) of the list
                 self.cards.guard().push_front(notification);
 
-                // set up auto-dismiss for non-critical notifications
-                if !matches!(urgency, NotificationUrgency::Critical) {
+                // set up auto-dismiss for non-critical notifications; a zero
+                // timeout in the config keeps popups until they're closed
+                let timeout = settings::get_config().notifications.timeout;
+                if timeout > 0 && !matches!(urgency, NotificationUrgency::Critical) {
                     let generation = self.next_timer_generation;
                     self.next_timer_generation = generation.wrapping_add(1);
                     self.auto_dismiss_timeouts
@@ -121,7 +126,7 @@ impl Component for FreshNotifications {
 
                     // relm4 cancels the command if the panel shuts down first
                     sender.oneshot_command(async move {
-                        tokio::time::sleep(AUTO_DISMISS_DELAY).await;
+                        tokio::time::sleep(Duration::from_secs(timeout)).await;
                         (notification_id, generation)
                     });
                 } else {
@@ -223,6 +228,3 @@ impl Component for FreshNotifications {
         sender.input(FreshNotificationsMsg::DismissNotification(id));
     }
 }
-
-/// How long a non-critical popup stays on screen.
-const AUTO_DISMISS_DELAY: std::time::Duration = std::time::Duration::from_secs(10);
