@@ -13,7 +13,7 @@ use tokio::{
 
 use crate::{
     bluetooth::{
-        agent,
+        actions, agent,
         commands::{self, BluetoothCommand},
         state::{BLUETOOTH_STATE, BluetoothState, DeviceInfo},
     },
@@ -171,15 +171,25 @@ impl BluetoothService {
                     handle.abort();
                 }
             }
-            BluetoothCommand::Pair(address) => handle_pair(address),
-            BluetoothCommand::Remove(address) => {
-                if let Err(e) = handle_remove(address).await {
-                    tracing::warn!("couldn't remove device {address}: {e}");
-                }
-            }
+            BluetoothCommand::SetPowered(powered) => match self.adapter() {
+                Some(adapter) => actions::spawn_set_powered(adapter, powered),
+                None => tracing::warn!("can't toggle bluetooth: no adapter available"),
+            },
+            BluetoothCommand::Device(address, action) => match self.adapter() {
+                Some(adapter) => actions::spawn_device_action(adapter, address, action),
+                None => tracing::warn!("can't {action:?} {address}: no adapter available"),
+            },
             BluetoothCommand::PairingReply(reply) => agent::respond(reply),
             BluetoothCommand::CancelPairing => agent::cancel(),
         }
+    }
+
+    /// The adapter currently in use, if any.
+    fn adapter(&self) -> Option<bluer::Adapter> {
+        BLUETOOTH_STATE
+            .read()
+            .as_ref()
+            .map(|state| state.adapter.clone())
     }
 
     /// Self-heals anything a missed event left stale.
@@ -592,57 +602,6 @@ fn spawn_session_watcher(
         tracing::warn!("stream for bluetooth session events has closed");
     })
     .abort_handle()
-}
-
-/// Initiates pairing with a device, spawned rather than awaited inline:
-/// pairing can take many seconds while it waits on the user to answer a PIN
-/// or passkey prompt, and awaiting it directly in the command loop would
-/// block every other bluetooth event (property updates, discovery, etc.)
-/// for that whole duration.
-fn handle_pair(address: Address) {
-    let adapter = {
-        let state = BLUETOOTH_STATE.read();
-        let Some(ref state) = *state else {
-            tracing::warn!("can't pair with {address}: no bluetooth adapter available");
-            return;
-        };
-        state.adapter.clone()
-    };
-
-    relm4::spawn(async move {
-        let device = match adapter.device(address) {
-            Ok(d) => d,
-            Err(e) => {
-                tracing::warn!("couldn't build device handle for {address}: {e}");
-                return;
-            }
-        };
-
-        match device.pair().await {
-            Ok(()) => {
-                tracing::info!("paired with {address}");
-                // trusting a device we just paired with is the common
-                // convention (lets it reconnect without re-authorizing)
-                if let Err(e) = device.set_trusted(true).await {
-                    tracing::warn!("paired with {address} but couldn't set it trusted: {e}");
-                }
-            }
-            Err(e) => tracing::warn!("pairing with {address} failed: {e}"),
-        }
-    });
-}
-
-async fn handle_remove(address: Address) -> anyhow::Result<()> {
-    let adapter = {
-        let state = BLUETOOTH_STATE.read();
-        let Some(ref state) = *state else {
-            anyhow::bail!("no bluetooth adapter available");
-        };
-        state.adapter.clone()
-    };
-
-    adapter.remove_device(address).await?;
-    Ok(())
 }
 
 /// Fetches a full property snapshot for a device.

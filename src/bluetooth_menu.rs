@@ -290,7 +290,7 @@ impl SimpleComponent for BluetoothMenu {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         self.resync_power_switch = false;
         self.reset_pairing_entry = false;
         match msg {
@@ -314,21 +314,7 @@ impl SimpleComponent for BluetoothMenu {
                     return;
                 }
 
-                let state_clone = self.bluetooth_state.clone();
-                let input = sender.input_sender().clone();
-                sender.oneshot_command(async move {
-                    if let Some(state) = state_clone
-                        && let Err(e) = state.adapter.set_powered(enabled).await
-                    {
-                        tracing::error!("failed to toggle bluetooth: {}", e);
-
-                        // nothing changed, so resync the switch with the
-                        // real state
-                        input.emit(BluetoothMenuMsg::UpdateState(
-                            BLUETOOTH_STATE.read().clone(),
-                        ));
-                    }
-                });
+                bluetooth::set_powered(enabled);
             }
             BluetoothMenuMsg::ToggleDiscovery => {
                 let discovering = self.bluetooth_state.as_ref().is_some_and(|s| s.discovering);
@@ -338,34 +324,8 @@ impl SimpleComponent for BluetoothMenu {
                     bluetooth::start_discovery();
                 }
             }
-            BluetoothMenuMsg::ConnectToDevice(addr) => {
-                let state_clone = self.bluetooth_state.clone();
-                sender.oneshot_command(async move {
-                    let Some(state) = state_clone else { return };
-                    match state.device_handle(addr) {
-                        Ok(device) => {
-                            if let Err(e) = device.connect().await {
-                                tracing::error!("failed to connect to device {addr}: {e}");
-                            }
-                        }
-                        Err(e) => tracing::error!("couldn't build device handle for {addr}: {e}"),
-                    }
-                });
-            }
-            BluetoothMenuMsg::DisconnectFromDevice(addr) => {
-                let state_clone = self.bluetooth_state.clone();
-                sender.oneshot_command(async move {
-                    let Some(state) = state_clone else { return };
-                    match state.device_handle(addr) {
-                        Ok(device) => {
-                            if let Err(e) = device.disconnect().await {
-                                tracing::error!("failed to disconnect from device {addr}: {e}");
-                            }
-                        }
-                        Err(e) => tracing::error!("couldn't build device handle for {addr}: {e}"),
-                    }
-                });
-            }
+            BluetoothMenuMsg::ConnectToDevice(addr) => bluetooth::connect(addr),
+            BluetoothMenuMsg::DisconnectFromDevice(addr) => bluetooth::disconnect(addr),
             BluetoothMenuMsg::PairDevice(addr) => {
                 bluetooth::pair(addr);
             }

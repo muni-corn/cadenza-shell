@@ -3,23 +3,18 @@ use std::sync::OnceLock;
 use bluer::Address;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::bluetooth::agent::PairingReply;
+use crate::bluetooth::{actions::DeviceAction, agent::PairingReply};
 
 /// Commands the UI can send to the bluetooth service.
 ///
-/// Scoped to the operations added for scanning and pairing; connect,
-/// disconnect, and power toggling already work by calling `bluer` directly
-/// from the UI via `BluetoothState::device_handle` (see `bluetooth_menu.rs`)
-/// and don't need a detour through the service. Discovery specifically needs
-/// a persistent service-side task (the discovery stream must stay alive for
-/// the whole session and auto-stop after a timeout), which a one-shot UI
-/// call can't manage on its own.
+/// Every adapter operation goes through the service, which owns the adapter,
+/// so the UI never does D-Bus I/O itself.
 #[derive(Debug)]
 pub(crate) enum BluetoothCommand {
     StartDiscovery,
     StopDiscovery,
-    Pair(Address),
-    Remove(Address),
+    SetPowered(bool),
+    Device(Address, DeviceAction),
     /// A reply to the currently pending pairing prompt, if any.
     PairingReply(PairingReply),
     /// Rejects the currently pending pairing prompt, if any.
@@ -55,14 +50,29 @@ pub fn stop_discovery() {
     send(BluetoothCommand::StopDiscovery);
 }
 
+/// Turns the adapter on or off.
+pub fn set_powered(powered: bool) {
+    send(BluetoothCommand::SetPowered(powered));
+}
+
+/// Connects to a paired device by address.
+pub fn connect(address: Address) {
+    send(BluetoothCommand::Device(address, DeviceAction::Connect));
+}
+
+/// Disconnects a device by address.
+pub fn disconnect(address: Address) {
+    send(BluetoothCommand::Device(address, DeviceAction::Disconnect));
+}
+
 /// Initiates pairing with a device by address.
 pub fn pair(address: Address) {
-    send(BluetoothCommand::Pair(address));
+    send(BluetoothCommand::Device(address, DeviceAction::Pair));
 }
 
 /// Removes (unpairs and forgets) a device by address.
 pub fn remove(address: Address) {
-    send(BluetoothCommand::Remove(address));
+    send(BluetoothCommand::Device(address, DeviceAction::Remove));
 }
 
 /// Responds to the current pairing prompt, if any.

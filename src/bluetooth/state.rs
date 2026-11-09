@@ -1,6 +1,6 @@
 use std::collections::{HashMap, hash_map};
 
-use bluer::{Adapter, Address, Device};
+use bluer::{Adapter, Address};
 use relm4::SharedState;
 
 pub static BLUETOOTH_STATE: SharedState<Option<BluetoothState>> = SharedState::new();
@@ -39,13 +39,10 @@ pub enum PairingRequest {
 
 /// A point-in-time snapshot of a remote device's properties.
 ///
-/// Devices themselves (`bluer::Device`) are cheap, synchronous handles that
-/// can be reconstructed from an address at any time via
-/// [`BluetoothState::device_handle`]; reading their properties, however,
-/// requires an async D-Bus round trip. Snapshotting the properties we care
-/// about into shared state means the UI can render device rows and
-/// tooltips synchronously from cached data instead of doing D-Bus I/O on
-/// every render.
+/// Reading a device's properties requires an async D-Bus round trip.
+/// Snapshotting the properties we care about into shared state means the UI can
+/// render device rows and tooltips synchronously from cached data instead of
+/// doing D-Bus I/O on every render.
 #[derive(Clone, Debug)]
 pub struct DeviceInfo {
     pub address: Address,
@@ -79,15 +76,5 @@ impl BluetoothState {
     /// out of sync with the devices it's supposed to be counting.
     pub fn connected_device_count(&self) -> usize {
         self.devices.values().filter(|d| d.connected).count()
-    }
-
-    /// Builds a handle for issuing commands (connect/disconnect/pair/etc.)
-    /// against a device by address.
-    ///
-    /// This is a cheap, synchronous local construction (it only builds a
-    /// D-Bus object path; no I/O is performed), so it's fine to call this on
-    /// demand rather than caching the handle alongside the snapshot.
-    pub fn device_handle(&self, address: Address) -> bluer::Result<Device> {
-        self.adapter.device(address)
     }
 }
