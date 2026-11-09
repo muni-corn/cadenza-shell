@@ -23,6 +23,9 @@ pub struct Notification {
     /// Whether the notification stays open after an action is invoked (the
     /// `resident` hint).
     pub resident: bool,
+    /// Whether action ids are icon names to show instead of their labels
+    /// (the `action-icons` hint).
+    pub action_icons: bool,
 }
 
 /// The action invoked by clicking the notification itself.
@@ -84,6 +87,7 @@ mod tests {
             timestamp: 0,
             actions: Vec::new(),
             resident: false,
+            action_icons: false,
         }
     }
 

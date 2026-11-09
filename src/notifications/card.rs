@@ -196,13 +196,19 @@ impl FactoryComponent for NotificationCard {
         for (action_id, label) in self.button_actions() {
             let action_button = gtk4::Button::builder().hexpand(true).build();
 
-            let button_label = gtk4::Label::builder()
-                .label(label)
-                .halign(gtk4::Align::Center)
-                .hexpand(true)
-                .build();
-
-            action_button.set_child(Some(&button_label));
+            // with action-icons the id names an icon and the label becomes a
+            // tooltip, unless the theme lacks the icon
+            if self.notification.action_icons && image::has_icon(action_id) {
+                action_button.set_icon_name(action_id);
+                action_button.set_tooltip_text(Some(label));
+            } else {
+                let button_label = gtk4::Label::builder()
+                    .label(label)
+                    .halign(gtk4::Align::Center)
+                    .hexpand(true)
+                    .build();
+                action_button.set_child(Some(&button_label));
+            }
 
             let sender = sender.clone();
             let action_id = action_id.to_string();

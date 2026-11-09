@@ -80,6 +80,7 @@ impl NotificationsDaemon {
             timestamp,
             actions,
             resident: hints.flag("resident"),
+            action_icons: hints.flag("action-icons"),
         };
 
         // write to the global state
