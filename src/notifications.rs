@@ -8,7 +8,7 @@ mod markup;
 pub mod panel;
 pub mod types;
 
-use std::{collections::HashMap, sync::OnceLock};
+use std::collections::HashMap;
 
 use anyhow::Result;
 use relm4::SharedState;
@@ -21,7 +21,7 @@ use crate::{
         lifecycle::CloseReason,
         types::{InvokedAction, Notification},
     },
-    utils::command_slot::CommandSlot,
+    utils::{command_slot::CommandSlot, event_bus::EventBus},
 };
 
 /// Global snapshot of all current notifications.
@@ -46,13 +46,8 @@ pub enum NotificationEvent {
     Closed { id: u32 },
 }
 
-// capacity of 64 events; lagging receivers miss old events but never block
-// the producer, matching the pattern used in sleep_monitor
-static EVENT_TX: OnceLock<broadcast::Sender<NotificationEvent>> = OnceLock::new();
-
-pub(crate) fn event_tx() -> &'static broadcast::Sender<NotificationEvent> {
-    EVENT_TX.get_or_init(|| broadcast::channel(64).0)
-}
+/// Notification events for the popups and tiles.
+pub(crate) static EVENTS: EventBus<NotificationEvent> = EventBus::new(64);
 
 /// Subscribe to notification events.
 ///
@@ -60,7 +55,7 @@ pub(crate) fn event_tx() -> &'static broadcast::Sender<NotificationEvent> {
 /// Multiple consumers can call this independently to each get their own
 /// receiver.
 pub fn subscribe_events() -> broadcast::Receiver<NotificationEvent> {
-    event_tx().subscribe()
+    EVENTS.subscribe()
 }
 
 /// Commands that consumers can send to the notification service.
@@ -108,10 +103,6 @@ pub fn invoke_action(action: InvokedAction) {
 /// Must be started exactly once, from `app.rs`.
 #[tracing::instrument(level = "debug", skip_all)]
 pub async fn run_notifications_service() {
-    // initialize the broadcast sender so subscribers can call
-    // subscribe_events() before the first event arrives
-    let _ = event_tx();
-
     let connection = match initialize_notifications_daemon().await {
         Ok(c) => {
             tracing::info!(

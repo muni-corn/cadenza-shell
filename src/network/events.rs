@@ -1,6 +1,6 @@
-use std::sync::OnceLock;
-
 use tokio::sync::broadcast;
+
+use crate::utils::event_bus::EventBus;
 
 /// The outcome of a connection attempt, broadcast so the menu can show
 /// specific feedback (e.g. distinguishing a wrong password from a generic
@@ -26,13 +26,8 @@ pub enum ConnectFailureReason {
     Other,
 }
 
-// capacity of 16 events; lagging receivers miss old events but never block
-// the producer, matching the pattern used in sleep_monitor/notifications
-static EVENT_TX: OnceLock<broadcast::Sender<NetworkEvent>> = OnceLock::new();
-
-pub(crate) fn event_tx() -> &'static broadcast::Sender<NetworkEvent> {
-    EVENT_TX.get_or_init(|| broadcast::channel(16).0)
-}
+/// Connection attempt outcomes for the menu.
+pub(crate) static EVENTS: EventBus<NetworkEvent> = EventBus::new(16);
 
 /// Subscribes to network connection-attempt outcomes.
 ///
@@ -40,5 +35,5 @@ pub(crate) fn event_tx() -> &'static broadcast::Sender<NetworkEvent> {
 /// attempt's result. Multiple consumers can call this independently to each
 /// get their own receiver.
 pub fn subscribe_events() -> broadcast::Receiver<NetworkEvent> {
-    event_tx().subscribe()
+    EVENTS.subscribe()
 }

@@ -1,16 +1,13 @@
-use std::{sync::OnceLock, time::Duration};
+use std::time::Duration;
 
 use futures_lite::StreamExt;
 use tokio::sync::broadcast;
 use zbus::proxy;
 
-use crate::utils::backoff::Backoff;
+use crate::utils::{backoff::Backoff, event_bus::EventBus};
 
-static WAKE_TX: OnceLock<broadcast::Sender<()>> = OnceLock::new();
-
-fn wake_tx() -> &'static broadcast::Sender<()> {
-    WAKE_TX.get_or_init(|| broadcast::channel(8).0)
-}
+/// Fires each time the system wakes from sleep.
+static WAKE: EventBus<()> = EventBus::new(8);
 
 /// Subscribe to system wake events.
 ///
@@ -18,7 +15,7 @@ fn wake_tx() -> &'static broadcast::Sender<()> {
 /// Multiple services can call this independently to each get their own
 /// receiver.
 pub fn subscribe_wake() -> broadcast::Receiver<()> {
-    wake_tx().subscribe()
+    WAKE.subscribe()
 }
 
 #[proxy(
@@ -67,8 +64,7 @@ async fn watch_sleep() -> zbus::Result<()> {
         // start=false means the system has just woken up
         if !args.start {
             tracing::debug!("system wake detected, notifying subscribers");
-            // ignore send errors; no subscribers is fine
-            let _ = wake_tx().send(());
+            WAKE.send(());
         }
     }
 

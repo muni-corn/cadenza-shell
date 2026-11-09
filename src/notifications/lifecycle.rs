@@ -17,7 +17,7 @@ use tokio::task::AbortHandle;
 use zbus::{Connection, object_server::SignalEmitter};
 
 use crate::notifications::{
-    NOTIFICATIONS_STATE, NotificationEvent, daemon::NotificationsDaemon, event_tx,
+    EVENTS, NOTIFICATIONS_STATE, NotificationEvent, daemon::NotificationsDaemon,
 };
 
 /// Object path the daemon is served at.
@@ -64,7 +64,7 @@ pub async fn close(id: u32, reason: CloseReason) -> bool {
     NOTIFICATIONS_STATE.write().notifications.remove(&id);
     tracing::debug!(notification.id = id, ?reason, "notification closed");
 
-    let _ = event_tx().send(NotificationEvent::Closed { id });
+    EVENTS.send(NotificationEvent::Closed { id });
 
     if let Some(connection) = CONNECTION.get() {
         let emitted = match SignalEmitter::new(connection, OBJECT_PATH) {

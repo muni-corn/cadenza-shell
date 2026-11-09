@@ -62,7 +62,7 @@ pub(super) async fn handle_command(conn: &zbus::Connection, cmd: NetworkCommand)
 
                 // the menu has already closed its password prompt, so it
                 // needs to hear about failures that happen before activation
-                let _ = events::event_tx().send(NetworkEvent::ConnectionFailed {
+                events::EVENTS.send(NetworkEvent::ConnectionFailed {
                     ssid,
                     reason: ConnectFailureReason::Other,
                 });
@@ -289,7 +289,7 @@ pub(super) fn spawn_outcome_watcher(
 
         let failed = matches!(outcome, Some(NetworkEvent::ConnectionFailed { .. }));
         if let Some(event) = outcome {
-            let _ = events::event_tx().send(event);
+            events::EVENTS.send(event);
         }
 
         if failed

@@ -8,7 +8,7 @@ use zbus::{interface, object_server::SignalEmitter, zvariant::OwnedValue};
 
 use crate::{
     notifications::{
-        NOTIFICATIONS_STATE, NotificationEvent, event_tx,
+        EVENTS, NOTIFICATIONS_STATE, NotificationEvent,
         hints::Hints,
         lifecycle::{self, CloseReason},
         types::{Notification, NotificationUrgency},
@@ -97,7 +97,7 @@ impl NotificationsDaemon {
             .insert(id, notification.clone());
 
         // broadcast the event to all subscribers
-        let _ = event_tx().send(NotificationEvent::Received(notification));
+        EVENTS.send(NotificationEvent::Received(notification));
 
         // handle timeout — auto-close non-persistent notifications
         // a replaced notification must not be closed by its predecessor's
