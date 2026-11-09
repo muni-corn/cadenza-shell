@@ -84,9 +84,10 @@ impl FactoryComponent for NotificationCard {
                     },
                 },
 
-                // Content section
+                // image and text; a box rather than a button, since a button
+                // holds a single child and would swallow clicks on links
                 #[name = "content_container"]
-                gtk4::Button {
+                gtk4::Box {
                     add_css_class: "content",
                     set_hexpand: true,
 
@@ -116,6 +117,7 @@ impl FactoryComponent for NotificationCard {
                         },
 
                         // body, rendered from the client's markup
+                        #[name = "body"]
                         gtk4::Label {
                             set_markup: &markup::to_label_markup(&self.notification.body),
                             add_css_class: "body",
@@ -164,11 +166,18 @@ impl FactoryComponent for NotificationCard {
 
         // clicking the notification itself invokes the "default" action
         if self.has_default_action() {
+            let click = gtk4::GestureClick::new();
             let sender = sender.clone();
-            widgets.content_container.connect_clicked(move |_| {
+            click.connect_released(move |_, _, _, _| {
                 sender.input(NotificationCardMsg::Action(DEFAULT_ACTION.to_string()));
             });
+            widgets.content_container.add_controller(click);
         }
+
+        widgets.body.connect_activate_link(|_, uri| {
+            open_link(uri);
+            glib::Propagation::Stop
+        });
 
         // every other action gets a button
         for (action_id, label) in self.button_actions() {
@@ -265,4 +274,18 @@ impl NotificationCard {
     pub fn notification_id(&self) -> u32 {
         self.notification.id
     }
+}
+
+/// Opens a link from a notification body in the default handler.
+fn open_link(uri: &str) {
+    let uri = uri.to_string();
+    gtk4::UriLauncher::new(&uri).launch(
+        None::<&gtk4::Window>,
+        None::<&gio::Cancellable>,
+        move |result| {
+            if let Err(e) = result {
+                tracing::warn!("couldn't open {uri} from a notification: {e}");
+            }
+        },
+    );
 }
