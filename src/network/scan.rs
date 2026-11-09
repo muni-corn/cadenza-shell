@@ -1,5 +1,6 @@
 use std::{cmp::Reverse, collections::HashMap};
 
+use tokio::task::JoinSet;
 use zbus::zvariant::OwnedObjectPath;
 
 use crate::network::{
@@ -28,13 +29,25 @@ pub async fn fetch_access_points(
     let wifi_proxy = proxy_at::<WirelessDeviceProxy>(conn, device_path).await?;
     let ap_paths = wifi_proxy.get_all_access_points().await?;
 
-    let mut readings = Vec::with_capacity(ap_paths.len());
-    for ap_path in &ap_paths {
-        match read_access_point(conn, ap_path).await {
-            Ok(Some(reading)) => readings.push(reading),
+    // read every access point at once instead of one round trip after
+    // another, which held up the service loop during scans
+    let mut reads = JoinSet::new();
+    for ap_path in ap_paths {
+        let conn = conn.clone();
+        reads.spawn(async move {
+            let reading = read_access_point(&conn, &ap_path).await;
+            (ap_path, reading)
+        });
+    }
+
+    let mut readings = Vec::with_capacity(reads.len());
+    while let Some(read) = reads.join_next().await {
+        match read {
+            Ok((_, Ok(Some(reading)))) => readings.push(reading),
             // empty or whitespace-only SSID (e.g. a hidden network); skip
-            Ok(None) => {}
-            Err(e) => tracing::debug!("couldn't read access point {ap_path}: {e}"),
+            Ok((_, Ok(None))) => {}
+            Ok((ap_path, Err(e))) => tracing::debug!("couldn't read access point {ap_path}: {e}"),
+            Err(e) => tracing::debug!("access point read task failed: {e}"),
         }
     }
 
