@@ -37,7 +37,7 @@ struct FreshPanel {
 struct MonitorBar {
     monitor: gdk4::Monitor,
     /// Held so the bar lives exactly as long as its monitor entry.
-    _bar: AsyncController<Bar>,
+    _bar: Controller<Bar>,
 }
 
 pub(crate) struct CadenzaShellModel {
@@ -214,7 +214,7 @@ impl AsyncComponent for CadenzaShellModel {
         _root: &Self::Root,
     ) {
         match msg {
-            CadenzaShellMsg::MonitorsChanged => self.reconcile_bars(&sender).await,
+            CadenzaShellMsg::MonitorsChanged => self.reconcile_bars(&sender),
             CadenzaShellMsg::NotificationEvent(event) => {
                 let Some(panel) = &self.fresh_panel else {
                     return;
@@ -282,7 +282,7 @@ impl CadenzaShellModel {
     /// Monitors are compared by identity rather than connector name, so a
     /// reconnected display that reuses its connector name gets a fresh bar
     /// bound to its new monitor object.
-    async fn reconcile_bars(&mut self, sender: &AsyncComponentSender<Self>) {
+    fn reconcile_bars(&mut self, sender: &AsyncComponentSender<Self>) {
         let current: Vec<gdk4::Monitor> = self
             .display
             .monitors()
@@ -312,7 +312,7 @@ impl CadenzaShellModel {
             if self.bars.iter().any(|bar| bar.monitor == monitor) {
                 continue;
             }
-            self.create_bar(monitor, sender).await;
+            self.create_bar(monitor, sender);
         }
 
         // keep popups available after their monitor is unplugged by moving
@@ -325,7 +325,7 @@ impl CadenzaShellModel {
     /// Creates a bar on `monitor` and reconciles again as soon as the
     /// monitor is invalidated, which gdk can report before the monitor list
     /// changes.
-    async fn create_bar(&mut self, monitor: gdk4::Monitor, sender: &AsyncComponentSender<Self>) {
+    fn create_bar(&mut self, monitor: gdk4::Monitor, sender: &AsyncComponentSender<Self>) {
         tracing::info!("creating bar for monitor: {:?}", monitor.connector());
 
         let bar = Bar::builder()

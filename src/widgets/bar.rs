@@ -38,7 +38,7 @@ pub enum BarMsg {
     ToggleActionPanel,
 }
 
-impl SimpleAsyncComponent for Bar {
+impl SimpleComponent for Bar {
     type Init = BarInit;
     type Input = BarMsg;
     type Output = ();
@@ -54,14 +54,14 @@ impl SimpleAsyncComponent for Bar {
             .build()
     }
 
-    async fn init(
+    fn init(
         BarInit {
             monitor,
             tray_client,
         }: Self::Init,
         window: Self::Root,
-        sender: AsyncComponentSender<Self>,
-    ) -> AsyncComponentParts<Self> {
+        sender: ComponentSender<Self>,
+    ) -> ComponentParts<Self> {
         let config = settings::get_config();
 
         // each bar owns the action panel for its own monitor
@@ -101,16 +101,14 @@ impl SimpleAsyncComponent for Bar {
 
         window.present();
 
-        AsyncComponentParts { model, widgets: () }
+        ComponentParts { model, widgets: () }
     }
 
-    async fn update(&mut self, msg: Self::Input, _sender: AsyncComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
             BarMsg::ToggleActionPanel => self.action_panel.emit(ActionPanelMsg::Toggle),
         }
     }
-
-    fn update_view(&self, _widgets: &mut Self::Widgets, _sender: AsyncComponentSender<Self>) {}
 
     fn shutdown(&mut self, _widgets: &mut Self::Widgets, _output: relm4::Sender<Self::Output>) {
         // explicitly close the layer-shell window so the compositor destroys
