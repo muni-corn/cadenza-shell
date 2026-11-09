@@ -11,14 +11,17 @@ use crate::{
         subscribe_events,
     },
     settings,
-    widgets::menu_parts::{MenuHeader, PromptBox, menu_root, scrolled_content},
+    widgets::{
+        menu_parts::{MenuHeader, PromptBox, menu_root, scrolled_content},
+        menu_row::{MenuRow, MenuRowData, MenuRowOutput, sync_rows},
+    },
 };
 
 #[derive(Debug)]
 pub struct NetworkMenu {
     network_state: NetworkInfo,
     scan_state: WifiScanState,
-    access_points: FactoryVecDeque<AccessPointRow>,
+    access_points: FactoryVecDeque<MenuRow>,
     password_prompt: Option<PasswordPrompt>,
     connect_error: Option<String>,
     /// Whether the menu's containing window is currently open, set by the
@@ -58,8 +61,10 @@ pub enum NetworkMenuMsg {
     ToggleWifi(bool),
     Rescan,
     Disconnect,
-    ApClicked(AccessPointSummary),
-    ForgetClicked(AccessPointSummary),
+    /// A network's row was clicked, identified by its ssid.
+    ApClicked(String),
+    /// A network's forget button was clicked, identified by its ssid.
+    ForgetClicked(String),
     PasswordSubmitted(Password),
     CancelPassword,
     UpdateState(NetworkInfo),
@@ -106,10 +111,8 @@ impl Component for NetworkMenu {
                     .build(),
             )
             .forward(sender.input_sender(), |output| match output {
-                AccessPointRowOutput::Clicked(summary) => NetworkMenuMsg::ApClicked(summary),
-                AccessPointRowOutput::ForgetClicked(summary) => {
-                    NetworkMenuMsg::ForgetClicked(summary)
-                }
+                MenuRowOutput::Activated(ssid) => NetworkMenuMsg::ApClicked(ssid),
+                MenuRowOutput::Remove(ssid) => NetworkMenuMsg::ForgetClicked(ssid),
             });
 
         NETWORK_STATE.subscribe(sender.input_sender(), |state| {
@@ -367,6 +370,15 @@ impl Component for NetworkMenu {
 }
 
 impl NetworkMenu {
+    /// The latest scan result for a network.
+    fn access_point(&self, ssid: &str) -> Option<AccessPointSummary> {
+        self.scan_state
+            .access_points
+            .iter()
+            .find(|ap| ap.ssid == ssid)
+            .cloned()
+    }
+
     /// Applies one menu message to the model.
     fn update_message(&mut self, msg: NetworkMenuMsg, sender: &ComponentSender<Self>) {
         match msg {
@@ -406,7 +418,10 @@ impl NetworkMenu {
             NetworkMenuMsg::Disconnect => {
                 network::disconnect();
             }
-            NetworkMenuMsg::ApClicked(summary) => {
+            NetworkMenuMsg::ApClicked(ssid) => {
+                let Some(summary) = self.access_point(&ssid) else {
+                    return;
+                };
                 self.connect_error = None;
                 if self.network_state.wifi_ssid().as_deref() == Some(summary.ssid.as_str()) {
                     // already connected to this network; nothing to do here,
@@ -429,8 +444,10 @@ impl NetworkMenu {
                     );
                 }
             }
-            NetworkMenuMsg::ForgetClicked(summary) => {
-                if summary.is_saved() {
+            NetworkMenuMsg::ForgetClicked(ssid) => {
+                if let Some(summary) = self.access_point(&ssid)
+                    && summary.is_saved()
+                {
                     network::forget(summary.saved_connections);
                 }
             }
@@ -510,188 +527,43 @@ impl NetworkMenu {
     }
 }
 
-/// Syncs the factory's rows with the latest scan results, with the connected
-/// network first and the rest by descending strength.
-///
-/// Rows are updated in place when the order is unchanged, which is the
-/// common case between scans; otherwise the list is rebuilt so the order is
-/// always right.
+/// Syncs the access point rows with the latest scan results, with the
+/// connected network first and the rest by descending strength.
 fn update_ap_rows(
-    rows: &mut FactoryVecDeque<AccessPointRow>,
+    rows: &mut FactoryVecDeque<MenuRow>,
     summaries: &[AccessPointSummary],
     active_ssid: Option<&str>,
 ) {
-    let mut ordered: Vec<(AccessPointSummary, bool)> = summaries
+    let mut data: Vec<(bool, MenuRowData)> = summaries
         .iter()
-        .map(|summary| (summary.clone(), Some(summary.ssid.as_str()) == active_ssid))
+        .map(|summary| {
+            let active = Some(summary.ssid.as_str()) == active_ssid;
+            (active, ap_row(summary, active))
+        })
         .collect();
     // stable, so the strength order from the scan is kept
-    ordered.sort_by_key(|(_, active)| !active);
+    data.sort_by_key(|(active, _)| !active);
 
-    let same_order = rows.len() == ordered.len()
-        && rows
-            .iter()
-            .zip(&ordered)
-            .all(|(row, (summary, _))| row.summary.ssid == summary.ssid);
+    sync_rows(rows, data.into_iter().map(|(_, row)| row).collect());
+}
 
-    if same_order {
-        for (index, (summary, active)) in ordered.into_iter().enumerate() {
-            rows.send(index, AccessPointRowMsg::Update(summary, active));
-        }
+/// How an access point is shown in the list, keyed by its ssid.
+fn ap_row(summary: &AccessPointSummary, active: bool) -> MenuRowData {
+    let status = if active {
+        Some("Connected")
+    } else if summary.is_saved() {
+        Some("Saved")
+    } else if !summary.security.is_open() {
+        Some("Secured")
     } else {
-        let mut guard = rows.guard();
-        guard.clear();
-        for row in ordered {
-            guard.push_back(row);
-        }
-    }
-}
+        None
+    };
 
-// factory for individual access point rows
-#[derive(Debug)]
-struct AccessPointRow {
-    summary: AccessPointSummary,
-    /// Whether the wifi device is connected to this network.
-    active: bool,
-}
-
-#[derive(Debug)]
-enum AccessPointRowMsg {
-    Clicked,
-    ForgetClicked,
-    Update(AccessPointSummary, bool),
-}
-
-#[derive(Debug)]
-enum AccessPointRowOutput {
-    Clicked(AccessPointSummary),
-    ForgetClicked(AccessPointSummary),
-}
-
-struct AccessPointRowWidgets {
-    strength_icon: gtk::Image,
-    ssid_label: gtk::Label,
-    status_label: gtk::Label,
-    forget_button: gtk::Button,
-}
-
-impl FactoryComponent for AccessPointRow {
-    type CommandOutput = ();
-    type Index = DynamicIndex;
-    /// The network and whether it's the connected one.
-    type Init = (AccessPointSummary, bool);
-    type Input = AccessPointRowMsg;
-    type Output = AccessPointRowOutput;
-    type ParentWidget = gtk::Box;
-    type Root = gtk::Box;
-    type Widgets = AccessPointRowWidgets;
-
-    fn init_model(
-        (summary, active): Self::Init,
-        _index: &DynamicIndex,
-        _sender: FactorySender<Self>,
-    ) -> Self {
-        Self { summary, active }
-    }
-
-    fn init_root(&self) -> Self::Root {
-        gtk::Box::builder().spacing(4).build()
-    }
-
-    fn init_widgets(
-        &mut self,
-        _index: &DynamicIndex,
-        root: Self::Root,
-        _returned_widget: &<Self::ParentWidget as relm4::factory::FactoryView>::ReturnedWidget,
-        sender: FactorySender<Self>,
-    ) -> Self::Widgets {
-        let select_button = gtk::Button::builder().hexpand(true).build();
-        select_button.connect_clicked({
-            let sender = sender.clone();
-            move |_| sender.input(AccessPointRowMsg::Clicked)
-        });
-
-        let main_box = gtk::Box::builder()
-            .spacing(8)
-            .halign(gtk::Align::Start)
-            .hexpand(true)
-            .build();
-
-        let strength_icon = gtk::Image::builder().width_request(24).build();
-        let ssid_label = gtk::Label::builder()
-            .halign(gtk::Align::Start)
-            .hexpand(true)
-            .build();
-        let status_label = gtk::Label::builder()
-            .css_classes(["dim"])
-            .halign(gtk::Align::End)
-            .build();
-
-        main_box.append(&strength_icon);
-        main_box.append(&ssid_label);
-        main_box.append(&status_label);
-
-        select_button.set_child(Some(&main_box));
-
-        let forget_button = gtk::Button::builder()
-            .icon_name("user-trash-symbolic")
-            .tooltip_text("Forget this network")
-            .visible(self.summary.is_saved())
-            .build();
-        forget_button.connect_clicked(move |_| sender.input(AccessPointRowMsg::ForgetClicked));
-
-        root.append(&select_button);
-        root.append(&forget_button);
-
-        let widgets = AccessPointRowWidgets {
-            strength_icon,
-            ssid_label,
-            status_label,
-            forget_button,
-        };
-        self.render(&widgets);
-        widgets
-    }
-
-    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
-        match msg {
-            AccessPointRowMsg::Clicked => {
-                let _ = sender.output(AccessPointRowOutput::Clicked(self.summary.clone()));
-            }
-            AccessPointRowMsg::ForgetClicked => {
-                let _ = sender.output(AccessPointRowOutput::ForgetClicked(self.summary.clone()));
-            }
-            AccessPointRowMsg::Update(summary, active) => {
-                self.summary = summary;
-                self.active = active;
-            }
-        }
-    }
-
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: FactorySender<Self>) {
-        self.render(widgets);
-    }
-}
-
-impl AccessPointRow {
-    fn render(&self, widgets: &AccessPointRowWidgets) {
-        widgets
-            .strength_icon
-            .set_icon_name(Some(get_strength_icon(self.summary.strength)));
-        widgets.ssid_label.set_label(&self.summary.ssid);
-
-        let status = if self.active {
-            "Connected"
-        } else if self.summary.is_saved() {
-            "Saved"
-        } else if !self.summary.security.is_open() {
-            "Secured"
-        } else {
-            ""
-        };
-        widgets.status_label.set_visible(!status.is_empty());
-        widgets.status_label.set_label(status);
-
-        widgets.forget_button.set_visible(self.summary.is_saved());
+    MenuRowData {
+        key: summary.ssid.clone(),
+        icon: Some(get_strength_icon(summary.strength).to_string()),
+        title: summary.ssid.clone(),
+        status,
+        remove_tooltip: summary.is_saved().then_some("Forget this network"),
     }
 }
