@@ -11,7 +11,10 @@ use super::{
 };
 use crate::network::{
     commands::NetworkCommand,
-    dbus::{NetworkDeviceProxy, NetworkManagerProxy, SettingsConnectionProxy, WirelessDeviceProxy},
+    dbus::{
+        NetworkDeviceProxy, NetworkManagerProxy, SettingsConnectionProxy, WirelessDeviceProxy,
+        proxy_at,
+    },
     events::{self, ConnectFailureReason, NetworkEvent},
     password::Password,
     scan,
@@ -118,10 +121,7 @@ pub(super) async fn handle_scan(conn: &zbus::Connection) -> anyhow::Result<()> {
 /// list.
 pub(super) async fn scan_and_refresh(conn: &zbus::Connection) -> anyhow::Result<()> {
     let device_path = find_wireless_device(conn).await?;
-    let wifi_proxy = WirelessDeviceProxy::builder(conn)
-        .path(&device_path)?
-        .build()
-        .await?;
+    let wifi_proxy = proxy_at::<WirelessDeviceProxy>(conn, &device_path).await?;
 
     // the caller logs a failed request, so only the refresh is logged here
     let scan_result = wifi_proxy.request_scan(HashMap::new()).await;
@@ -185,11 +185,7 @@ pub(super) async fn ensure_scan_watcher(
     let tx = event_tx.clone();
     let path = device_path.clone();
     let handle = relm4::spawn(async move {
-        let proxy = match WirelessDeviceProxy::builder(&conn).path(&path) {
-            Ok(builder) => builder.build().await,
-            Err(e) => Err(e),
-        };
-        let proxy = match proxy {
+        let proxy = match proxy_at::<WirelessDeviceProxy>(&conn, &path).await {
             Ok(proxy) => proxy,
             Err(e) => {
                 tracing::warn!("couldn't watch wifi scans on {path}: {e}");
@@ -348,9 +344,7 @@ pub(super) fn wep_key_type(password: &str) -> u32 {
 /// Disconnects the wifi device, leaving any wired or vpn connection alone.
 pub(super) async fn handle_disconnect(conn: &zbus::Connection) -> anyhow::Result<()> {
     let device_path = find_wireless_device(conn).await?;
-    NetworkDeviceProxy::builder(conn)
-        .path(&device_path)?
-        .build()
+    proxy_at::<NetworkDeviceProxy>(conn, &device_path)
         .await?
         .disconnect()
         .await?;
@@ -361,10 +355,7 @@ pub(super) async fn handle_forget(
     conn: &zbus::Connection,
     connection_path: &OwnedObjectPath,
 ) -> anyhow::Result<()> {
-    let connection_proxy = SettingsConnectionProxy::builder(conn)
-        .path(connection_path)?
-        .build()
-        .await?;
+    let connection_proxy = proxy_at::<SettingsConnectionProxy>(conn, connection_path).await?;
     connection_proxy.delete().await?;
     Ok(())
 }

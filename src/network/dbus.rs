@@ -3,7 +3,10 @@
 
 use std::collections::HashMap;
 
-use zbus::{proxy, zvariant};
+use zbus::{
+    proxy,
+    zvariant::{self, OwnedObjectPath},
+};
 
 use crate::network::types::{ConnectivityState, State};
 
@@ -170,4 +173,20 @@ pub trait SettingsConnection {
 
     /// Deletes this connection profile.
     fn delete(&self) -> zbus::Result<()>;
+}
+
+/// Builds a proxy of type `P` for the NetworkManager object at `path`.
+///
+/// # Example
+/// ```ignore
+/// let ap = proxy_at::<AccessPointProxy>(&conn, &ap_path).await?;
+/// ```
+pub async fn proxy_at<'a, P>(conn: &zbus::Connection, path: &'a OwnedObjectPath) -> zbus::Result<P>
+where
+    P: From<zbus::Proxy<'a>> + zbus::proxy::Defaults,
+{
+    zbus::proxy::Builder::<P>::new(conn)
+        .path(path)?
+        .build()
+        .await
 }

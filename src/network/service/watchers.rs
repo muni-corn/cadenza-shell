@@ -1,13 +1,13 @@
 //! Subscriptions that turn NetworkManager signals into service events.
 
 use futures_lite::StreamExt;
-use tokio::sync::mpsc::UnboundedSender;
+use tokio::{sync::mpsc::UnboundedSender, task::AbortHandle};
 use zbus::zvariant::OwnedObjectPath;
 
-use super::{NetworkPropertyChange, PropertyWatcherTasks};
-use crate::network::dbus::{AccessPointProxy, NetworkManagerProxy, WirelessDeviceProxy};
+use super::NetworkPropertyChange;
+use crate::network::dbus::{AccessPointProxy, NetworkManagerProxy, WirelessDeviceProxy, proxy_at};
 
-/// Spawns the top-level NetworkManager property watchers (state,
+/// Spawns one task watching the top-level NetworkManager properties (state,
 /// connectivity, primary connection, wifi enabled), forwarding changes into
 /// `event_tx`.
 ///
@@ -17,90 +17,54 @@ use crate::network::dbus::{AccessPointProxy, NetworkManagerProxy, WirelessDevice
 pub(super) async fn spawn_property_watchers(
     conn: &zbus::Connection,
     event_tx: &UnboundedSender<NetworkPropertyChange>,
-) -> anyhow::Result<PropertyWatcherTasks> {
-    let nm_proxy = NetworkManagerProxy::new(conn).await?;
+) -> anyhow::Result<AbortHandle> {
+    let nm = NetworkManagerProxy::new(conn).await?;
 
-    // watch for state changes
-    let event_tx_clone = event_tx.clone();
-    let mut state_stream = nm_proxy.receive_state_changed().await;
-    let state =
-        relm4::spawn(async move {
-            while let Some(change) = state_stream.next().await {
-                if let Ok(new_state) = change.get().await.inspect_err(|e| {
-                    tracing::error!("couldn't get network state change value: {e}")
-                }) {
-                    event_tx_clone
-                        .clone()
-                        .send(NetworkPropertyChange::State(new_state))
-                        .unwrap_or_else(|e| tracing::error!("couldn't send state change: {e}"));
-                }
-            }
-            tracing::warn!("stream for network state changes has closed");
-        })
-        .abort_handle();
-
-    // watch for connectivity changes
-    let mut connectivity_stream = nm_proxy.receive_connectivity_changed().await;
-    let event_tx_clone = event_tx.clone();
-    let connectivity = relm4::spawn(async move {
-        while let Some(change) = connectivity_stream.next().await {
-            if let Ok(new_connectivity) = change.get().await.inspect_err(|e| {
-                tracing::error!("couldn't get network connectivity change value: {e}")
-            }) {
-                event_tx_clone
-                    .send(NetworkPropertyChange::Connectivity(new_connectivity))
-                    .unwrap_or_else(|e| tracing::error!("couldn't send connectivity change: {e}"));
-            }
-        }
-        tracing::warn!("stream for connectivity state changes has closed");
-    })
-    .abort_handle();
-
-    // watch for primary connection changes
-    let mut primary_connection_stream = nm_proxy.receive_primary_connection_changed().await;
-    let event_tx_clone = event_tx.clone();
-    let primary = relm4::spawn(async move {
-        while let Some(change) = primary_connection_stream.next().await {
-            // the new path itself isn't needed; any change triggers a refetch
-            if let Err(e) = change.get().await {
-                tracing::error!("couldn't get primary connection change value: {e}");
-                continue;
-            }
-            event_tx_clone
-                .send(NetworkPropertyChange::Refetch("primary connection changed"))
-                .unwrap_or_else(|e| {
-                    tracing::error!("couldn't send primary connection change: {e}")
-                });
-        }
-        tracing::warn!("stream for primary connection state changes has closed");
-    })
-    .abort_handle();
-
-    // watch for the wifi radio being switched on or off
-    let mut wireless_enabled_stream = nm_proxy.receive_wireless_enabled_changed().await;
-    let event_tx_clone = event_tx.clone();
-    let wireless_enabled = relm4::spawn(async move {
-        while let Some(change) = wireless_enabled_stream.next().await {
-            if let Ok(enabled) = change
+    // values that can't be read are skipped rather than ending the stream
+    let state = nm
+        .receive_state_changed()
+        .await
+        .then(|change| async move { change.get().await.ok().map(NetworkPropertyChange::State) });
+    let connectivity = nm
+        .receive_connectivity_changed()
+        .await
+        .then(|change| async move {
+            change
                 .get()
                 .await
-                .inspect_err(|e| tracing::error!("couldn't get wireless enabled value: {e}"))
+                .ok()
+                .map(NetworkPropertyChange::Connectivity)
+        });
+    let wifi_enabled = nm
+        .receive_wireless_enabled_changed()
+        .await
+        .then(|change| async move {
+            change
+                .get()
+                .await
+                .ok()
+                .map(NetworkPropertyChange::WifiEnabled)
+        });
+    // the new path itself isn't needed; any change triggers a refetch
+    let primary = nm
+        .receive_primary_connection_changed()
+        .await
+        .map(|_| Some(NetworkPropertyChange::Refetch("primary connection changed")));
+
+    let event_tx = event_tx.clone();
+    let handle = relm4::spawn(async move {
+        let mut changes = std::pin::pin!(state.or(connectivity).or(wifi_enabled).or(primary));
+        while let Some(change) = changes.next().await {
+            if let Some(change) = change
+                && event_tx.send(change).is_err()
             {
-                event_tx_clone
-                    .send(NetworkPropertyChange::WifiEnabled(enabled))
-                    .unwrap_or_else(|e| tracing::error!("couldn't send wifi enabled change: {e}"));
+                break;
             }
         }
-        tracing::warn!("stream for wireless enabled changes has closed");
-    })
-    .abort_handle();
+        tracing::warn!("networkmanager property streams have closed");
+    });
 
-    Ok(PropertyWatcherTasks {
-        state,
-        connectivity,
-        primary,
-        wireless_enabled,
-    })
+    Ok(handle.abort_handle())
 }
 
 /// Watches for NetworkManager appearing under a new unique bus name (a
@@ -177,14 +141,7 @@ pub(super) async fn subscribe_ap_strength(
     ap_path: OwnedObjectPath,
     tx: UnboundedSender<NetworkPropertyChange>,
 ) {
-    let builder = match AccessPointProxy::builder(&conn).path(&ap_path) {
-        Ok(b) => b,
-        Err(e) => {
-            tracing::error!("invalid access point path {ap_path}: {e}");
-            return;
-        }
-    };
-    let ap_proxy = match builder.build().await {
+    let ap_proxy = match proxy_at::<AccessPointProxy>(&conn, &ap_path).await {
         Ok(p) => p,
         Err(e) => {
             tracing::error!("couldn't build access point proxy for strength subscription: {e}");
@@ -226,14 +183,7 @@ pub(super) async fn subscribe_active_ap(
     known_ap: Option<OwnedObjectPath>,
     tx: UnboundedSender<NetworkPropertyChange>,
 ) {
-    let builder = match WirelessDeviceProxy::builder(&conn).path(&device_path) {
-        Ok(b) => b,
-        Err(e) => {
-            tracing::error!("invalid wireless device path {device_path}: {e}");
-            return;
-        }
-    };
-    let wifi_proxy = match builder.build().await {
+    let wifi_proxy = match proxy_at::<WirelessDeviceProxy>(&conn, &device_path).await {
         Ok(p) => p,
         Err(e) => {
             tracing::error!("couldn't build wireless device proxy for active AP subscription: {e}");

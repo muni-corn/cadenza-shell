@@ -3,7 +3,9 @@ use std::{cmp::Reverse, collections::HashMap};
 use zbus::zvariant::OwnedObjectPath;
 
 use crate::network::{
-    dbus::{AccessPointProxy, SettingsConnectionProxy, SettingsProxy, WirelessDeviceProxy},
+    dbus::{
+        AccessPointProxy, SettingsConnectionProxy, SettingsProxy, WirelessDeviceProxy, proxy_at,
+    },
     security::ApSecurity,
     state::AccessPointSummary,
 };
@@ -23,10 +25,7 @@ pub async fn fetch_access_points(
     conn: &zbus::Connection,
     device_path: &OwnedObjectPath,
 ) -> anyhow::Result<Vec<AccessPointSummary>> {
-    let wifi_proxy = WirelessDeviceProxy::builder(conn)
-        .path(device_path)?
-        .build()
-        .await?;
+    let wifi_proxy = proxy_at::<WirelessDeviceProxy>(conn, device_path).await?;
     let ap_paths = wifi_proxy.get_all_access_points().await?;
 
     let mut readings = Vec::with_capacity(ap_paths.len());
@@ -56,10 +55,7 @@ async fn read_access_point(
     conn: &zbus::Connection,
     ap_path: &OwnedObjectPath,
 ) -> anyhow::Result<Option<RawApReading>> {
-    let ap_proxy = AccessPointProxy::builder(conn)
-        .path(ap_path)?
-        .build()
-        .await?;
+    let ap_proxy = proxy_at::<AccessPointProxy>(conn, ap_path).await?;
 
     let ssid_bytes = ap_proxy.ssid().await?;
     if ssid_bytes.is_empty() {
@@ -94,10 +90,7 @@ async fn fetch_saved_wifi_connections(
 
     let mut result: HashMap<String, Vec<OwnedObjectPath>> = HashMap::new();
     for path in connection_paths {
-        let Ok(builder) = SettingsConnectionProxy::builder(conn).path(&path) else {
-            continue;
-        };
-        let Ok(conn_proxy) = builder.build().await else {
+        let Ok(conn_proxy) = proxy_at::<SettingsConnectionProxy>(conn, &path).await else {
             continue;
         };
         let Ok(settings) = conn_proxy.get_settings().await else {

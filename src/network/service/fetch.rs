@@ -5,7 +5,7 @@ use zbus::zvariant::OwnedObjectPath;
 use crate::network::{
     dbus::{
         AccessPointProxy, ActiveConnectionProxy, NetworkDeviceProxy, NetworkManagerProxy,
-        WirelessDeviceProxy,
+        WirelessDeviceProxy, proxy_at,
     },
     state::{DeviceKind, NetworkInfo, SpecificNetworkInfo, WifiConnection},
     types::{NM_DEVICE_TYPE_ETHERNET, NM_DEVICE_TYPE_WIFI, State},
@@ -22,7 +22,7 @@ pub(super) async fn find_wireless_device(
     let device_paths = nm_proxy.get_devices().await?;
 
     for path in device_paths {
-        let Ok(device_proxy) = NetworkDeviceProxy::builder(conn).path(&path)?.build().await else {
+        let Ok(device_proxy) = proxy_at::<NetworkDeviceProxy>(conn, &path).await else {
             continue;
         };
         if let Ok(NM_DEVICE_TYPE_WIFI) = device_proxy.device_type().await {
@@ -147,10 +147,7 @@ pub(super) async fn resolve_active_device(
     conn: &zbus::Connection,
     connection_path: &OwnedObjectPath,
 ) -> anyhow::Result<Option<(OwnedObjectPath, u32)>> {
-    let active_conn_proxy = ActiveConnectionProxy::builder(conn)
-        .path(connection_path)?
-        .build()
-        .await?;
+    let active_conn_proxy = proxy_at::<ActiveConnectionProxy>(conn, connection_path).await?;
 
     let active_device_paths = active_conn_proxy.devices().await?;
     tracing::debug!("active network device paths: {:?}", active_device_paths);
@@ -159,10 +156,7 @@ pub(super) async fn resolve_active_device(
         return Ok(None);
     };
 
-    let device_proxy = NetworkDeviceProxy::builder(conn)
-        .path(device_path)?
-        .build()
-        .await?;
+    let device_proxy = proxy_at::<NetworkDeviceProxy>(conn, device_path).await?;
 
     let device_type = device_proxy.device_type().await?;
 
@@ -175,10 +169,7 @@ pub(super) async fn get_wifi_info(
     conn: &zbus::Connection,
     device_path: &zbus::zvariant::OwnedObjectPath,
 ) -> anyhow::Result<(String, u8, OwnedObjectPath)> {
-    let wifi_proxy = WirelessDeviceProxy::builder(conn)
-        .path(device_path)?
-        .build()
-        .await?;
+    let wifi_proxy = proxy_at::<WirelessDeviceProxy>(conn, device_path).await?;
 
     let ap_path = wifi_proxy.active_access_point().await?;
 
@@ -187,10 +178,7 @@ pub(super) async fn get_wifi_info(
         anyhow::bail!("no active access point");
     }
 
-    let ap_proxy = AccessPointProxy::builder(conn)
-        .path(&ap_path)?
-        .build()
-        .await?;
+    let ap_proxy = proxy_at::<AccessPointProxy>(conn, &ap_path).await?;
 
     let ssid_bytes = ap_proxy.ssid().await?;
     let strength = ap_proxy.strength().await?;

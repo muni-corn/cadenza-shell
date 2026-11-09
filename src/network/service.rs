@@ -56,25 +56,6 @@ pub enum NetworkPropertyChange {
     ScanCompleted,
 }
 
-/// Tracks the abort handles for the top-level NetworkManager property
-/// watchers, so they can be cancelled and respawned when NetworkManager
-/// itself restarts under a new unique bus name.
-struct PropertyWatcherTasks {
-    state: AbortHandle,
-    connectivity: AbortHandle,
-    primary: AbortHandle,
-    wireless_enabled: AbortHandle,
-}
-
-impl PropertyWatcherTasks {
-    fn abort_all(&self) {
-        self.state.abort();
-        self.connectivity.abort();
-        self.primary.abort();
-        self.wireless_enabled.abort();
-    }
-}
-
 /// The per-connection subscriptions, each with the object path it watches,
 /// so they're only respawned when that path changes.
 #[derive(Default)]
@@ -169,7 +150,8 @@ struct NetworkService {
     /// rebuilt when NetworkManager restarts.
     nm: NetworkManagerProxy<'static>,
     event_tx: UnboundedSender<NetworkPropertyChange>,
-    property_tasks: PropertyWatcherTasks,
+    /// Watches NetworkManager's own properties; respawned when it restarts.
+    property_watcher: AbortHandle,
     name_owner_task: Option<AbortHandle>,
     subscriptions: SubscriptionTasks,
     scan_watcher: Option<(OwnedObjectPath, AbortHandle)>,
@@ -184,14 +166,14 @@ impl NetworkService {
         let (event_tx, event_rx) = mpsc::unbounded_channel();
 
         let nm = NetworkManagerProxy::new(&conn).await?;
-        let property_tasks = spawn_property_watchers(&conn, &event_tx).await?;
+        let property_watcher = spawn_property_watchers(&conn, &event_tx).await?;
         let name_owner_task = spawn_name_owner_watcher(&conn, &event_tx).await;
 
         let service = Self {
             conn,
             nm,
             event_tx,
-            property_tasks,
+            property_watcher,
             name_owner_task,
             subscriptions: SubscriptionTasks::default(),
             scan_watcher: None,
@@ -256,7 +238,7 @@ impl NetworkService {
                     "networkmanager reappeared on the bus, re-establishing subscriptions"
                 );
                 self.nm_present = true;
-                self.property_tasks.abort_all();
+                self.property_watcher.abort();
 
                 // a fresh proxy refills its property cache from the new owner
                 match NetworkManagerProxy::new(&self.conn).await {
@@ -264,7 +246,7 @@ impl NetworkService {
                     Err(e) => tracing::error!("couldn't rebuild the networkmanager proxy: {e}"),
                 }
                 match spawn_property_watchers(&self.conn, &self.event_tx).await {
-                    Ok(tasks) => self.property_tasks = tasks,
+                    Ok(watcher) => self.property_watcher = watcher,
                     Err(e) => tracing::error!("couldn't re-establish property watchers: {e}"),
                 }
                 self.refetch("networkmanager restarted").await;
@@ -347,7 +329,7 @@ fn update_network_state(update: impl FnOnce(&mut NetworkInfo)) {
 
 impl Drop for NetworkService {
     fn drop(&mut self) {
-        self.property_tasks.abort_all();
+        self.property_watcher.abort();
         self.subscriptions.abort_all();
         if let Some(handle) = &self.name_owner_task {
             handle.abort();
