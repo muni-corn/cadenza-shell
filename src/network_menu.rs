@@ -11,6 +11,7 @@ use crate::{
         subscribe_events,
     },
     settings,
+    widgets::menu_parts::{MenuHeader, PromptBox, menu_root, scrolled_content},
 };
 
 #[derive(Debug)]
@@ -30,6 +31,9 @@ pub struct NetworkMenu {
     /// Set when new state arrives, so the switch only snaps to the real
     /// value then and not right after the user flips it.
     resync_wifi_switch: bool,
+    /// Set when a password prompt opens, so the entry is cleared and
+    /// focused.
+    reset_password_entry: bool,
 }
 
 /// Results of the menu's background commands.
@@ -66,9 +70,7 @@ pub enum NetworkMenuMsg {
 
 #[derive(Debug)]
 pub struct NetworkMenuWidgets {
-    wifi_icon: gtk::Image,
-    wifi_switch: gtk::Switch,
-    wifi_switch_handler: glib::SignalHandlerId,
+    header: MenuHeader,
     ssid_label: gtk::Label,
     connectivity_label: gtk::Label,
     connection_state_label: gtk::Label,
@@ -76,9 +78,7 @@ pub struct NetworkMenuWidgets {
     rescan_button: gtk::Button,
     scanning_label: gtk::Label,
     error_label: gtk::Label,
-    password_box: gtk::Box,
-    password_label: gtk::Label,
-    password_entry: gtk::Entry,
+    password_prompt: PromptBox,
 }
 
 impl Component for NetworkMenu {
@@ -90,13 +90,7 @@ impl Component for NetworkMenu {
     type Widgets = NetworkMenuWidgets;
 
     fn init_root() -> Self::Root {
-        gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(16)
-            .vexpand(true)
-            .width_request(320)
-            .height_request(512)
-            .build()
+        menu_root()
     }
 
     fn init(
@@ -157,49 +151,11 @@ impl Component for NetworkMenu {
         let current_state = NETWORK_STATE.read().clone();
         let current_scan_state = WIFI_SCAN_STATE.read().clone();
 
-        // header with wifi toggle
-        let header_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(20)
-            .hexpand(true)
-            .build();
-        header_box.add_css_class("content-title");
-
-        let wifi_icon = gtk::Image::builder()
-            .icon_name(get_icon(&current_state))
-            .icon_size(gtk4::IconSize::Large)
-            .hexpand(true)
-            .halign(gtk::Align::Start)
-            .build();
-
-        let wifi_switch = gtk::Switch::builder()
-            .active(current_state.wifi_enabled)
-            .halign(gtk::Align::End)
-            .valign(gtk::Align::End)
-            .build();
-
-        let wifi_switch_handler = wifi_switch.connect_state_set({
+        let header = MenuHeader::new(get_icon(&current_state), current_state.wifi_enabled, {
             let sender = sender.clone();
-            move |_, state| {
-                sender.input(NetworkMenuMsg::ToggleWifi(state));
-                glib::Propagation::Proceed
-            }
+            move |enabled| sender.input(NetworkMenuMsg::ToggleWifi(enabled))
         });
-
-        header_box.append(&wifi_icon);
-        header_box.append(&wifi_switch);
-
-        // scrollable content
-        let scrolled_window = gtk::ScrolledWindow::builder()
-            .vscrollbar_policy(gtk::PolicyType::Automatic)
-            .hscrollbar_policy(gtk::PolicyType::Never)
-            .vexpand(true)
-            .build();
-
-        let content_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(16)
-            .build();
+        let (scrolled_window, content_box) = scrolled_content();
 
         // status information
         let status_box = gtk::Box::builder()
@@ -274,61 +230,30 @@ impl Component for NetworkMenu {
             .wrap(true)
             .build();
 
-        // password prompt (initially hidden)
-        let password_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(8)
-            .visible(false)
-            .build();
-
-        let password_label = gtk::Label::builder().halign(gtk::Align::Start).build();
-
-        let password_entry = gtk::Entry::builder()
-            .visibility(false)
-            .placeholder_text("Password")
-            .activates_default(true)
-            .build();
-
-        let dialog_buttons_box = gtk::Box::builder().spacing(8).build();
-
-        let cancel_button = gtk::Button::builder().label("Cancel").build();
-        cancel_button.connect_clicked({
-            let sender = sender.clone();
-            move |_| sender.input(NetworkMenuMsg::CancelPassword)
-        });
-
-        let connect_button = gtk::Button::builder().label("Connect").build();
-        let submit = {
-            let sender = sender.clone();
-            let password_entry = password_entry.clone();
-            move || {
-                sender.input(NetworkMenuMsg::PasswordSubmitted(Password::new(
-                    password_entry.text().to_string(),
-                )));
-            }
-        };
-        connect_button.connect_clicked({
-            let submit = submit.clone();
-            move |_| submit()
-        });
-        password_entry.connect_activate(move |_| submit());
-
-        dialog_buttons_box.append(&cancel_button);
-        dialog_buttons_box.append(&connect_button);
-
-        password_box.append(&password_label);
-        password_box.append(&password_entry);
-        password_box.append(&dialog_buttons_box);
+        let password_prompt = PromptBox::new(
+            "Connect",
+            "Password",
+            true,
+            {
+                let sender = sender.clone();
+                move |password| {
+                    let password = Password::new(password.unwrap_or_default());
+                    sender.input(NetworkMenuMsg::PasswordSubmitted(password));
+                }
+            },
+            {
+                let sender = sender.clone();
+                move || sender.input(NetworkMenuMsg::CancelPassword)
+            },
+        );
 
         content_box.append(&status_box);
         content_box.append(&rescan_row);
         content_box.append(&error_label);
-        content_box.append(&password_box);
+        content_box.append(&password_prompt.root);
         content_box.append(access_points.widget());
 
-        scrolled_window.set_child(Some(&content_box));
-
-        root.append(&header_box);
+        root.append(&header.root);
         root.append(&scrolled_window);
 
         let mut model = NetworkMenu {
@@ -340,6 +265,7 @@ impl Component for NetworkMenu {
             is_open: false,
             rescan_generation: 0,
             resync_wifi_switch: false,
+            reset_password_entry: false,
         };
         update_ap_rows(
             &mut model.access_points,
@@ -349,9 +275,7 @@ impl Component for NetworkMenu {
         model.scan_state = current_scan_state;
 
         let widgets = NetworkMenuWidgets {
-            wifi_icon,
-            wifi_switch,
-            wifi_switch_handler,
+            header,
             ssid_label,
             connectivity_label,
             connection_state_label,
@@ -359,9 +283,7 @@ impl Component for NetworkMenu {
             rescan_button,
             scanning_label,
             error_label,
-            password_box,
-            password_label,
-            password_entry,
+            password_prompt,
         };
 
         ComponentParts { model, widgets }
@@ -369,6 +291,84 @@ impl Component for NetworkMenu {
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>, _root: &Self::Root) {
         self.resync_wifi_switch = false;
+        let had_prompt = self.password_prompt.is_some();
+        self.update_message(msg, &sender);
+        self.reset_password_entry = !had_prompt && self.password_prompt.is_some();
+    }
+
+    fn update_cmd(
+        &mut self,
+        command: Self::CommandOutput,
+        sender: ComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        let had_prompt = self.password_prompt.is_some();
+        match command {
+            NetworkMenuCommand::ConnectionEvent(event) => self.handle_connection_event(event),
+            NetworkMenuCommand::RescanTick(generation) => {
+                // ticks from an earlier open period are stale
+                if self.is_open && generation == self.rescan_generation {
+                    network::request_scan();
+                    self.schedule_rescan(&sender);
+                }
+            }
+        }
+        self.reset_password_entry = !had_prompt && self.password_prompt.is_some();
+    }
+
+    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        widgets.header.set_icon(get_icon(&self.network_state));
+        if self.resync_wifi_switch {
+            widgets.header.sync_switch(self.network_state.wifi_enabled);
+        }
+
+        let ssid = self.network_state.wifi_ssid();
+        widgets.ssid_label.set_visible(ssid.is_some());
+        widgets.disconnect_button.set_visible(ssid.is_some());
+        widgets.ssid_label.set_label(
+            &ssid
+                .map(|ssid| format!("Connected to {ssid}"))
+                .unwrap_or_default(),
+        );
+
+        widgets
+            .connectivity_label
+            .set_label(&self.network_state.connectivity.to_string());
+        widgets
+            .connection_state_label
+            .set_label(&self.network_state.connection_state.to_string());
+
+        widgets
+            .rescan_button
+            .set_sensitive(!self.scan_state.scanning);
+        widgets.scanning_label.set_visible(self.scan_state.scanning);
+
+        widgets
+            .error_label
+            .set_visible(self.connect_error.is_some());
+        widgets
+            .error_label
+            .set_label(self.connect_error.as_deref().unwrap_or_default());
+
+        match &self.password_prompt {
+            Some(prompt) => {
+                widgets.password_prompt.show(
+                    &format!("Enter password for {}", prompt.ssid),
+                    true,
+                    true,
+                );
+                if self.reset_password_entry {
+                    widgets.password_prompt.reset_entry();
+                }
+            }
+            None => widgets.password_prompt.hide(),
+        }
+    }
+}
+
+impl NetworkMenu {
+    /// Applies one menu message to the model.
+    fn update_message(&mut self, msg: NetworkMenuMsg, sender: &ComponentSender<Self>) {
         match msg {
             NetworkMenuMsg::UpdateState(state) => {
                 self.network_state = state;
@@ -400,7 +400,7 @@ impl Component for NetworkMenu {
                     // fetch fresh results right away instead of waiting for
                     // the next periodic tick
                     network::request_scan();
-                    self.schedule_rescan(&sender);
+                    self.schedule_rescan(sender);
                 }
             }
             NetworkMenuMsg::Disconnect => {
@@ -460,85 +460,6 @@ impl Component for NetworkMenu {
         }
     }
 
-    fn update_cmd(
-        &mut self,
-        command: Self::CommandOutput,
-        sender: ComponentSender<Self>,
-        _root: &Self::Root,
-    ) {
-        match command {
-            NetworkMenuCommand::ConnectionEvent(event) => self.handle_connection_event(event),
-            NetworkMenuCommand::RescanTick(generation) => {
-                // ticks from an earlier open period are stale
-                if self.is_open && generation == self.rescan_generation {
-                    network::request_scan();
-                    self.schedule_rescan(&sender);
-                }
-            }
-        }
-    }
-
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        widgets
-            .wifi_icon
-            .set_icon_name(Some(get_icon(&self.network_state)));
-
-        // set_active emits state-set, which would send ToggleWifi again
-        if self.resync_wifi_switch
-            && widgets.wifi_switch.is_active() != self.network_state.wifi_enabled
-        {
-            widgets
-                .wifi_switch
-                .block_signal(&widgets.wifi_switch_handler);
-            widgets
-                .wifi_switch
-                .set_active(self.network_state.wifi_enabled);
-            widgets
-                .wifi_switch
-                .unblock_signal(&widgets.wifi_switch_handler);
-        }
-
-        let ssid = self.network_state.wifi_ssid();
-        widgets.ssid_label.set_visible(ssid.is_some());
-        widgets.disconnect_button.set_visible(ssid.is_some());
-        widgets.ssid_label.set_label(
-            &ssid
-                .map(|ssid| format!("Connected to {ssid}"))
-                .unwrap_or_default(),
-        );
-
-        widgets
-            .connectivity_label
-            .set_label(&self.network_state.connectivity.to_string());
-        widgets
-            .connection_state_label
-            .set_label(&self.network_state.connection_state.to_string());
-
-        widgets
-            .rescan_button
-            .set_sensitive(!self.scan_state.scanning);
-        widgets.scanning_label.set_visible(self.scan_state.scanning);
-
-        widgets
-            .error_label
-            .set_visible(self.connect_error.is_some());
-        widgets
-            .error_label
-            .set_label(self.connect_error.as_deref().unwrap_or_default());
-
-        if let Some(prompt) = &self.password_prompt {
-            widgets.password_box.set_visible(true);
-            widgets
-                .password_label
-                .set_label(&format!("Enter password for {}", prompt.ssid));
-        } else {
-            widgets.password_box.set_visible(false);
-            widgets.password_entry.set_text("");
-        }
-    }
-}
-
-impl NetworkMenu {
     /// Requests another scan after `network.scan_interval` while the menu
     /// stays open. RequestScan only starts a scan, so repeating it is what
     /// eventually surfaces fresh results.
