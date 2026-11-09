@@ -6,7 +6,7 @@ use relm4::prelude::*;
 use crate::notifications::{
     image::NotificationImage,
     markup,
-    types::{DEFAULT_ACTION, Notification, NotificationUrgency},
+    types::{DEFAULT_ACTION, InvokedAction, Notification, NotificationUrgency},
 };
 
 #[derive(Debug)]
@@ -23,8 +23,8 @@ pub enum NotificationCardMsg {
 
 #[derive(Debug)]
 pub enum NotificationCardOutput {
-    Dismiss(u32),        // notification_id
-    Action(u32, String), // notification_id, action_id
+    Dismiss(u32), // notification_id
+    Action(InvokedAction),
 }
 
 #[relm4::factory(pub)]
@@ -237,10 +237,13 @@ impl FactoryComponent for NotificationCard {
                     %action_id,
                     "notification card action clicked"
                 );
-                let _ = sender.output(NotificationCardOutput::Action(
-                    self.notification.id,
-                    action_id,
-                ));
+                // tokens are tied to the input event, so request one now on
+                // the gtk thread rather than later in the service
+                let _ = sender.output(NotificationCardOutput::Action(InvokedAction {
+                    id: self.notification.id,
+                    key: action_id,
+                    activation_token: activation_token(),
+                }));
             }
         }
     }
@@ -307,4 +310,14 @@ fn open_link(uri: &str) {
             }
         },
     );
+}
+
+/// Asks the compositor for an activation token, which lets the app that
+/// handles an action raise its window.
+fn activation_token() -> Option<String> {
+    let display = gtk4::gdk::Display::default()?;
+    display
+        .app_launch_context()
+        .startup_notify_id(None::<&gio::AppInfo>, &[])
+        .map(String::from)
 }

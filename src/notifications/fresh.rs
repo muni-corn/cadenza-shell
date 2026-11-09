@@ -9,7 +9,7 @@ use crate::{
     notifications::{
         NOTIFICATIONS_STATE,
         card::{NotificationCard, NotificationCardOutput},
-        types::Notification,
+        types::{InvokedAction, Notification},
     },
     settings,
 };
@@ -30,14 +30,14 @@ pub enum FreshNotificationsMsg {
     /// Drops popups whose notification is gone, after close events were
     /// missed.
     Resync,
-    NotificationAction(u32, String), // notification_id, action_id
-    DismissNotification(u32),        // notification_id
+    NotificationAction(InvokedAction),
+    DismissNotification(u32), // notification_id
 }
 
 #[derive(Debug)]
 pub enum FreshNotificationsOutput {
     NotificationDismissed(u32),
-    NotificationActionTriggered(u32, String),
+    NotificationActionTriggered(InvokedAction),
 }
 
 #[relm4::component(pub)]
@@ -74,8 +74,8 @@ impl Component for FreshNotifications {
                 NotificationCardOutput::Dismiss(id) => {
                     FreshNotificationsMsg::DismissNotification(id)
                 }
-                NotificationCardOutput::Action(id, action) => {
-                    FreshNotificationsMsg::NotificationAction(id, action)
+                NotificationCardOutput::Action(action) => {
+                    FreshNotificationsMsg::NotificationAction(action)
                 }
             });
 
@@ -218,12 +218,13 @@ impl Component for FreshNotifications {
                         )
                     });
             }
-            FreshNotificationsMsg::NotificationAction(id, action) => {
-                tracing::debug!(notification.id = id, %action, "notification action triggered from popup");
+            FreshNotificationsMsg::NotificationAction(action) => {
+                let id = action.id;
+                tracing::debug!(notification.id = id, action = %action.key, "notification action triggered from popup");
 
                 sender
                     .output(FreshNotificationsOutput::NotificationActionTriggered(
-                        id, action,
+                        action,
                     ))
                     .unwrap_or_else(|_| {
                         tracing::error!(

@@ -16,6 +16,7 @@ use crate::{
         NotificationEvent,
         fresh::{FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput},
         run_notifications_service, subscribe_events,
+        types::InvokedAction,
     },
     pulseaudio::run_pulseaudio_loop,
     sleep_monitor::run_sleep_monitor,
@@ -58,7 +59,7 @@ pub(crate) enum CadenzaShellMsg {
     /// A notification was dismissed from the fresh panel.
     FreshNotificationDismissed(u32),
     /// A notification action was triggered from the fresh panel.
-    FreshNotificationAction(u32, String),
+    FreshNotificationAction(InvokedAction),
 }
 
 #[derive(Debug)]
@@ -299,13 +300,13 @@ impl AsyncComponent for CadenzaShellModel {
                 tracing::debug!(notification.id = id, "fresh panel dismissed notification");
                 crate::notifications::dismiss(id);
             }
-            CadenzaShellMsg::FreshNotificationAction(id, action) => {
+            CadenzaShellMsg::FreshNotificationAction(action) => {
                 tracing::debug!(
-                    notification.id = id,
-                    %action,
+                    notification.id = action.id,
+                    action = %action.key,
                     "fresh panel triggered notification action"
                 );
-                crate::notifications::invoke_action(id, action);
+                crate::notifications::invoke_action(action);
             }
         }
     }
@@ -433,8 +434,8 @@ impl CadenzaShellModel {
                 FreshNotificationsOutput::NotificationDismissed(id) => {
                     CadenzaShellMsg::FreshNotificationDismissed(id)
                 }
-                FreshNotificationsOutput::NotificationActionTriggered(id, action) => {
-                    CadenzaShellMsg::FreshNotificationAction(id, action)
+                FreshNotificationsOutput::NotificationActionTriggered(action) => {
+                    CadenzaShellMsg::FreshNotificationAction(action)
                 }
             });
 

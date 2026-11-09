@@ -28,6 +28,16 @@ pub struct Notification {
     pub action_icons: bool,
 }
 
+/// A notification action the user invoked.
+#[derive(Debug, Clone)]
+pub struct InvokedAction {
+    pub id: u32,
+    pub key: String,
+    /// An xdg activation token so the app can raise its window, if the
+    /// compositor handed one out.
+    pub activation_token: Option<String>,
+}
+
 /// The action invoked by clicking the notification itself.
 pub const DEFAULT_ACTION: &str = "default";
 

@@ -163,6 +163,13 @@ impl NotificationsDaemon {
     ) -> zbus::Result<()>;
 
     #[zbus(signal)]
+    async fn activation_token(
+        emitter: &SignalEmitter<'_>,
+        id: u32,
+        activation_token: String,
+    ) -> zbus::Result<()>;
+
+    #[zbus(signal)]
     async fn action_invoked(
         emitter: &SignalEmitter<'_>,
         id: u32,

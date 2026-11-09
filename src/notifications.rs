@@ -18,7 +18,7 @@ use zbus::Connection;
 use crate::notifications::{
     daemon::{NotificationsDaemon, NotificationsDaemonSignals},
     lifecycle::CloseReason,
-    types::Notification,
+    types::{InvokedAction, Notification},
 };
 
 /// Global snapshot of all current notifications.
@@ -64,7 +64,7 @@ pub fn subscribe_events() -> broadcast::Receiver<NotificationEvent> {
 pub(crate) enum NotificationCommand {
     Dismiss(u32),
     ClearAll,
-    InvokeAction { id: u32, action_key: String },
+    InvokeAction(InvokedAction),
 }
 
 static COMMAND_TX: OnceLock<mpsc::UnboundedSender<NotificationCommand>> = OnceLock::new();
@@ -89,12 +89,13 @@ pub fn clear_all() {
     }
 }
 
-/// Invoke a notification action, emitting the D-Bus `ActionInvoked` signal.
+/// Invoke a notification action, emitting the D-Bus `ActivationToken` (if
+/// there's a token) and `ActionInvoked` signals.
 ///
 /// Has no effect if the service has not been started.
-pub fn invoke_action(id: u32, action_key: String) {
+pub fn invoke_action(action: InvokedAction) {
     if let Some(tx) = COMMAND_TX.get() {
-        let _ = tx.send(NotificationCommand::InvokeAction { id, action_key });
+        let _ = tx.send(NotificationCommand::InvokeAction(action));
     }
 }
 
@@ -177,10 +178,22 @@ pub async fn run_notifications_service() {
                     lifecycle::close(id, CloseReason::Dismissed).await;
                 }
             }
-            NotificationCommand::InvokeAction { id, action_key } => {
-                tracing::trace!(notification.id = id, %action_key, "invoke_action command received");
+            NotificationCommand::InvokeAction(InvokedAction {
+                id,
+                key,
+                activation_token,
+            }) => {
+                tracing::trace!(notification.id = id, action = %key, "invoke_action command received");
 
-                if let Err(e) = interface_ref.action_invoked(id, action_key).await {
+                // the spec sends the token first so the app has it when it
+                // handles the action
+                if let Some(token) = activation_token
+                    && let Err(e) = interface_ref.activation_token(id, token).await
+                {
+                    tracing::error!(notification.id = id, error = %e, "couldn't emit activation_token signal");
+                }
+
+                if let Err(e) = interface_ref.action_invoked(id, key).await {
                     tracing::error!(notification.id = id, error = %e, "couldn't emit action_invoked signal");
                 }
 

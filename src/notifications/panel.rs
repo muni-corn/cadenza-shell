@@ -12,7 +12,7 @@ use crate::{
     notifications::{
         NOTIFICATIONS_STATE,
         card::{NotificationCard, NotificationCardOutput},
-        types::Notification,
+        types::{InvokedAction, Notification},
     },
     settings,
 };
@@ -31,7 +31,7 @@ pub enum ActionPanelMsg {
     // payload is unused; update_view reads directly from the global
     StateUpdate,
     DismissNotification(u32),
-    NotificationAction(u32, String),
+    NotificationAction(InvokedAction),
 }
 
 #[derive(Debug)]
@@ -102,8 +102,8 @@ impl SimpleComponent for ActionPanel {
                 .launch(gtk4::Box::default())
                 .forward(sender.input_sender(), |output| match output {
                     NotificationCardOutput::Dismiss(id) => ActionPanelMsg::DismissNotification(id),
-                    NotificationCardOutput::Action(id, action) => {
-                        ActionPanelMsg::NotificationAction(id, action)
+                    NotificationCardOutput::Action(action) => {
+                        ActionPanelMsg::NotificationAction(action)
                     }
                 }),
             panel: gtk4::Box::builder()
@@ -201,13 +201,13 @@ impl SimpleComponent for ActionPanel {
                 tracing::trace!(notification.id = id, "notification dismissed from center");
                 crate::notifications::dismiss(id);
             }
-            ActionPanelMsg::NotificationAction(id, action) => {
+            ActionPanelMsg::NotificationAction(action) => {
                 tracing::trace!(
-                    notification.id = id,
-                    %action,
+                    notification.id = action.id,
+                    action = %action.key,
                     "notification action invoked from center"
                 );
-                crate::notifications::invoke_action(id, action);
+                crate::notifications::invoke_action(action);
             }
         }
     }
