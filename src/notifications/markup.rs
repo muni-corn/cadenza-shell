@@ -1,25 +1,47 @@
 //! Turning notification body markup into something a gtk label can show.
 //!
 //! The spec allows a small html-like subset: `<b>`, `<i>`, `<u>`,
-//! `<a href="...">` and `<img src="..." alt="..."/>`. Everything else is
-//! dropped while keeping its text, and text is escaped so stray `<` and `&`
-//! can't break pango.
+//! `<a href="...">` and `<img src="..." alt="..."/>`. Images are pulled out
+//! to be shown separately, everything else is dropped while keeping its
+//! text, and text is escaped so stray `<` and `&` can't break pango.
 
-/// Converts a notification body into gtk label markup that's safe to render.
+/// A notification body split into label markup and the images it embeds.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub struct Body {
+    /// Gtk label markup that's safe to render.
+    pub markup: String,
+    /// Images from `<img>` tags, which a label can't show inline.
+    pub images: Vec<BodyImage>,
+}
+
+/// An `<img>` tag from a notification body.
+#[derive(Debug, PartialEq, Eq)]
+pub struct BodyImage {
+    /// A file path or uri.
+    pub src: String,
+    /// Text to show if the image can't be.
+    pub alt: String,
+}
+
+/// Parses a notification body.
 ///
-/// If the result still isn't valid markup (e.g. mismatched tags), the body
-/// is shown as escaped plain text instead.
-pub fn to_label_markup(body: &str) -> String {
-    let markup = sanitize(body);
+/// If the markup still isn't valid after sanitizing (e.g. mismatched tags),
+/// the body is shown as escaped plain text instead, without images.
+pub fn parse_body(body: &str) -> Body {
+    let mut images = Vec::new();
+    let markup = sanitize(body, &mut images);
     if is_valid_markup(&markup) {
-        markup
+        Body { markup, images }
     } else {
-        glib::markup_escape_text(body).to_string()
+        Body {
+            markup: glib::markup_escape_text(body).to_string(),
+            images: Vec::new(),
+        }
     }
 }
 
-/// Rewrites `body` keeping only the supported tags.
-fn sanitize(body: &str) -> String {
+/// Rewrites `body` keeping only the supported tags, collecting images.
+fn sanitize(body: &str, images: &mut Vec<BodyImage>) -> String {
     let mut out = String::with_capacity(body.len());
     let mut rest = body;
 
@@ -31,7 +53,7 @@ fn sanitize(body: &str) -> String {
             push_text(&mut out, &rest[start..]);
             return out;
         };
-        push_tag(&mut out, &after[..end]);
+        push_tag(&mut out, &after[..end], images);
         rest = &after[end + 1..];
     }
 
@@ -41,7 +63,7 @@ fn sanitize(body: &str) -> String {
 
 /// Emits the sanitized form of the tag whose contents (between `<` and `>`)
 /// are `tag`.
-fn push_tag(out: &mut String, tag: &str) {
+fn push_tag(out: &mut String, tag: &str, images: &mut Vec<BodyImage>) {
     let (closing, tag) = match tag.strip_prefix('/') {
         Some(tag) => (true, tag),
         None => (false, tag),
@@ -61,8 +83,10 @@ fn push_tag(out: &mut String, tag: &str) {
             push_attribute(out, &attribute(tag, "href").unwrap_or_default());
             out.push_str("\">");
         }
-        // images can't be shown inline, so their alt text stands in
-        ("img", false) => push_text(out, &attribute(tag, "alt").unwrap_or_default()),
+        ("img", false) => images.push(BodyImage {
+            src: attribute(tag, "src").unwrap_or_default(),
+            alt: attribute(tag, "alt").unwrap_or_default(),
+        }),
         ("br", false) => out.push('\n'),
         // anything else is dropped, keeping the text around it
         _ => {}
@@ -167,6 +191,10 @@ fn is_valid_markup(markup: &str) -> bool {
 mod tests {
     use super::*;
 
+    fn to_label_markup(body: &str) -> String {
+        parse_body(body).markup
+    }
+
     #[test]
     fn plain_text_is_escaped() {
         assert_eq!(to_label_markup("fish & chips"), "fish &amp; chips");
@@ -206,8 +234,13 @@ mod tests {
     }
 
     #[test]
-    fn images_show_their_alt_text() {
-        assert_eq!(to_label_markup("<img src=\"/a.png\" alt=\"cat\"/>"), "cat");
+    fn images_are_collected() {
+        let body = parse_body("look <img src=\"/a.png\" alt=\"cat\"/>");
+        assert_eq!(body.markup, "look ");
+        assert_eq!(body.images, vec![BodyImage {
+            src: "/a.png".to_string(),
+            alt: "cat".to_string(),
+        }]);
     }
 
     #[test]

@@ -12,6 +12,7 @@ use crate::notifications::{
 #[derive(Debug)]
 pub struct NotificationCard {
     notification: Notification,
+    body: markup::Body,
 }
 
 #[derive(Debug)]
@@ -119,7 +120,7 @@ impl FactoryComponent for NotificationCard {
                         // body, rendered from the client's markup
                         #[name = "body"]
                         gtk4::Label {
-                            set_markup: &markup::to_label_markup(&self.notification.body),
+                            set_markup: &self.body.markup,
                             add_css_class: "body",
                             set_wrap: true,
                             set_halign: gtk4::Align::Start,
@@ -128,7 +129,15 @@ impl FactoryComponent for NotificationCard {
                             set_ellipsize: gtk4::pango::EllipsizeMode::End,
                             set_max_width_chars: 1,
                             set_hexpand: true,
-                            set_visible: !self.notification.body.is_empty(),
+                            set_visible: !self.body.markup.is_empty(),
+                        },
+
+                        // images embedded in the body
+                        #[name = "body_images"]
+                        gtk4::Box {
+                            set_orientation: gtk4::Orientation::Vertical,
+                            set_spacing: 4,
+                            set_visible: !self.body.images.is_empty(),
                         },
                     },
                 },
@@ -149,7 +158,8 @@ impl FactoryComponent for NotificationCard {
         _index: &Self::Index,
         _sender: FactorySender<Self>,
     ) -> Self {
-        Self { notification }
+        let body = markup::parse_body(&notification.body);
+        Self { notification, body }
     }
 
     fn init_widgets(
@@ -163,6 +173,9 @@ impl FactoryComponent for NotificationCard {
 
         image::show(&widgets.app_icon, self.header_icon().as_ref());
         image::show(&widgets.image, self.notification.image.as_ref());
+        for body_image in &self.body.images {
+            widgets.body_images.append(&image::body_image(body_image));
+        }
 
         // clicking the notification itself invokes the "default" action
         if self.has_default_action() {
