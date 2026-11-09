@@ -1,9 +1,6 @@
-use std::sync::OnceLock;
-
 use bluer::Address;
-use tokio::sync::mpsc::UnboundedSender;
 
-use crate::bluetooth::actions::DeviceAction;
+use crate::{bluetooth::actions::DeviceAction, utils::command_slot::CommandSlot};
 
 /// Commands the UI can send to the bluetooth service.
 ///
@@ -17,23 +14,11 @@ pub(crate) enum BluetoothCommand {
     Device(Address, DeviceAction),
 }
 
-static COMMAND_TX: OnceLock<UnboundedSender<BluetoothCommand>> = OnceLock::new();
-
-/// Installs the command sender. Called once from `run_bluetooth_service`.
-///
-/// Returns `Err` if called more than once (e.g. the service was somehow
-/// started twice).
-pub(crate) fn install_command_sender(tx: UnboundedSender<BluetoothCommand>) -> Result<(), ()> {
-    COMMAND_TX.set(tx).map_err(|_| ())
-}
+/// Commands from the ui, received by the service loop.
+pub(crate) static COMMANDS: CommandSlot<BluetoothCommand> = CommandSlot::new("bluetooth");
 
 fn send(cmd: BluetoothCommand) {
-    match COMMAND_TX.get() {
-        Some(tx) => {
-            let _ = tx.send(cmd);
-        }
-        None => tracing::warn!("bluetooth command sent before the service started; dropping"),
-    }
+    COMMANDS.send(cmd);
 }
 
 /// Starts a device discovery session. A no-op if one is already running.

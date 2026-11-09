@@ -12,13 +12,16 @@ use std::{collections::HashMap, sync::OnceLock};
 
 use anyhow::Result;
 use relm4::SharedState;
-use tokio::sync::{broadcast, mpsc};
+use tokio::sync::broadcast;
 use zbus::Connection;
 
-use crate::notifications::{
-    daemon::{NotificationsDaemon, NotificationsDaemonSignals},
-    lifecycle::CloseReason,
-    types::{InvokedAction, Notification},
+use crate::{
+    notifications::{
+        daemon::{NotificationsDaemon, NotificationsDaemonSignals},
+        lifecycle::CloseReason,
+        types::{InvokedAction, Notification},
+    },
+    utils::command_slot::CommandSlot,
 };
 
 /// Global snapshot of all current notifications.
@@ -67,16 +70,15 @@ pub(crate) enum NotificationCommand {
     InvokeAction(InvokedAction),
 }
 
-static COMMAND_TX: OnceLock<mpsc::UnboundedSender<NotificationCommand>> = OnceLock::new();
+/// Commands from the ui, received by the service loop.
+static COMMANDS: CommandSlot<NotificationCommand> = CommandSlot::new("notifications");
 
 /// Dismiss a notification by ID.
 ///
 /// Closes the notification as dismissed by the user.
 /// Has no effect if the service has not been started.
 pub fn dismiss(id: u32) {
-    if let Some(tx) = COMMAND_TX.get() {
-        let _ = tx.send(NotificationCommand::Dismiss(id));
-    }
+    COMMANDS.send(NotificationCommand::Dismiss(id));
 }
 
 /// Clear all notifications.
@@ -84,9 +86,7 @@ pub fn dismiss(id: u32) {
 /// Closes every notification as dismissed by the user.
 /// Has no effect if the service has not been started.
 pub fn clear_all() {
-    if let Some(tx) = COMMAND_TX.get() {
-        let _ = tx.send(NotificationCommand::ClearAll);
-    }
+    COMMANDS.send(NotificationCommand::ClearAll);
 }
 
 /// Invoke a notification action, emitting the D-Bus `ActivationToken` (if
@@ -94,9 +94,7 @@ pub fn clear_all() {
 ///
 /// Has no effect if the service has not been started.
 pub fn invoke_action(action: InvokedAction) {
-    if let Some(tx) = COMMAND_TX.get() {
-        let _ = tx.send(NotificationCommand::InvokeAction(action));
-    }
+    COMMANDS.send(NotificationCommand::InvokeAction(action));
 }
 
 /// Runs the notification service.
@@ -143,12 +141,11 @@ pub async fn run_notifications_service() {
         }
     };
 
-    // install the command sender so free functions can push commands
-    let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<NotificationCommand>();
-    if COMMAND_TX.set(cmd_tx).is_err() {
+    // open the command slot so free functions can push commands
+    let Some(mut cmd_rx) = COMMANDS.open() else {
         tracing::warn!("notifications service started more than once; extra instance exiting");
         return;
-    }
+    };
 
     tracing::debug!("entering command loop");
 

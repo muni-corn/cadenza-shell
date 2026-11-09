@@ -42,12 +42,11 @@ enum BluetoothEvent {
 /// Runs the bluetooth service: watches bluez, publishes [`BLUETOOTH_STATE`],
 /// and handles commands from the menu, all from a single loop.
 pub async fn run_bluetooth_service() {
-    // installed first, so a second instance bails out before starting tasks
-    let (cmd_tx, mut cmd_rx) = unbounded_channel::<BluetoothCommand>();
-    if commands::install_command_sender(cmd_tx).is_err() {
+    // opened first, so a second instance bails out before starting tasks
+    let Some(mut cmd_rx) = commands::COMMANDS.open() else {
         tracing::warn!("bluetooth service started more than once; extra instance exiting");
         return;
-    }
+    };
 
     let session = match Session::new().await {
         Ok(session) => session,

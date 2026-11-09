@@ -97,12 +97,11 @@ impl SubscriptionTasks {
 /// [`NETWORK_STATE`] and [`WIFI_SCAN_STATE`], and handles commands from the
 /// menu, all from a single loop.
 pub async fn run_network_service() {
-    // installed first, so a second instance bails out before starting tasks
-    let (cmd_tx, mut cmd_rx) = mpsc::unbounded_channel::<NetworkCommand>();
-    if commands::install_command_sender(cmd_tx).is_err() {
+    // opened first, so a second instance bails out before starting tasks
+    let Some(mut cmd_rx) = commands::COMMANDS.open() else {
         tracing::warn!("network service started more than once; extra instance exiting");
         return;
-    }
+    };
 
     let (mut service, mut event_rx) = match NetworkService::start().await {
         Ok(started) => started,

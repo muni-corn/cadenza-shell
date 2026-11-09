@@ -1,9 +1,9 @@
-use std::sync::OnceLock;
-
-use tokio::sync::mpsc::UnboundedSender;
 use zbus::zvariant::OwnedObjectPath;
 
-use crate::network::{password::Password, security::ApSecurity};
+use crate::{
+    network::{password::Password, security::ApSecurity},
+    utils::command_slot::CommandSlot,
+};
 
 /// Commands the UI can send to the network service.
 ///
@@ -35,23 +35,11 @@ pub(crate) enum NetworkCommand {
     Forget(Vec<OwnedObjectPath>),
 }
 
-static COMMAND_TX: OnceLock<UnboundedSender<NetworkCommand>> = OnceLock::new();
-
-/// Installs the command sender. Called once from `run_network_service`.
-///
-/// Returns `Err` if called more than once (e.g. the service was somehow
-/// started twice).
-pub(crate) fn install_command_sender(tx: UnboundedSender<NetworkCommand>) -> Result<(), ()> {
-    COMMAND_TX.set(tx).map_err(|_| ())
-}
+/// Commands from the ui, received by the service loop.
+pub(crate) static COMMANDS: CommandSlot<NetworkCommand> = CommandSlot::new("network");
 
 fn send(cmd: NetworkCommand) {
-    match COMMAND_TX.get() {
-        Some(tx) => {
-            let _ = tx.send(cmd);
-        }
-        None => tracing::warn!("network command sent before the service started; dropping"),
-    }
+    COMMANDS.send(cmd);
 }
 
 /// Enables or disables the wifi radio.
