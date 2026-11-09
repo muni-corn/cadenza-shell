@@ -1,26 +1,26 @@
+mod device_rows;
 mod pairing_prompt;
 
 use bluer::Address;
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use self::pairing_prompt::{PromptView, parse_passkey, parse_pin_code, prompt_view};
+use self::{
+    device_rows::DeviceRows,
+    pairing_prompt::{PromptView, parse_passkey, parse_pin_code, prompt_view},
+};
 use crate::{
     bluetooth::{
-        self, BLUETOOTH_STATE, BluetoothState, DeviceInfo, PAIRING_PROMPT, PairingPrompt,
-        PairingReply, PairingRequest, get_icon,
+        self, BLUETOOTH_STATE, BluetoothState, PAIRING_PROMPT, PairingPrompt, PairingReply,
+        PairingRequest, get_icon,
     },
-    widgets::{
-        menu_parts::{MenuHeader, PromptBox, menu_root, scrolled_content},
-        menu_row::{MenuRow, MenuRowData, MenuRowOutput, sync_rows},
-    },
+    widgets::menu_parts::{MenuHeader, PromptBox, menu_root, scrolled_content},
 };
 
 #[derive(Debug)]
 pub struct BluetoothMenu {
     bluetooth_state: Option<BluetoothState>,
-    paired_devices: FactoryVecDeque<MenuRow>,
-    nearby_devices: FactoryVecDeque<MenuRow>,
+    devices: DeviceRows,
     pairing_prompt: Option<PairingPrompt>,
     /// Why the last PIN or passkey entry was rejected, if it was.
     pairing_error: Option<&'static str>,
@@ -76,28 +76,9 @@ impl SimpleComponent for BluetoothMenu {
             BluetoothMenuMsg::UpdatePairingPrompt(prompt.to_owned())
         });
 
-        // create device factories, one per section
-        let paired_devices = FactoryVecDeque::builder()
-            .launch(
-                gtk::Box::builder()
-                    .orientation(gtk::Orientation::Vertical)
-                    .spacing(8)
-                    .build(),
-            )
-            .forward(sender.input_sender(), device_output_to_msg);
-        let nearby_devices = FactoryVecDeque::builder()
-            .launch(
-                gtk::Box::builder()
-                    .orientation(gtk::Orientation::Vertical)
-                    .spacing(8)
-                    .build(),
-            )
-            .forward(sender.input_sender(), device_output_to_msg);
-
         let model = BluetoothMenu {
             bluetooth_state: BLUETOOTH_STATE.read().clone(),
-            paired_devices,
-            nearby_devices,
+            devices: DeviceRows::new(sender.input_sender()),
             pairing_prompt: PAIRING_PROMPT.read().clone(),
             pairing_error: None,
             reset_pairing_entry: true,
@@ -177,9 +158,9 @@ impl SimpleComponent for BluetoothMenu {
         content_box.append(&status_box);
         content_box.append(&pairing_prompt.root);
         content_box.append(&paired_header);
-        content_box.append(model.paired_devices.widget());
+        content_box.append(model.devices.paired_widget());
         content_box.append(&nearby_header);
-        content_box.append(model.nearby_devices.widget());
+        content_box.append(model.devices.nearby_widget());
         root.append(&scrolled_window);
 
         let mut widgets = BluetoothMenuWidgets {
@@ -190,14 +171,7 @@ impl SimpleComponent for BluetoothMenu {
         };
 
         let mut model = model;
-        update_device_rows(
-            &mut model.paired_devices,
-            paired_devices_iter(&model.bluetooth_state),
-        );
-        update_device_rows(
-            &mut model.nearby_devices,
-            nearby_devices_iter(&model.bluetooth_state),
-        );
+        model.devices.sync(model.bluetooth_state.as_ref());
         render_pairing_prompt(&model, &mut widgets);
 
         ComponentParts { model, widgets }
@@ -209,8 +183,7 @@ impl SimpleComponent for BluetoothMenu {
         match msg {
             BluetoothMenuMsg::UpdateState(state) => {
                 self.resync_power_switch = true;
-                update_device_rows(&mut self.paired_devices, paired_devices_iter(&state));
-                update_device_rows(&mut self.nearby_devices, nearby_devices_iter(&state));
+                self.devices.sync(state.as_ref());
                 self.bluetooth_state = state;
             }
             BluetoothMenuMsg::UpdatePairingPrompt(prompt) => {
@@ -319,24 +292,6 @@ impl SimpleComponent for BluetoothMenu {
     }
 }
 
-fn device_output_to_msg(output: MenuRowOutput) -> BluetoothMenuMsg {
-    let (MenuRowOutput::Activated(key) | MenuRowOutput::Remove(key)) = &output;
-    // rows are keyed by the address they were built from, so this can't fail
-    let address: Address = key.parse().expect("device rows are keyed by address");
-    match output {
-        MenuRowOutput::Activated(_) => BluetoothMenuMsg::DeviceClicked(address),
-        MenuRowOutput::Remove(_) => BluetoothMenuMsg::RemoveDevice(address),
-    }
-}
-
-fn paired_devices_iter(state: &Option<BluetoothState>) -> impl Iterator<Item = &DeviceInfo> {
-    state.iter().flat_map(|s| s.devices()).filter(|d| d.paired)
-}
-
-fn nearby_devices_iter(state: &Option<BluetoothState>) -> impl Iterator<Item = &DeviceInfo> {
-    state.iter().flat_map(|s| s.devices()).filter(|d| !d.paired)
-}
-
 fn scan_button_label(state: &Option<BluetoothState>) -> String {
     if state.as_ref().is_some_and(|s| s.discovery_owned) {
         "Stop scanning".to_string()
@@ -384,33 +339,5 @@ fn get_status_text(state: &Option<BluetoothState>) -> String {
         }
         Some(_) => "Bluetooth enabled".to_string(),
         None => "Bluetooth unavailable".to_string(),
-    }
-}
-
-/// Syncs device rows with the latest snapshots, connected devices first and
-/// then by name; devices come out of a hashmap, so they need a stable order.
-fn update_device_rows<'a>(
-    rows: &mut FactoryVecDeque<MenuRow>,
-    infos: impl Iterator<Item = &'a DeviceInfo>,
-) {
-    let mut infos: Vec<&DeviceInfo> = infos.collect();
-    infos.sort_by(|a, b| {
-        b.connected
-            .cmp(&a.connected)
-            .then_with(|| a.alias.cmp(&b.alias))
-            .then_with(|| a.address.cmp(&b.address))
-    });
-
-    sync_rows(rows, infos.into_iter().map(device_row).collect());
-}
-
-/// How a device is shown in the list, keyed by its address.
-fn device_row(info: &DeviceInfo) -> MenuRowData {
-    MenuRowData {
-        key: info.address.to_string(),
-        icon: info.icon.clone(),
-        title: info.alias.clone(),
-        status: info.connected.then_some("Connected"),
-        remove_tooltip: info.paired.then_some("Remove this device"),
     }
 }
