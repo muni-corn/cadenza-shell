@@ -2,6 +2,7 @@ pub mod card;
 pub mod daemon;
 pub mod fresh;
 mod hints;
+pub mod image;
 mod lifecycle;
 pub mod panel;
 pub mod types;

@@ -1,22 +1,12 @@
-use std::path::Path;
+mod image;
 
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::notifications::types::{DEFAULT_ACTION, Notification, NotificationUrgency};
-
-fn is_icon(icon: &str) -> bool {
-    if let Some(display) = gtk4::gdk::Display::default() {
-        let icon_theme = gtk4::IconTheme::for_display(&display);
-        !icon.is_empty() && icon_theme.has_icon(icon)
-    } else {
-        false
-    }
-}
-
-fn file_exists(path: &str) -> bool {
-    !path.is_empty() && Path::new(path).exists()
-}
+use crate::notifications::{
+    image::NotificationImage,
+    types::{DEFAULT_ACTION, Notification, NotificationUrgency},
+};
 
 #[derive(Debug)]
 pub struct NotificationCard {
@@ -57,22 +47,17 @@ impl FactoryComponent for NotificationCard {
                 gtk4::Box {
                     add_css_class: "header",
 
-                    // App icon (if available)
+                    // app icon, if there is one
+                    #[name = "app_icon"]
                     gtk4::Image {
-                        #[watch]
-                        set_visible: self.has_app_icon(),
-                        #[watch]
-                        set_icon_name: self.get_app_icon_name().as_deref(),
                         add_css_class: "app-icon",
                     },
 
                     // App name
                     gtk4::Label {
-                        #[watch]
                         set_text: &self.notification.app_name,
                         add_css_class: "app-name",
                         set_halign: gtk4::Align::Start,
-                        #[watch]
                         set_visible: !self.notification.app_name.is_empty(),
                     },
 
@@ -104,24 +89,11 @@ impl FactoryComponent for NotificationCard {
                     add_css_class: "content",
                     set_hexpand: true,
 
-                    // Notification image (if available)
+                    // notification image, if there is one
+                    #[name = "image"]
                     gtk4::Image {
-                        #[watch]
-                        set_visible: self.has_notification_image(),
-                        #[watch]
-                        set_from_file: if self.has_notification_image() && file_exists(&self.notification.image) {
-                            Some(&self.notification.image)
-                        } else {
-                            None
-                        },
-                        #[watch]
-                        set_icon_name: if self.has_notification_image() && !file_exists(&self.notification.image) {
-                            Some(&self.notification.image)
-                        } else {
-                            None
-                        },
                         set_valign: gtk4::Align::Start,
-                        add_css_class: if file_exists(&self.notification.image) { "image" } else { "icon-image" },
+                        add_css_class: if matches!(self.notification.image, Some(NotificationImage::Icon(_))) { "icon-image" } else { "image" },
                     },
 
                     // Text content
@@ -187,6 +159,9 @@ impl FactoryComponent for NotificationCard {
         sender: FactorySender<Self>,
     ) -> Self::Widgets {
         let widgets = view_output!();
+
+        image::show(&widgets.app_icon, self.header_icon().as_ref());
+        image::show(&widgets.image, self.notification.image.as_ref());
 
         // clicking the notification itself invokes the "default" action
         if self.has_default_action() {
@@ -269,22 +244,13 @@ impl NotificationCard {
         }
     }
 
-    fn has_app_icon(&self) -> bool {
-        !self.notification.app_icon.is_empty() || is_icon(&self.notification.desktop_entry)
-    }
-
-    fn get_app_icon_name(&self) -> Option<String> {
-        if !self.notification.app_icon.is_empty() {
-            Some(self.notification.app_icon.clone())
-        } else if is_icon(&self.notification.desktop_entry) {
-            Some(self.notification.desktop_entry.clone())
-        } else {
-            None
-        }
-    }
-
-    fn has_notification_image(&self) -> bool {
-        !self.notification.image.is_empty()
+    /// The app icon from the notification, or the icon of its desktop
+    /// entry as a fallback.
+    fn header_icon(&self) -> Option<NotificationImage> {
+        NotificationImage::from_path_or_icon(&self.notification.app_icon).or_else(|| {
+            image::has_icon(&self.notification.desktop_entry)
+                .then(|| NotificationImage::Icon(self.notification.desktop_entry.clone()))
+        })
     }
 
     fn format_time(&self, timestamp: i64) -> String {

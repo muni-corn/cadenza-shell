@@ -1,12 +1,15 @@
 use std::time::Duration;
 
+use crate::notifications::image::NotificationImage;
+
 #[derive(Debug, Clone)]
 pub struct Notification {
     pub id: u32,
     pub app_name: String,
     pub app_icon: String,
     pub desktop_entry: String,
-    pub image: String,
+    /// The image from the `image-data` or `image-path` hint, if any.
+    pub image: Option<NotificationImage>,
     pub summary: String,
     pub body: String,
     pub urgency: NotificationUrgency,
@@ -73,7 +76,7 @@ mod tests {
             app_name: String::new(),
             app_icon: String::new(),
             desktop_entry: String::new(),
-            image: String::new(),
+            image: None,
             summary: String::new(),
             body: String::new(),
             urgency,

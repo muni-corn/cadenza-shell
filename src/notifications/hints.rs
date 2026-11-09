@@ -2,7 +2,10 @@ use std::collections::HashMap;
 
 use zbus::zvariant::{OwnedValue, Value};
 
-use crate::notifications::types::NotificationUrgency;
+use crate::notifications::{
+    image::{ImageData, NotificationImage},
+    types::NotificationUrgency,
+};
 
 /// The `hints` dictionary passed with a `Notify` call.
 ///
@@ -43,6 +46,37 @@ impl Hints {
             Some(_) => self.integer(key).is_some_and(|n| n != 0),
             None => false,
         }
+    }
+
+    /// The notification's image, preferring inline pixels over a path, as
+    /// the spec asks. Older spellings of both hints are accepted too.
+    pub fn image(&self) -> Option<NotificationImage> {
+        ["image-data", "image_data", "icon_data"]
+            .into_iter()
+            .find_map(|key| self.image_data(key))
+            .map(|data| NotificationImage::Pixels(Box::new(data)))
+            .or_else(|| {
+                ["image-path", "image_path"]
+                    .into_iter()
+                    .find_map(|key| self.string(key))
+                    .and_then(|path| NotificationImage::from_path_or_icon(&path))
+            })
+    }
+
+    /// Decodes an `(iiibiiay)` image hint.
+    fn image_data(&self, key: &str) -> Option<ImageData> {
+        let value = self.0.get(key)?.try_clone().ok()?;
+        let (width, height, rowstride, has_alpha, bits_per_sample, channels, data) =
+            <(i32, i32, i32, bool, i32, i32, Vec<u8>)>::try_from(value).ok()?;
+        Some(ImageData {
+            width,
+            height,
+            rowstride,
+            has_alpha,
+            bits_per_sample,
+            channels,
+            data,
+        })
     }
 
     /// An integer hint of any integer type.
@@ -99,6 +133,25 @@ mod tests {
         assert!(hints.flag("resident"));
         assert!(hints.flag("transient"));
         assert!(!hints.flag("missing"));
+    }
+
+    #[test]
+    fn prefers_image_data_over_image_path() {
+        let pixels = Value::from((1i32, 1i32, 4i32, true, 8i32, 4i32, vec![0u8; 4]));
+        let hints = hints(&[
+            ("image-path", Value::from("/tmp/a.png")),
+            ("image-data", pixels),
+        ]);
+        assert!(matches!(hints.image(), Some(NotificationImage::Pixels(_))));
+    }
+
+    #[test]
+    fn reads_image_path() {
+        let hints = hints(&[("image-path", Value::from("file:///tmp/a.png"))]);
+        assert_eq!(
+            hints.image(),
+            Some(NotificationImage::File("/tmp/a.png".into()))
+        );
     }
 
     #[test]

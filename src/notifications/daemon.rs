@@ -72,7 +72,7 @@ impl NotificationsDaemon {
             app_name,
             app_icon,
             desktop_entry: hints.string("desktop-entry").unwrap_or_default(),
-            image: String::new(), // TODO: Extract from hints if available
+            image: hints.image(),
             summary,
             body,
             urgency,
