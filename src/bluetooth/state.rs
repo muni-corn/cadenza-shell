@@ -32,6 +32,9 @@ pub enum PairingRequest {
     ConfirmPasskey(u32),
     /// Authorize the pairing with no code exchange (just-works model).
     Authorize,
+    /// Allow an already paired device to use a profile, such as audio or
+    /// file transfer; carries the profile's readable name.
+    AuthorizeService(String),
     /// Display this PIN code; the user types it on the *other* device.
     DisplayPinCode(String),
     /// Display this passkey; the user types it on the *other* device.

@@ -250,6 +250,7 @@ impl SimpleComponent for BluetoothMenu {
                     // the entry isn't shown for these; nothing to submit
                     PairingRequest::ConfirmPasskey(_)
                     | PairingRequest::Authorize
+                    | PairingRequest::AuthorizeService(_)
                     | PairingRequest::DisplayPinCode(_)
                     | PairingRequest::DisplayPasskey { .. } => return,
                 };
@@ -360,9 +361,11 @@ fn render_pairing_prompt(model: &BluetoothMenu, widgets: &mut BluetoothMenuWidge
         text,
         show_entry,
         show_buttons,
+        button_labels: (cancel, confirm),
     } = prompt_view(&prompt.request, &device);
 
     widgets.pairing_prompt.show(&text, show_entry, show_buttons);
+    widgets.pairing_prompt.set_button_labels(cancel, confirm);
     widgets.pairing_prompt.set_error(model.pairing_error);
     if model.reset_pairing_entry {
         widgets.pairing_prompt.reset_entry();

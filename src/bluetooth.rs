@@ -2,6 +2,7 @@ mod actions;
 mod agent;
 mod commands;
 mod outcomes;
+mod profile_names;
 mod service;
 mod state;
 

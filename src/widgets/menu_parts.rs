@@ -101,6 +101,8 @@ pub struct PromptBox {
     entry: gtk::Entry,
     error: gtk::Label,
     buttons: gtk::Box,
+    cancel: gtk::Button,
+    confirm: gtk::Button,
 }
 
 impl PromptBox {
@@ -168,7 +170,15 @@ impl PromptBox {
             entry,
             error,
             buttons,
+            cancel,
+            confirm,
         }
+    }
+
+    /// Relabels the cancel and confirm buttons, e.g. to "Deny" and "Allow".
+    pub fn set_button_labels(&self, cancel: &str, confirm: &str) {
+        self.cancel.set_label(cancel);
+        self.confirm.set_label(confirm);
     }
 
     /// Shows the prompt with `text`, with or without the entry and buttons.

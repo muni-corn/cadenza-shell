@@ -11,6 +11,8 @@ pub struct PromptView {
     /// Whether there's anything to confirm or cancel; display-only prompts
     /// just show a code until bluez is done with it.
     pub show_buttons: bool,
+    /// The cancel and confirm button labels.
+    pub button_labels: (&'static str, &'static str),
 }
 
 /// Describes the prompt for `request` from the device named `device`.
@@ -24,6 +26,9 @@ pub fn prompt_view(request: &PairingRequest, device: &str) -> PromptView {
             true,
         ),
         PairingRequest::Authorize => (format!("Allow pairing with {device}?"), false, true),
+        PairingRequest::AuthorizeService(profile) => {
+            (format!("Allow {device} to use {profile}?"), false, true)
+        }
         PairingRequest::DisplayPinCode(pin) => (format!("Enter {pin} on {device}"), false, false),
         PairingRequest::DisplayPasskey { passkey, entered } => {
             let digits = if *entered == 1 { "digit" } else { "digits" };
@@ -35,10 +40,17 @@ pub fn prompt_view(request: &PairingRequest, device: &str) -> PromptView {
         }
     };
 
+    // permission questions read better as allow or deny
+    let button_labels = match request {
+        PairingRequest::Authorize | PairingRequest::AuthorizeService(_) => ("Deny", "Allow"),
+        _ => ("Cancel", "Confirm"),
+    };
+
     PromptView {
         text,
         show_entry,
         show_buttons,
+        button_labels,
     }
 }
 
@@ -63,6 +75,17 @@ pub fn parse_passkey(text: &str) -> Result<u32, &'static str> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn service_prompts_name_the_profile() {
+        let view = prompt_view(
+            &PairingRequest::AuthorizeService("Audio Sink".into()),
+            "Headphones",
+        );
+        assert_eq!(view.text, "Allow Headphones to use Audio Sink?");
+        assert!(!view.show_entry && view.show_buttons);
+        assert_eq!(view.button_labels, ("Deny", "Allow"));
+    }
 
     #[test]
     fn display_prompts_have_no_buttons() {

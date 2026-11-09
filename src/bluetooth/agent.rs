@@ -6,13 +6,16 @@ use std::sync::{
 use bluer::{
     Session,
     agent::{
-        Agent, AgentHandle, DisplayPasskey, DisplayPinCode, ReqError, ReqResult,
+        Agent, AgentHandle, AuthorizeService, DisplayPasskey, DisplayPinCode, ReqError, ReqResult,
         RequestAuthorization, RequestConfirmation, RequestPasskey, RequestPinCode,
     },
 };
 use tokio::sync::oneshot;
 
-use crate::bluetooth::state::{PAIRING_PROMPT, PairingPrompt, PairingRequest};
+use crate::bluetooth::{
+    profile_names::profile_name,
+    state::{PAIRING_PROMPT, PairingPrompt, PairingRequest},
+};
 
 /// The user's response to whatever [`PairingRequest`] is currently pending.
 ///
@@ -104,6 +107,9 @@ pub async fn register_agent(
         display_passkey: Some(Box::new(|req| Box::pin(handle_display_passkey(req)))),
         request_confirmation: Some(Box::new(|req| Box::pin(handle_request_confirmation(req)))),
         request_authorization: Some(Box::new(|req| Box::pin(handle_request_authorization(req)))),
+        // without a handler bluer rejects every request, so untrusted
+        // devices could never use their profiles
+        authorize_service: Some(Box::new(|req| Box::pin(handle_authorize_service(req)))),
         ..Default::default()
     };
 
@@ -175,6 +181,21 @@ async fn handle_request_authorization(req: RequestAuthorization) -> ReqResult<()
         PairingPrompt {
             address: req.device,
             request: PairingRequest::Authorize,
+        },
+        |reply| match reply {
+            PairingReply::Confirm => Some(()),
+            _ => None,
+        },
+    )
+    .await
+}
+
+/// Asks whether a device that isn't trusted may use a profile.
+async fn handle_authorize_service(req: AuthorizeService) -> ReqResult<()> {
+    await_reply(
+        PairingPrompt {
+            address: req.device,
+            request: PairingRequest::AuthorizeService(profile_name(req.service)),
         },
         |reply| match reply {
             PairingReply::Confirm => Some(()),
