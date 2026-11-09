@@ -1,32 +1,25 @@
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use gdk4::Monitor;
 use gtk4::prelude::BoxExt;
 use relm4::prelude::*;
-use system_tray::{client::Event as TrayEvent, data::BaseMap};
 
 use crate::{
     settings::BarConfig,
     tiles::{
-        battery::battery_tile,
-        bluetooth::BluetoothTile,
-        brightness::brightness_tile,
-        network::NetworkTile,
-        notifications::notifications_tile,
-        pulseaudio::volume_tile,
-        tray::{TrayMsg, TrayWidget},
+        battery::battery_tile, bluetooth::BluetoothTile, brightness::brightness_tile,
+        network::NetworkTile, notifications::notifications_tile, pulseaudio::volume_tile,
+        tray::TrayWidget,
     },
     widgets::{
         progress_tile::ProgressTile,
         tile::{Tile, TileOutput},
-        tray_item::TrayItemOutput,
+        tray_item::TrayClient,
     },
 };
 
 #[derive(Debug)]
-pub struct RightGroup {
-    tray: Option<Controller<TrayWidget>>,
-}
+pub struct RightGroup;
 
 #[derive(Debug)]
 pub struct RightWidgets {
@@ -37,11 +30,12 @@ pub struct RightWidgets {
     _network: Controller<NetworkTile>,
     _battery: Controller<Tile>,
     _notifications: Controller<Tile>,
+    _tray: Option<Controller<TrayWidget>>,
 }
 
 pub struct RightGroupInit {
     pub bar_config: BarConfig,
-    pub tray_items: Option<Arc<Mutex<BaseMap>>>,
+    pub tray_client: Option<Arc<TrayClient>>,
     /// The monitor this bar (and thus this group) belongs to, so tiles with
     /// their own layer-shell menu windows (wifi, bluetooth) can pin those
     /// windows to the correct output.
@@ -49,19 +43,13 @@ pub struct RightGroupInit {
 }
 
 #[derive(Debug)]
-pub enum RightGroupMsg {
-    TrayEvent(TrayEvent),
-}
-
-#[derive(Debug)]
 pub enum RightGroupOutput {
     ToggleActionPanel,
-    TrayItemOutput(TrayItemOutput),
 }
 
 impl SimpleComponent for RightGroup {
     type Init = RightGroupInit;
-    type Input = RightGroupMsg;
+    type Input = ();
     type Output = RightGroupOutput;
     type Root = gtk::Box;
     type Widgets = RightWidgets;
@@ -73,7 +61,7 @@ impl SimpleComponent for RightGroup {
     fn init(
         RightGroupInit {
             bar_config,
-            tray_items,
+            tray_client,
             monitor,
         }: Self::Init,
         root: Self::Root,
@@ -91,30 +79,20 @@ impl SimpleComponent for RightGroup {
             .forward(sender.output_sender(), |TileOutput::Clicked| {
                 RightGroupOutput::ToggleActionPanel
             });
-        let tray_opt = tray_items.and_then(|m| match m.lock() {
-            Ok(items) => Some(
-                TrayWidget::builder()
-                    .launch(items.clone())
-                    .forward(sender.output_sender(), RightGroupOutput::TrayItemOutput),
-            ),
-            Err(e) => {
-                tracing::error!("couldn't lock tray items mutex: {}", e);
-                None
-            }
-        });
+        let tray = tray_client.map(|client| TrayWidget::builder().launch(client).detach());
 
         root.append(brightness.widget());
         root.append(volume.widget());
         root.append(bluetooth.widget());
         root.append(network.widget());
         root.append(battery.widget());
-        if let Some(tray) = &tray_opt {
+        if let Some(tray) = &tray {
             root.append(tray.widget());
         }
         root.append(notifications.widget());
 
         ComponentParts {
-            model: RightGroup { tray: tray_opt },
+            model: RightGroup,
             widgets: RightWidgets {
                 _brightness: brightness,
                 _volume: volume,
@@ -122,17 +100,8 @@ impl SimpleComponent for RightGroup {
                 _network: network,
                 _battery: battery,
                 _notifications: notifications,
+                _tray: tray,
             },
-        }
-    }
-
-    fn update(&mut self, message: Self::Input, _sender: ComponentSender<Self>) {
-        match message {
-            RightGroupMsg::TrayEvent(event) => {
-                if let Some(ref tray) = self.tray {
-                    tray.emit(TrayMsg::TrayEvent(event));
-                }
-            }
         }
     }
 }

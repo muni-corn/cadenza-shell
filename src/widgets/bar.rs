@@ -2,13 +2,12 @@ mod center;
 mod left;
 mod right;
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use gdk4::Monitor;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::prelude::*;
-use system_tray::data::BaseMap;
 
 use crate::{
     notifications::panel::{ActionPanel, ActionPanelMsg},
@@ -17,9 +16,9 @@ use crate::{
         bar::{
             center::CenterGroup,
             left::{LeftGroup, LeftGroupInit},
-            right::{RightGroup, RightGroupInit, RightGroupMsg, RightGroupOutput},
+            right::{RightGroup, RightGroupInit, RightGroupOutput},
         },
-        tray_item::{TrayEvent, TrayItemOutput},
+        tray_item::TrayClient,
     },
 };
 
@@ -43,26 +42,18 @@ pub struct Bar {
 #[derive(Debug)]
 pub struct BarInit {
     pub monitor: Monitor,
-    pub tray_items: Option<Arc<Mutex<BaseMap>>>,
+    pub tray_client: Option<Arc<TrayClient>>,
 }
 
 #[derive(Debug)]
 pub enum BarMsg {
-    TrayEvent(TrayEvent),
     ToggleActionPanel,
-    /// A tray item asked to be activated; relayed to the app.
-    TrayItemOutput(TrayItemOutput),
-}
-
-#[derive(Debug)]
-pub enum BarOutput {
-    TrayItemOutput(TrayItemOutput),
 }
 
 impl SimpleAsyncComponent for Bar {
     type Init = BarInit;
     type Input = BarMsg;
-    type Output = BarOutput;
+    type Output = ();
     type Root = gtk::Window;
     type Widgets = ();
 
@@ -78,7 +69,7 @@ impl SimpleAsyncComponent for Bar {
     async fn init(
         BarInit {
             monitor,
-            tray_items,
+            tray_client,
         }: Self::Init,
         window: Self::Root,
         sender: AsyncComponentSender<Self>,
@@ -99,14 +90,11 @@ impl SimpleAsyncComponent for Bar {
             right: RightGroup::builder()
                 .launch(RightGroupInit {
                     bar_config: config.bar,
-                    tray_items,
+                    tray_client,
                     monitor: monitor.clone(),
                 })
                 .forward(sender.input_sender(), |output| match output {
                     RightGroupOutput::ToggleActionPanel => BarMsg::ToggleActionPanel,
-                    RightGroupOutput::TrayItemOutput(tray_item_output) => {
-                        BarMsg::TrayItemOutput(tray_item_output)
-                    }
                 }),
 
             action_panel,
@@ -142,16 +130,9 @@ impl SimpleAsyncComponent for Bar {
         AsyncComponentParts { model, widgets: () }
     }
 
-    async fn update(&mut self, msg: Self::Input, sender: AsyncComponentSender<Self>) {
+    async fn update(&mut self, msg: Self::Input, _sender: AsyncComponentSender<Self>) {
         match msg {
-            // propagate tray update to the right group
-            BarMsg::TrayEvent(event) => self.right.emit(RightGroupMsg::TrayEvent(event)),
             BarMsg::ToggleActionPanel => self.action_panel.emit(ActionPanelMsg::Toggle),
-            BarMsg::TrayItemOutput(tray_item_output) => {
-                sender
-                    .output(BarOutput::TrayItemOutput(tray_item_output))
-                    .unwrap_or_else(|_| tracing::error!("couldn't relay tray item output to app"));
-            }
         }
     }
 

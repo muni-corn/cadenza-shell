@@ -3,7 +3,6 @@ use std::sync::Arc;
 use gdk4::Display;
 use gtk4::prelude::*;
 use relm4::prelude::*;
-use tokio::sync::Mutex;
 
 use crate::{
     battery::start_battery_service,
@@ -22,8 +21,8 @@ use crate::{
     sleep_monitor::run_sleep_monitor,
     weather::start_weather_polling,
     widgets::{
-        bar::{Bar, BarInit, BarMsg, BarOutput},
-        tray_item::{TrayClient, TrayEvent, TrayItemOutput},
+        bar::{Bar, BarInit},
+        tray_item::TrayClient,
     },
 };
 
@@ -37,13 +36,14 @@ struct FreshPanel {
 /// A bar together with the monitor it was created for.
 struct MonitorBar {
     monitor: gdk4::Monitor,
-    controller: AsyncController<Bar>,
+    /// Held so the bar lives exactly as long as its monitor entry.
+    _bar: AsyncController<Bar>,
 }
 
 pub(crate) struct CadenzaShellModel {
     display: Display,
     bars: Vec<MonitorBar>,
-    tray_client: Option<Arc<Mutex<TrayClient>>>,
+    tray_client: Option<Arc<TrayClient>>,
     /// Single global fresh-notification popup panel, anchored to one monitor.
     fresh_panel: Option<FreshPanel>,
 }
@@ -53,7 +53,6 @@ pub(crate) enum CadenzaShellMsg {
     /// The monitor list changed or a monitor was invalidated; bars are
     /// reconciled against the current list.
     MonitorsChanged,
-    HandleTrayItemOutput(TrayItemOutput),
     /// A notification event forwarded from the global broadcast channel.
     NotificationEvent(NotificationEvent),
     /// A notification was dismissed from the fresh panel.
@@ -64,7 +63,6 @@ pub(crate) enum CadenzaShellMsg {
 
 #[derive(Debug)]
 pub(crate) enum CadenzaShellCommandOutput {
-    TrayEvent(TrayEvent),
     NotificationEvent(NotificationEvent),
     /// Some notification events were missed, so popups may be stale.
     NotificationEventsMissed,
@@ -92,7 +90,7 @@ impl AsyncComponent for CadenzaShellModel {
             .await
             .inspect_err(|e| tracing::error!("couldn't setup tray client: {}", e))
             .ok()
-            .map(|c| Arc::new(Mutex::new(c)));
+            .map(Arc::new);
 
         // every service channel is created lazily on first use, so the
         // order services start in doesn't matter
@@ -186,41 +184,6 @@ impl AsyncComponent for CadenzaShellModel {
         // start pulseaudio service
         sender.command(|_, shutdown| shutdown.register(run_pulseaudio_loop()).drop_on_shutdown());
 
-        if let Some(ref tray_client) = tray_client {
-            let tray_client = Arc::clone(tray_client);
-            sender.command(|out, shutdown| {
-                shutdown
-                    .register(async move {
-                        // subscribe to tray events
-                        let mut rx = tray_client.lock().await.subscribe();
-                        loop {
-                            match rx.recv().await {
-                                Ok(event) => {
-                                    out.send(CadenzaShellCommandOutput::TrayEvent(event))
-                                        .unwrap_or_else(|_| {
-                                            tracing::error!(
-                                                "unable to send tray event as command output",
-                                            )
-                                        });
-                                }
-                                Err(tokio::sync::broadcast::error::RecvError::Lagged(n)) => {
-                                    tracing::warn!(
-                                        missed_events = n,
-                                        "app lagged on tray event receiver"
-                                    );
-                                }
-                                Err(tokio::sync::broadcast::error::RecvError::Closed) => {
-                                    tracing::warn!(
-                                        "tray event channel closed; app listener stopping"
-                                    );
-                                    break;
-                                }
-                            }
-                        }
-                    })
-                    .drop_on_shutdown()
-            });
-        }
         let display = Display::default().expect("could not get default display");
 
         let model = CadenzaShellModel {
@@ -252,23 +215,6 @@ impl AsyncComponent for CadenzaShellModel {
     ) {
         match msg {
             CadenzaShellMsg::MonitorsChanged => self.reconcile_bars(&sender).await,
-            CadenzaShellMsg::HandleTrayItemOutput(tray_item_output) => match tray_item_output {
-                TrayItemOutput::Activate(activate_request) => {
-                    if let Some(client) = &self.tray_client {
-                        client
-                            .lock()
-                            .await
-                            .activate(activate_request)
-                            .await
-                            .unwrap_or_else(|e| {
-                                tracing::error!(
-                                    "error sending activate request to tray client: {}",
-                                    e
-                                )
-                            });
-                    }
-                }
-            },
             CadenzaShellMsg::NotificationEvent(event) => {
                 let Some(panel) = &self.fresh_panel else {
                     return;
@@ -318,11 +264,6 @@ impl AsyncComponent for CadenzaShellModel {
         _root: &Self::Root,
     ) {
         match message {
-            Self::CommandOutput::TrayEvent(event) => {
-                for bar in &self.bars {
-                    bar.controller.emit(BarMsg::TrayEvent(event.clone()));
-                }
-            }
             Self::CommandOutput::NotificationEvent(event) => {
                 sender.input(CadenzaShellMsg::NotificationEvent(event));
             }
@@ -387,22 +328,12 @@ impl CadenzaShellModel {
     async fn create_bar(&mut self, monitor: gdk4::Monitor, sender: &AsyncComponentSender<Self>) {
         tracing::info!("creating bar for monitor: {:?}", monitor.connector());
 
-        let tray_items = if let Some(ref c) = self.tray_client {
-            Some(c.lock().await.items())
-        } else {
-            None
-        };
-
-        let controller = Bar::builder()
+        let bar = Bar::builder()
             .launch(BarInit {
                 monitor: monitor.clone(),
-                tray_items,
+                tray_client: self.tray_client.clone(),
             })
-            .forward(sender.input_sender(), |output| match output {
-                BarOutput::TrayItemOutput(tray_item_output) => {
-                    CadenzaShellMsg::HandleTrayItemOutput(tray_item_output)
-                }
-            });
+            .detach();
 
         let input = sender.input_sender().clone();
         monitor.connect_invalidate(move |monitor| {
@@ -410,10 +341,7 @@ impl CadenzaShellModel {
             input.emit(CadenzaShellMsg::MonitorsChanged);
         });
 
-        self.bars.push(MonitorBar {
-            monitor,
-            controller,
-        });
+        self.bars.push(MonitorBar { monitor, _bar: bar });
     }
 
     /// Creates the fresh notification panel anchored to `monitor` if none
