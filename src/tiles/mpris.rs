@@ -1,78 +1,27 @@
-use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
     icon_names::{MEDIA_PLAYBACK_PAUSE, MUSIC_NOTE_SINGLE},
     mpris::{MPRIS_STATE, MprisState, PlaybackStatus},
-    widgets::tile::{Tile, TileMsg},
+    widgets::tile::{Tile, TileState, state_tile},
 };
 
-#[derive(Debug)]
-pub struct MprisTile {
-    state: Option<MprisState>,
+/// The track the current media player is on, hidden without a player.
+pub fn mpris_tile() -> Controller<Tile> {
+    state_tile(&MPRIS_STATE, view).detach()
 }
 
-#[derive(Debug)]
-pub struct MprisWidgets {
-    root: <MprisTile as Component>::Root,
-    tile: Controller<Tile>,
-}
+fn view(state: &Option<MprisState>) -> Option<TileState> {
+    let state = state.as_ref()?;
+    let icon = match state.status {
+        PlaybackStatus::Playing => MUSIC_NOTE_SINGLE,
+        _ => MEDIA_PLAYBACK_PAUSE,
+    };
 
-impl SimpleComponent for MprisTile {
-    type Init = ();
-    type Input = Option<MprisState>;
-    type Output = ();
-    type Root = gtk::Box;
-    type Widgets = MprisWidgets;
-
-    fn init(
-        _init: Self::Init,
-        root: Self::Root,
-        sender: ComponentSender<Self>,
-    ) -> ComponentParts<Self> {
-        MPRIS_STATE.subscribe(sender.input_sender(), |data| data.clone());
-        sender.input(MPRIS_STATE.read().clone());
-
-        // initialize the tile component
-        let tile = Tile::builder().launch(Default::default()).detach();
-
-        root.append(tile.widget());
-
-        let model = MprisTile { state: None };
-
-        ComponentParts {
-            model,
-            widgets: MprisWidgets { root, tile },
-        }
-    }
-
-    fn update(&mut self, state: Self::Input, _sender: ComponentSender<Self>) {
-        self.state = state
-    }
-
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        match &self.state {
-            None => widgets.root.set_visible(false),
-            Some(MprisState {
-                title,
-                artist,
-                status,
-            }) => {
-                let icon = match status {
-                    PlaybackStatus::Playing => MUSIC_NOTE_SINGLE,
-                    _ => MEDIA_PLAYBACK_PAUSE,
-                }
-                .to_string();
-
-                widgets.tile.emit(TileMsg::SetIcon(Some(icon)));
-                widgets.tile.emit(TileMsg::SetPrimary(title.clone()));
-                widgets.tile.emit(TileMsg::SetSecondary(artist.clone()));
-                widgets.root.set_visible(true);
-            }
-        }
-    }
-
-    fn init_root() -> Self::Root {
-        gtk::Box::builder().visible(false).build()
-    }
+    Some(TileState {
+        icon: Some(icon.to_string()),
+        primary: state.title.clone(),
+        secondary: state.artist.clone(),
+        ..Default::default()
+    })
 }
