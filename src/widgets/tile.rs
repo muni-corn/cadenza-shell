@@ -29,7 +29,6 @@ pub enum TileMsg {
     SetIcon(Option<String>),
     SetPrimary(Option<String>),
     SetSecondary(Option<String>),
-    SetAttention(Attention),
     SetTooltip(Option<String>),
 }
 
@@ -119,7 +118,6 @@ impl SimpleComponent for Tile {
             TileMsg::SetIcon(icon) => state.icon = icon,
             TileMsg::SetPrimary(primary) => state.primary = primary,
             TileMsg::SetSecondary(secondary) => state.secondary = secondary,
-            TileMsg::SetAttention(attention) => state.attention = attention,
             TileMsg::SetTooltip(tooltip) => state.tooltip = tooltip,
         }
     }

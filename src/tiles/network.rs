@@ -8,13 +8,12 @@ use crate::{
     tiles::Attention,
     widgets::{
         menu_window::{MenuWindow, MenuWindowInit, MenuWindowMsg, MenuWindowOutput},
-        tile::{Tile, TileMsg, TileState},
+        tile::{Tile, TileOutput, TileState, state_tile},
     },
 };
 
 #[derive(Debug)]
 pub struct NetworkTile {
-    current_state: NetworkInfo,
     menu_open: bool,
     menu_window: Controller<MenuWindow>,
     // kept alive so the menu's component runtime (and its NETWORK_STATE
@@ -25,14 +24,13 @@ pub struct NetworkTile {
 
 #[derive(Debug)]
 pub enum NetworkTileMsg {
-    Update(NetworkInfo),
     ToggleMenu,
     MenuClosed,
 }
 
 #[derive(Debug)]
 pub struct NetworkTileWidgets {
-    tile: Controller<Tile>,
+    _tile: Controller<Tile>,
 }
 
 impl SimpleComponent for NetworkTile {
@@ -47,20 +45,13 @@ impl SimpleComponent for NetworkTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        NETWORK_STATE.subscribe(sender.input_sender(), |state| {
-            NetworkTileMsg::Update(state.clone())
-        });
-
-        let current_state = NETWORK_STATE.read().clone();
-        // initialize the Tile component
-        let tile = Tile::builder()
-            .launch(Some(TileState {
-                icon: Some(get_icon(&current_state).to_string()),
-                secondary: get_secondary_text(&current_state),
-                tooltip: Some(get_tooltip_text(&current_state)),
-                ..Default::default()
-            }))
-            .detach();
+        // toggle the menu window on click; authoritative for open/closed
+        // state so it doesn't depend on the window's own visibility (see
+        // MenuWindow's docs on why it doesn't dismiss on focus loss)
+        let tile = state_tile(&NETWORK_STATE, view)
+            .forward(sender.input_sender(), |TileOutput::Clicked| {
+                NetworkTileMsg::ToggleMenu
+            });
 
         // initialize the network menu component
         let network_menu = NetworkMenu::builder().launch(()).detach();
@@ -78,33 +69,21 @@ impl SimpleComponent for NetworkTile {
                 MenuWindowOutput::Hidden => NetworkTileMsg::MenuClosed,
             });
 
-        // toggle the menu window on click; authoritative for open/closed
-        // state so it doesn't depend on the window's own visibility (see
-        // MenuWindow's docs on why it doesn't dismiss on focus loss)
-        tile.widget().connect_clicked({
-            let sender = sender.clone();
-            move |_| sender.input(NetworkTileMsg::ToggleMenu)
-        });
-
         root.append(tile.widget());
 
         ComponentParts {
             model: NetworkTile {
-                current_state,
                 menu_open: false,
                 menu_window,
                 network_menu,
             },
-            widgets: NetworkTileWidgets { tile },
+            widgets: NetworkTileWidgets { _tile: tile },
         }
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         tracing::debug!("network tile received update: {msg:?}");
         match msg {
-            NetworkTileMsg::Update(new_info) => {
-                self.current_state = new_info;
-            }
             NetworkTileMsg::ToggleMenu => {
                 self.menu_open = !self.menu_open;
                 self.menu_window.emit(if self.menu_open {
@@ -122,25 +101,19 @@ impl SimpleComponent for NetworkTile {
         }
     }
 
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        let icon = get_icon(&self.current_state);
-
-        widgets.tile.emit(TileMsg::SetIcon(Some(icon.to_string())));
-        widgets.tile.emit(TileMsg::SetPrimary(None));
-        widgets.tile.emit(TileMsg::SetSecondary(get_secondary_text(
-            &self.current_state,
-        )));
-        widgets.tile.emit(TileMsg::SetTooltip(Some(get_tooltip_text(
-            &self.current_state,
-        ))));
-        widgets
-            .tile
-            .emit(TileMsg::SetAttention(get_attention(&self.current_state)))
-    }
-
     fn init_root() -> Self::Root {
         gtk::Box::builder().build()
     }
+}
+
+fn view(info: &NetworkInfo) -> Option<TileState> {
+    Some(TileState {
+        icon: Some(get_icon(info).to_string()),
+        primary: None,
+        secondary: get_secondary_text(info),
+        attention: get_attention(info),
+        tooltip: Some(get_tooltip_text(info)),
+    })
 }
 
 fn get_secondary_text(info: &NetworkInfo) -> Option<String> {
