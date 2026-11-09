@@ -18,6 +18,7 @@ use crate::{
         state::{BLUETOOTH_STATE, BluetoothState, DeviceInfo},
     },
     settings, sleep_monitor,
+    utils::shared_state::set_if_changed,
 };
 
 /// Events produced by the watcher tasks for the service loop.
@@ -151,9 +152,9 @@ impl BluetoothService {
                 if let Some(handle) = self.device_event_tasks.remove(&address) {
                     handle.abort();
                 }
-                if let Some(ref mut state) = *BLUETOOTH_STATE.write() {
+                update_state(|state| {
                     state.devices.remove(&address);
-                }
+                });
             }
             BluetoothEvent::Adapter(AdapterEvent::PropertyChanged(property)) => {
                 apply_adapter_property(property);
@@ -227,7 +228,7 @@ impl BluetoothService {
             Ok(adapter) => adapter,
             Err(e) => {
                 tracing::warn!("no bluetooth adapter currently available: {e}");
-                *BLUETOOTH_STATE.write() = None;
+                set_if_changed(&BLUETOOTH_STATE, None);
                 return;
             }
         };
@@ -271,7 +272,7 @@ impl BluetoothService {
         };
 
         self.adapter = Some(adapter);
-        *BLUETOOTH_STATE.write() = Some(state);
+        set_if_changed(&BLUETOOTH_STATE, Some(state));
     }
 
     /// Fetches a full property snapshot for a newly discovered device and
@@ -288,11 +289,9 @@ impl BluetoothService {
         self.subscribe_device(address, device.clone()).await;
 
         match build_device_info(&device).await {
-            Ok(info) => {
-                if let Some(ref mut state) = *BLUETOOTH_STATE.write() {
-                    state.devices.insert(address, info);
-                }
-            }
+            Ok(info) => update_state(|state| {
+                state.devices.insert(address, info);
+            }),
             Err(e) => tracing::debug!("couldn't read new bluetooth device {address}: {e}"),
         }
     }
@@ -344,11 +343,11 @@ impl BluetoothService {
         let powered = adapter.is_powered().await.unwrap_or(false);
         let discovering = adapter.is_discovering().await.unwrap_or(false);
 
-        if let Some(ref mut state) = *BLUETOOTH_STATE.write() {
+        update_state(|state| {
             state.powered = powered;
             state.discovering = discovering;
             state.devices = devices;
-        }
+        });
     }
 
     /// Forwards a device's property changes into the event channel,
@@ -469,15 +468,11 @@ fn apply_adapter_property(property: AdapterProperty) {
         return;
     }
 
-    let mut guard = BLUETOOTH_STATE.write();
-    let Some(state) = guard.as_mut() else {
-        return;
-    };
-    match property {
+    update_state(|state| match property {
         AdapterProperty::Powered(powered) => state.powered = powered,
         AdapterProperty::Discovering(discovering) => state.discovering = discovering,
         _ => {}
-    }
+    });
 }
 
 /// Applies a device property change to [`BLUETOOTH_STATE`].
@@ -495,21 +490,29 @@ fn apply_device_property(address: Address, property: DeviceProperty) {
         return;
     }
 
-    let mut guard = BLUETOOTH_STATE.write();
-    let Some(info) = guard
-        .as_mut()
-        .and_then(|state| state.devices.get_mut(&address))
-    else {
-        tracing::debug!("property change for untracked device {address}, ignoring");
+    update_state(|state| {
+        let Some(info) = state.devices.get_mut(&address) else {
+            tracing::debug!("property change for untracked device {address}, ignoring");
+            return;
+        };
+        match property {
+            DeviceProperty::Connected(connected) => info.connected = connected,
+            DeviceProperty::Alias(alias) => info.alias = alias,
+            DeviceProperty::Icon(icon) => info.icon = Some(icon),
+            DeviceProperty::Paired(paired) => info.paired = paired,
+            _ => {}
+        }
+    });
+}
+
+/// Applies `update` to a copy of the current state and publishes it only if
+/// something changed, since every write wakes every tile and menu.
+fn update_state(update: impl FnOnce(&mut BluetoothState)) {
+    let Some(mut state) = BLUETOOTH_STATE.read().clone() else {
         return;
     };
-    match property {
-        DeviceProperty::Connected(connected) => info.connected = connected,
-        DeviceProperty::Alias(alias) => info.alias = alias,
-        DeviceProperty::Icon(icon) => info.icon = Some(icon),
-        DeviceProperty::Paired(paired) => info.paired = paired,
-        _ => {}
-    }
+    update(&mut state);
+    set_if_changed(&BLUETOOTH_STATE, Some(state));
 }
 
 /// Registers the pairing agent unless it's already registered.
