@@ -12,11 +12,14 @@ use crate::{
         bluetooth::BluetoothTile,
         brightness::BrightnessTile,
         network::NetworkTile,
-        notifications::{NotificationsTile, NotificationsTileOutput},
+        notifications::notifications_tile,
         pulseaudio::PulseAudioTile,
         tray::{TrayMsg, TrayWidget},
     },
-    widgets::{tile::Tile, tray_item::TrayItemOutput},
+    widgets::{
+        tile::{Tile, TileOutput},
+        tray_item::TrayItemOutput,
+    },
 };
 
 #[derive(Debug)]
@@ -32,7 +35,7 @@ pub struct RightWidgets {
 
     _network: Controller<NetworkTile>,
     _battery: Controller<Tile>,
-    _notifications: Controller<NotificationsTile>,
+    _notifications: Controller<Tile>,
 }
 
 pub struct RightGroupInit {
@@ -83,12 +86,10 @@ impl SimpleComponent for RightGroup {
         let bluetooth = BluetoothTile::builder().launch(monitor.clone()).detach();
         let network = NetworkTile::builder().launch(monitor.clone()).detach();
         let battery = battery_tile();
-        let notifications = NotificationsTile::builder().launch(()).forward(
-            sender.output_sender(),
-            |msg| match msg {
-                NotificationsTileOutput::ToggleActionPanel => RightGroupOutput::ToggleActionPanel,
-            },
-        );
+        let notifications = notifications_tile()
+            .forward(sender.output_sender(), |TileOutput::Clicked| {
+                RightGroupOutput::ToggleActionPanel
+            });
         let tray_opt = tray_items.and_then(|m| match m.lock() {
             Ok(items) => Some(
                 TrayWidget::builder()
