@@ -5,21 +5,12 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    battery::start_battery_service,
-    bluetooth::run_bluetooth_service,
-    brightness::start_brightness_watcher,
-    mpris::run_mpris_service,
-    network::run_network_service,
-    niri,
     notifications::{
         NotificationEvent,
         fresh::{FreshNotifications, FreshNotificationsMsg, FreshNotificationsOutput},
-        run_notifications_service, subscribe_events,
+        subscribe_events,
         types::InvokedAction,
     },
-    pulseaudio::run_pulseaudio_loop,
-    sleep_monitor::run_sleep_monitor,
-    weather::start_weather_polling,
     widgets::{
         bar::{Bar, BarInit},
         tray_item::TrayClient,
@@ -92,18 +83,7 @@ impl AsyncComponent for CadenzaShellModel {
             .ok()
             .map(Arc::new);
 
-        // every service channel is created lazily on first use, so the
-        // order services start in doesn't matter
-
-        // start sleep monitor
-        sender.command(|_, shutdown| shutdown.register(run_sleep_monitor()).drop_on_shutdown());
-
-        // start notifications service (registers the D-Bus daemon)
-        sender.command(|_, shutdown| {
-            shutdown
-                .register(run_notifications_service())
-                .drop_on_shutdown()
-        });
+        crate::services::start_all(&sender);
 
         // subscribe to notification events and forward them into update()
         sender.command(|out, shutdown| {
@@ -139,50 +119,6 @@ impl AsyncComponent for CadenzaShellModel {
                 })
                 .drop_on_shutdown()
         });
-
-        // start battery watching
-        sender.command(|_, shutdown| {
-            shutdown
-                .register(start_battery_service())
-                .drop_on_shutdown()
-        });
-
-        // start bluetooth watching
-        sender.command(|_, shutdown| {
-            shutdown
-                .register(run_bluetooth_service())
-                .drop_on_shutdown()
-        });
-
-        // start brightness watching
-        sender.command(|_, shutdown| {
-            shutdown
-                .register(start_brightness_watcher())
-                .drop_on_shutdown()
-        });
-
-        // start network service
-        sender.command(|_, shutdown| shutdown.register(run_network_service()).drop_on_shutdown());
-
-        // start weather watching
-        sender.command(|_, shutdown| {
-            shutdown
-                .register(start_weather_polling())
-                .drop_on_shutdown()
-        });
-
-        // start mpris service
-        sender.command(|_, shutdown| shutdown.register(run_mpris_service()).drop_on_shutdown());
-
-        // start niri event watching
-        sender.command(|_, shutdown| {
-            shutdown
-                .register(niri::start_event_listener())
-                .drop_on_shutdown()
-        });
-
-        // start pulseaudio service
-        sender.command(|_, shutdown| shutdown.register(run_pulseaudio_loop()).drop_on_shutdown());
 
         let display = Display::default().expect("could not get default display");
 

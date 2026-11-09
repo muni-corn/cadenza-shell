@@ -10,6 +10,7 @@ mod network_menu;
 mod niri;
 mod notifications;
 mod pulseaudio;
+mod services;
 mod settings;
 mod sleep_monitor;
 mod sound;
