@@ -2,9 +2,12 @@ use bluer::Address;
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::bluetooth::{
-    self, BLUETOOTH_STATE, BluetoothState, DeviceInfo, PAIRING_PROMPT, PairingPrompt, PairingReply,
-    PairingRequest, get_icon,
+use crate::{
+    bluetooth::{
+        self, BLUETOOTH_STATE, BluetoothState, DeviceInfo, PAIRING_PROMPT, PairingPrompt,
+        PairingReply, PairingRequest, get_icon,
+    },
+    widgets::menu_parts::{MenuHeader, PromptBox, menu_root, scrolled_content},
 };
 
 #[derive(Debug)]
@@ -41,17 +44,10 @@ pub enum BluetoothMenuMsg {
 
 #[derive(Debug)]
 pub struct BluetoothMenuWidgets {
-    icon: gtk::Image,
-    toggle_switch: gtk::Switch,
-    toggle_switch_handler: glib::SignalHandlerId,
+    header: MenuHeader,
     status_label: gtk::Label,
     scan_button: gtk::Button,
-    pairing_box: gtk::Box,
-    pairing_label: gtk::Label,
-    pairing_entry: gtk::Entry,
-    pairing_error_label: gtk::Label,
-    pairing_confirm_button: gtk::Button,
-    pairing_cancel_button: gtk::Button,
+    pairing_prompt: PromptBox,
 }
 
 impl SimpleComponent for BluetoothMenu {
@@ -103,55 +99,17 @@ impl SimpleComponent for BluetoothMenu {
             resync_power_switch: false,
         };
 
-        // create header box
-        let header_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(20)
-            .hexpand(true)
-            .visible(true)
-            .css_classes(["content-title"])
-            .build();
+        let header = MenuHeader::new(
+            get_icon(model.bluetooth_state.as_ref()),
+            model.bluetooth_state.as_ref().is_some_and(|s| s.powered),
+            {
+                let sender = sender.clone();
+                move |powered| sender.input(BluetoothMenuMsg::ToggleBluetooth(powered))
+            },
+        );
+        root.append(&header.root);
 
-        // create bluetooth icon
-        let icon = gtk::Image::builder()
-            .icon_size(gtk::IconSize::Large)
-            .hexpand(true)
-            .halign(gtk::Align::Start)
-            .icon_name(get_icon(model.bluetooth_state.as_ref()))
-            .build();
-
-        // create toggle switch
-        let toggle_switch = gtk::Switch::builder()
-            .halign(gtk::Align::End)
-            .valign(gtk::Align::End)
-            .active(model.bluetooth_state.as_ref().map_or_default(|s| s.powered))
-            .build();
-
-        // connect toggle switch handler
-        let toggle_switch_handler = toggle_switch.connect_state_set({
-            let sender = sender.clone();
-            move |_, state| {
-                sender.input(BluetoothMenuMsg::ToggleBluetooth(state));
-                glib::Propagation::Proceed
-            }
-        });
-
-        header_box.append(&icon);
-        header_box.append(&toggle_switch);
-        root.append(&header_box);
-
-        // create scrolled window for content
-        let scrolled_window = gtk::ScrolledWindow::builder()
-            .vscrollbar_policy(gtk::PolicyType::Automatic)
-            .hscrollbar_policy(gtk::PolicyType::Never)
-            .vexpand(true)
-            .build();
-
-        // create content box
-        let content_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(16)
-            .build();
+        let (scrolled_window, content_box) = scrolled_content();
 
         // status + scan row
         let status_box = gtk::Box::builder()
@@ -176,67 +134,26 @@ impl SimpleComponent for BluetoothMenu {
         status_box.append(&status_label);
         status_box.append(&scan_button);
 
-        // pairing prompt (initially hidden)
-        let pairing_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(8)
-            .visible(false)
-            .build();
-
-        let pairing_label = gtk::Label::builder()
-            .halign(gtk::Align::Start)
-            .wrap(true)
-            .build();
-
-        let pairing_entry = gtk::Entry::builder()
-            .placeholder_text("PIN or passkey")
-            .activates_default(true)
-            .build();
-
-        let pairing_error_label = gtk::Label::builder()
-            .halign(gtk::Align::Start)
-            .css_classes(["warning"])
-            .visible(false)
-            .build();
-
-        let pairing_buttons_box = gtk::Box::builder().spacing(8).build();
-
-        let pairing_cancel_button = gtk::Button::builder().label("Cancel").build();
-        pairing_cancel_button.connect_clicked({
-            let sender = sender.clone();
-            move |_| sender.input(BluetoothMenuMsg::PairingCancel)
-        });
-
-        let pairing_confirm_button = gtk::Button::builder().label("Confirm").build();
-        // the entry is only visible for PinCode/Passkey requests; for
-        // ConfirmPasskey/Authorize it's hidden and there's nothing to submit,
-        // just a yes/no
-        let submit = {
-            let sender = sender.clone();
-            let pairing_entry = pairing_entry.clone();
-            move || {
-                if pairing_entry.get_visible() {
-                    sender.input(BluetoothMenuMsg::PairingSubmit(
-                        pairing_entry.text().to_string(),
-                    ));
-                } else {
-                    sender.input(BluetoothMenuMsg::PairingConfirm);
+        // the entry is only shown for PinCode/Passkey requests; for
+        // ConfirmPasskey/Authorize there's nothing to submit, just a yes/no
+        let pairing_prompt = PromptBox::new(
+            "Confirm",
+            "PIN or passkey",
+            false,
+            {
+                let sender = sender.clone();
+                move |text| {
+                    sender.input(match text {
+                        Some(text) => BluetoothMenuMsg::PairingSubmit(text),
+                        None => BluetoothMenuMsg::PairingConfirm,
+                    });
                 }
-            }
-        };
-        pairing_confirm_button.connect_clicked({
-            let submit = submit.clone();
-            move |_| submit()
-        });
-        pairing_entry.connect_activate(move |_| submit());
-
-        pairing_buttons_box.append(&pairing_cancel_button);
-        pairing_buttons_box.append(&pairing_confirm_button);
-
-        pairing_box.append(&pairing_label);
-        pairing_box.append(&pairing_entry);
-        pairing_box.append(&pairing_error_label);
-        pairing_box.append(&pairing_buttons_box);
+            },
+            {
+                let sender = sender.clone();
+                move || sender.input(BluetoothMenuMsg::PairingCancel)
+            },
+        );
 
         // paired devices section
         let paired_header = gtk::Label::builder()
@@ -253,26 +170,18 @@ impl SimpleComponent for BluetoothMenu {
             .build();
 
         content_box.append(&status_box);
-        content_box.append(&pairing_box);
+        content_box.append(&pairing_prompt.root);
         content_box.append(&paired_header);
         content_box.append(model.paired_devices.widget());
         content_box.append(&nearby_header);
         content_box.append(model.nearby_devices.widget());
-        scrolled_window.set_child(Some(&content_box));
         root.append(&scrolled_window);
 
         let mut widgets = BluetoothMenuWidgets {
-            icon,
-            toggle_switch,
-            toggle_switch_handler,
+            header,
             status_label,
             scan_button,
-            pairing_box,
-            pairing_label,
-            pairing_entry,
-            pairing_error_label,
-            pairing_confirm_button,
-            pairing_cancel_button,
+            pairing_prompt,
         };
 
         let mut model = model;
@@ -367,20 +276,12 @@ impl SimpleComponent for BluetoothMenu {
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         widgets
-            .icon
-            .set_icon_name(Some(get_icon(self.bluetooth_state.as_ref())));
+            .header
+            .set_icon(get_icon(self.bluetooth_state.as_ref()));
 
         let is_powered = self.bluetooth_state.as_ref().map_or_default(|s| s.powered);
-
-        // set_active emits state-set, which would send ToggleBluetooth again
-        if self.resync_power_switch && widgets.toggle_switch.is_active() != is_powered {
-            widgets
-                .toggle_switch
-                .block_signal(&widgets.toggle_switch_handler);
-            widgets.toggle_switch.set_active(is_powered);
-            widgets
-                .toggle_switch
-                .unblock_signal(&widgets.toggle_switch_handler);
+        if self.resync_power_switch {
+            widgets.header.sync_switch(is_powered);
         }
 
         widgets
@@ -396,13 +297,7 @@ impl SimpleComponent for BluetoothMenu {
     }
 
     fn init_root() -> Self::Root {
-        gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .spacing(16)
-            .vexpand(true)
-            .width_request(320)
-            .height_request(512)
-            .build()
+        menu_root()
     }
 }
 
@@ -433,12 +328,9 @@ fn scan_button_label(state: &Option<BluetoothState>) -> String {
 
 fn render_pairing_prompt(model: &BluetoothMenu, widgets: &mut BluetoothMenuWidgets) {
     let Some(prompt) = &model.pairing_prompt else {
-        widgets.pairing_box.set_visible(false);
-        widgets.pairing_entry.set_text("");
+        widgets.pairing_prompt.hide();
         return;
     };
-
-    widgets.pairing_box.set_visible(true);
 
     let device = device_name(&model.bluetooth_state, prompt.address);
     let (label, show_entry, show_buttons) = match &prompt.request {
@@ -461,23 +353,12 @@ fn render_pairing_prompt(model: &BluetoothMenu, widgets: &mut BluetoothMenuWidge
         }
     };
 
-    widgets.pairing_label.set_label(&label);
-    widgets.pairing_entry.set_visible(show_entry);
-    widgets.pairing_confirm_button.set_visible(show_buttons);
-    widgets.pairing_cancel_button.set_visible(show_buttons);
-
     widgets
-        .pairing_error_label
-        .set_visible(model.pairing_error.is_some());
-    widgets
-        .pairing_error_label
-        .set_label(model.pairing_error.unwrap_or_default());
-
+        .pairing_prompt
+        .show(&label, show_entry, show_buttons);
+    widgets.pairing_prompt.set_error(model.pairing_error);
     if model.reset_pairing_entry {
-        widgets.pairing_entry.set_text("");
-        if show_entry {
-            widgets.pairing_entry.grab_focus();
-        }
+        widgets.pairing_prompt.reset_entry();
     }
 }
 
