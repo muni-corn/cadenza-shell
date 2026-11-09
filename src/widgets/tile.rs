@@ -21,16 +21,6 @@ pub struct Tile {
 }
 
 #[derive(Debug)]
-pub enum TileMsg {
-    /// Replaces everything the tile shows; `None` hides it.
-    Set(Option<TileState>),
-    // legacy per-field setters, still used by tiles that haven't moved to
-    // TileState
-    SetPrimary(Option<String>),
-    SetSecondary(Option<String>),
-}
-
-#[derive(Debug)]
 pub enum TileOutput {
     Clicked,
 }
@@ -46,7 +36,8 @@ pub struct TileWidgets {
 impl SimpleComponent for Tile {
     /// The initial state; `None` starts the tile hidden.
     type Init = Option<TileState>;
-    type Input = TileMsg;
+    /// Replaces everything the tile shows; `None` hides it.
+    type Input = Option<TileState>;
     type Output = TileOutput;
     type Root = gtk::Button;
     type Widgets = TileWidgets;
@@ -104,18 +95,8 @@ impl SimpleComponent for Tile {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
-        if let TileMsg::Set(state) = msg {
-            self.state = state;
-            return;
-        }
-
-        let state = self.state.get_or_insert_default();
-        match msg {
-            TileMsg::Set(_) => {}
-            TileMsg::SetPrimary(primary) => state.primary = primary,
-            TileMsg::SetSecondary(secondary) => state.secondary = secondary,
-        }
+    fn update(&mut self, state: Self::Input, _sender: ComponentSender<Self>) {
+        self.state = state;
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
@@ -171,7 +152,7 @@ where
 {
     let tile = Tile::builder().launch(None);
     // subscribe before the first read so a write in between isn't missed
-    state.subscribe(tile.sender(), move |data| TileMsg::Set(view(data)));
-    tile.emit(TileMsg::Set(view(&state.read())));
+    state.subscribe(tile.sender(), view);
+    tile.emit(view(&state.read()));
     tile
 }

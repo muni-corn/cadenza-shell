@@ -6,7 +6,7 @@ use relm4::prelude::*;
 
 use crate::{
     icon_names,
-    widgets::tile::{Tile, TileMsg, TileState},
+    widgets::tile::{Tile, TileState},
 };
 
 #[derive(Debug)]
@@ -27,17 +27,7 @@ impl Component for ClockTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let current_time = Local::now();
-
-        // initialize the Tile component
-        let tile = Tile::builder()
-            .launch(Some(TileState {
-                icon: Some(icon_names::CLOCK.to_string()),
-                primary: Some(format_time(&current_time)),
-                secondary: Some(format_date(&current_time)),
-                ..Default::default()
-            }))
-            .detach();
+        let tile = Tile::builder().launch(view(&Local::now())).detach();
 
         root.append(tile.widget());
 
@@ -67,14 +57,21 @@ impl Component for ClockTile {
         _sender: ComponentSender<Self>,
         _root: &Self::Root,
     ) {
-        self.tile.emit(TileMsg::SetPrimary(Some(format_time(&now))));
-        self.tile
-            .emit(TileMsg::SetSecondary(Some(format_date(&now))));
+        self.tile.emit(view(&now));
     }
 
     fn init_root() -> Self::Root {
         gtk::Box::new(gtk::Orientation::Horizontal, 0)
     }
+}
+
+fn view(now: &DateTime<Local>) -> Option<TileState> {
+    Some(TileState {
+        icon: Some(icon_names::CLOCK.to_string()),
+        primary: Some(format_time(now)),
+        secondary: Some(format_date(now)),
+        ..Default::default()
+    })
 }
 
 /// Returns how long to wait until just after the next minute starts.
