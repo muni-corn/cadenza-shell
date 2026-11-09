@@ -67,7 +67,7 @@ pub(super) async fn spawn_property_watchers(
                 continue;
             }
             event_tx_clone
-                .send(NetworkPropertyChange::Primary)
+                .send(NetworkPropertyChange::Refetch("primary connection changed"))
                 .unwrap_or_else(|e| {
                     tracing::error!("couldn't send primary connection change: {e}")
                 });
@@ -113,12 +113,12 @@ pub(super) async fn spawn_property_watchers(
 pub(super) async fn spawn_name_owner_watcher(
     conn: &zbus::Connection,
     event_tx: &UnboundedSender<NetworkPropertyChange>,
-) {
+) -> Option<tokio::task::AbortHandle> {
     let dbus_proxy = match zbus::fdo::DBusProxy::new(conn).await {
         Ok(p) => p,
         Err(e) => {
             tracing::error!("couldn't create DBus proxy for name owner watching: {e}");
-            return;
+            return None;
         }
     };
 
@@ -126,12 +126,12 @@ pub(super) async fn spawn_name_owner_watcher(
         Ok(s) => s,
         Err(e) => {
             tracing::error!("couldn't subscribe to NameOwnerChanged: {e}");
-            return;
+            return None;
         }
     };
 
     let event_tx = event_tx.clone();
-    relm4::spawn(async move {
+    let handle = relm4::spawn(async move {
         while let Some(signal) = stream.next().await {
             let Ok(args) = signal
                 .args()
@@ -164,6 +164,7 @@ pub(super) async fn spawn_name_owner_watcher(
         }
         tracing::warn!("stream for NameOwnerChanged has closed");
     });
+    Some(handle.abort_handle())
 }
 
 /// Subscribes to strength property changes on an access point and forwards
@@ -215,7 +216,7 @@ pub(super) async fn subscribe_ap_strength(
 }
 
 /// Subscribes to active-access-point changes on a wireless device and
-/// forwards them as [`NetworkPropertyChange::ActiveApChanged`] events.
+/// forwards them as [`NetworkPropertyChange::Refetch`] events.
 ///
 /// This catches roaming to a different BSSID on the same SSID, which does
 /// not change `PrimaryConnection` and would otherwise leave the strength
@@ -255,8 +256,10 @@ pub(super) async fn subscribe_active_ap(
     stream.next().await;
 
     while stream.next().await.is_some() {
-        tx.send(NetworkPropertyChange::ActiveApChanged)
-            .unwrap_or_else(|e| tracing::error!("couldn't send active AP change: {e}"));
+        tx.send(NetworkPropertyChange::Refetch(
+            "active access point changed",
+        ))
+        .unwrap_or_else(|e| tracing::error!("couldn't send active AP change: {e}"));
     }
 
     tracing::debug!("active access point subscription for device {device_path} ended");
