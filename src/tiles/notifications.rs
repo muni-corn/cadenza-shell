@@ -5,7 +5,7 @@ use crate::{
     icon_names::BELL,
     notifications::{NOTIFICATIONS_STATE, NotificationsState},
     tiles::Attention,
-    widgets::tile::{Tile, TileInit, TileMsg, TileOutput},
+    widgets::tile::{Tile, TileMsg, TileOutput, TileState},
 };
 
 #[derive(Debug)]
@@ -53,12 +53,12 @@ impl SimpleComponent for NotificationsTile {
         let widgets = NotificationsTileWidgets {
             root,
             tile: Tile::builder()
-                .launch(TileInit {
-                    icon_name: Some(BELL.to_string()),
+                .launch(Some(TileState {
+                    icon: Some(BELL.to_string()),
                     primary: count_text(notification_count),
                     attention: count_attention(notification_count),
                     ..Default::default()
-                })
+                }))
                 .forward(sender.input_sender(), |TileOutput::Clicked| {
                     NotificationsTileMsg::TileClicked
                 }),

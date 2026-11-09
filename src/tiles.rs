@@ -11,10 +11,11 @@ pub mod pulseaudio;
 pub mod tray;
 pub mod weather;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Default)]
 pub enum Attention {
     Alarm,
     Warning,
+    #[default]
     Normal,
     Dim,
 }

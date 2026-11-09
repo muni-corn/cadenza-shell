@@ -1,20 +1,31 @@
 use gtk4::prelude::*;
-use relm4::prelude::*;
+use relm4::{Component, SharedState, prelude::*};
 
 use crate::{settings, tiles::Attention};
 
+/// What a tile shows.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct TileState {
+    pub icon: Option<String>,
+    pub primary: Option<String>,
+    pub secondary: Option<String>,
+    pub attention: Attention,
+    pub tooltip: Option<String>,
+}
+
+/// A bar button with an icon and up to two labels.
 #[derive(Clone, Debug)]
 pub struct Tile {
-    icon: Option<String>,
-    primary: Option<String>,
-    secondary: Option<String>,
-    attention: Attention,
-    tooltip: Option<String>,
+    /// `None` hides the tile.
+    state: Option<TileState>,
 }
 
 #[derive(Debug)]
 pub enum TileMsg {
-    Click,
+    /// Replaces everything the tile shows; `None` hides it.
+    Set(Option<TileState>),
+    // legacy per-field setters, still used by tiles that haven't moved to
+    // TileState
     SetIcon(Option<String>),
     SetPrimary(Option<String>),
     SetSecondary(Option<String>),
@@ -35,64 +46,39 @@ pub struct TileWidgets {
     secondary_label: gtk::Label,
 }
 
-pub struct TileInit {
-    pub icon_name: Option<String>,
-    pub primary: Option<String>,
-    pub secondary: Option<String>,
-    pub attention: Attention,
-    pub tooltip: Option<String>,
-}
-
-impl Default for TileInit {
-    fn default() -> Self {
-        Self {
-            icon_name: None,
-            primary: None,
-            secondary: None,
-            attention: Attention::Normal,
-            tooltip: None,
-        }
-    }
-}
-
 impl SimpleComponent for Tile {
-    type Init = TileInit;
+    /// The initial state; `None` starts the tile hidden.
+    type Init = Option<TileState>;
     type Input = TileMsg;
     type Output = TileOutput;
     type Root = gtk::Button;
     type Widgets = TileWidgets;
 
     fn init(
-        init: Self::Init,
+        state: Self::Init,
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        let model = Tile {
-            icon: init.icon_name,
-            primary: init.primary,
-            secondary: init.secondary,
-            attention: init.attention,
-            tooltip: init.tooltip,
-        };
+        let model = Tile { state };
 
         // create container
         let container = gtk::Box::new(gtk::Orientation::Horizontal, 8);
 
         // create widgets
         let icon = gtk::Image::builder()
-            .css_classes(model.attention.with_classes(&["icon"]))
+            .css_classes(["icon"])
             .pixel_size(settings::get_config().tiles.icon_size)
             .width_request(settings::get_config().tiles.icon_size)
             .build();
 
         let primary_label = gtk::Label::builder()
-            .css_classes(model.attention.with_classes(&["primary"]))
+            .css_classes(["primary"])
             .ellipsize(gtk::pango::EllipsizeMode::End)
             .max_width_chars(64)
             .build();
 
         let secondary_label = gtk::Label::builder()
-            .css_classes(model.attention.with_classes(&["secondary"]))
+            .css_classes(["secondary"])
             .ellipsize(gtk::pango::EllipsizeMode::End)
             .max_width_chars(20)
             .build();
@@ -105,11 +91,8 @@ impl SimpleComponent for Tile {
         // add the container to the button
         root.set_child(Some(&container));
 
-        // setup click handler
-        let sender_clone = sender.clone();
-        root.connect_clicked(move |_| {
-            sender_clone.input(TileMsg::Click);
-        });
+        let output = sender.output_sender().clone();
+        root.connect_clicked(move |_| output.emit(TileOutput::Clicked));
 
         let mut widgets = TileWidgets {
             root: root.clone(),
@@ -124,70 +107,77 @@ impl SimpleComponent for Tile {
         ComponentParts { model, widgets }
     }
 
-    fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
+        if let TileMsg::Set(state) = msg {
+            self.state = state;
+            return;
+        }
+
+        let state = self.state.get_or_insert_default();
         match msg {
-            TileMsg::Click => {
-                let _ = sender.output(TileOutput::Clicked);
-            }
-            TileMsg::SetIcon(icon) => {
-                self.icon = icon;
-            }
-            TileMsg::SetPrimary(primary) => {
-                self.primary = primary;
-            }
-            TileMsg::SetSecondary(secondary) => {
-                self.secondary = secondary;
-            }
-            TileMsg::SetAttention(attention) => {
-                self.attention = attention;
-            }
-            TileMsg::SetTooltip(tooltip) => {
-                self.tooltip = tooltip;
-            }
+            TileMsg::Set(_) => {}
+            TileMsg::SetIcon(icon) => state.icon = icon,
+            TileMsg::SetPrimary(primary) => state.primary = primary,
+            TileMsg::SetSecondary(secondary) => state.secondary = secondary,
+            TileMsg::SetAttention(attention) => state.attention = attention,
+            TileMsg::SetTooltip(tooltip) => state.tooltip = tooltip,
         }
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
+        widgets.root.set_visible(self.state.is_some());
+        let Some(state) = &self.state else {
+            return;
+        };
+
         // update attention css classes
         widgets
             .icon
-            .set_css_classes(&self.attention.with_classes(&["icon"]));
+            .set_css_classes(&state.attention.with_classes(&["icon"]));
         widgets
             .primary_label
-            .set_css_classes(&self.attention.with_classes(&["primary"]));
+            .set_css_classes(&state.attention.with_classes(&["primary"]));
         widgets
             .secondary_label
-            .set_css_classes(&self.attention.with_classes(&["secondary"]));
+            .set_css_classes(&state.attention.with_classes(&["secondary"]));
 
-        // update icon
-        if let Some(icon_name) = &self.icon {
-            widgets.icon.set_icon_name(Some(icon_name));
-            widgets.icon.set_visible(true);
-        } else {
-            widgets.icon.set_visible(false);
-        }
+        widgets.icon.set_visible(state.icon.is_some());
+        widgets.icon.set_icon_name(state.icon.as_deref());
 
-        // update primary label
-        if let Some(primary_text) = &self.primary {
-            widgets.primary_label.set_label(primary_text);
-            widgets.primary_label.set_visible(true);
-        } else {
-            widgets.primary_label.set_visible(false);
-        }
+        set_optional_label(&widgets.primary_label, state.primary.as_deref());
+        set_optional_label(&widgets.secondary_label, state.secondary.as_deref());
 
-        // update secondary label
-        if let Some(secondary_text) = &self.secondary {
-            widgets.secondary_label.set_label(secondary_text);
-            widgets.secondary_label.set_visible(true);
-        } else {
-            widgets.secondary_label.set_visible(false);
-        }
-
-        // update tooltip
-        widgets.root.set_tooltip_text(self.tooltip.as_deref());
+        widgets.root.set_tooltip_text(state.tooltip.as_deref());
     }
 
     fn init_root() -> Self::Root {
         gtk::Button::builder().css_classes(["tile"]).build()
     }
+}
+
+/// Shows `text` in `label`, hiding the label when there's none.
+fn set_optional_label(label: &gtk::Label, text: Option<&str>) {
+    label.set_visible(text.is_some());
+    label.set_label(text.unwrap_or_default());
+}
+
+/// Builds a tile that shows `view` of `state` and stays in sync with every
+/// write to it, hidden whenever `view` returns `None`.
+///
+/// # Example
+/// ```ignore
+/// let tile = state_tile(&WEATHER_STATE, weather_view).detach();
+/// ```
+pub fn state_tile<S>(
+    state: &'static SharedState<S>,
+    view: fn(&S) -> Option<TileState>,
+) -> relm4::component::Connector<Tile>
+where
+    S: Default + Send + Sync + 'static,
+{
+    let tile = Tile::builder().launch(None);
+    // subscribe before the first read so a write in between isn't missed
+    state.subscribe(tile.sender(), move |data| TileMsg::Set(view(data)));
+    tile.emit(TileMsg::Set(view(&state.read())));
+    tile
 }

@@ -8,7 +8,7 @@ use crate::{
     tiles::Attention,
     widgets::{
         menu_window::{MenuWindow, MenuWindowInit, MenuWindowMsg, MenuWindowOutput},
-        tile::{Tile, TileInit, TileMsg},
+        tile::{Tile, TileMsg, TileState},
     },
 };
 
@@ -54,12 +54,12 @@ impl SimpleComponent for NetworkTile {
         let current_state = NETWORK_STATE.read().clone();
         // initialize the Tile component
         let tile = Tile::builder()
-            .launch(TileInit {
-                icon_name: Some(get_icon(&current_state).to_string()),
+            .launch(Some(TileState {
+                icon: Some(get_icon(&current_state).to_string()),
                 secondary: get_secondary_text(&current_state),
                 tooltip: Some(get_tooltip_text(&current_state)),
                 ..Default::default()
-            })
+            }))
             .detach();
 
         // initialize the network menu component

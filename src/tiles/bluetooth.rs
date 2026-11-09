@@ -8,7 +8,7 @@ use crate::{
     icon_names::{BLUETOOTH, BLUETOOTH_DOTS, BLUETOOTH_NO, BLUETOOTH_X},
     widgets::{
         menu_window::{MenuWindow, MenuWindowInit, MenuWindowMsg, MenuWindowOutput},
-        tile::{Tile, TileInit, TileMsg},
+        tile::{Tile, TileMsg, TileState},
     },
 };
 
@@ -53,11 +53,11 @@ impl Component for BluetoothTile {
         let current_state = BLUETOOTH_STATE.read().clone();
         root.set_visible(current_state.is_some());
         let tile = Tile::builder()
-            .launch(TileInit {
-                icon_name: current_state.as_ref().map(get_bluetooth_icon),
+            .launch(Some(TileState {
+                icon: current_state.as_ref().map(get_bluetooth_icon),
                 tooltip: current_state.as_ref().map(get_tooltip_text),
                 ..Default::default()
-            })
+            }))
             .detach();
 
         // initialize the bluetooth menu component

@@ -6,7 +6,7 @@ use relm4::prelude::*;
 
 use crate::{
     icon_names,
-    widgets::tile::{Tile, TileInit, TileMsg},
+    widgets::tile::{Tile, TileMsg, TileState},
 };
 
 #[derive(Debug)]
@@ -31,12 +31,12 @@ impl Component for ClockTile {
 
         // initialize the Tile component
         let tile = Tile::builder()
-            .launch(TileInit {
-                icon_name: Some(icon_names::CLOCK.to_string()),
+            .launch(Some(TileState {
+                icon: Some(icon_names::CLOCK.to_string()),
                 primary: Some(format_time(&current_time)),
                 secondary: Some(format_date(&current_time)),
                 ..Default::default()
-            })
+            }))
             .detach();
 
         root.append(tile.widget());

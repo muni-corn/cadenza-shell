@@ -11,7 +11,7 @@ use crate::{
     },
     tiles::Attention,
     utils::icons::{BATTERY_CHARGING_ICON_NAMES, BATTERY_ICON_NAMES, percentage_to_icon_from_list},
-    widgets::tile::{Tile, TileInit, TileMsg},
+    widgets::tile::{Tile, TileMsg, TileState},
 };
 
 const TIME_REMAINING_LOW_THRESHOLD: Duration = Duration::from_mins(30);
@@ -68,13 +68,13 @@ impl SimpleComponent for BatteryTile {
 
         // setup tile
         let tile = Tile::builder()
-            .launch(TileInit {
-                icon_name: Some(model.get_icon().to_string()),
+            .launch(Some(TileState {
+                icon: Some(model.get_icon().to_string()),
                 primary: Some(model.get_text()),
                 secondary: Some(model.get_readable_time()),
                 attention: model.get_attention(),
                 tooltip: None,
-            })
+            }))
             .detach();
         root.append(tile.widget());
 
