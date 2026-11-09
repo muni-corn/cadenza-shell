@@ -7,10 +7,13 @@
 
 use bluer::{Adapter, Address, Device};
 
-use crate::bluetooth::state::BLUETOOTH_STATE;
+use crate::bluetooth::{
+    outcomes::{ActionProgress, BluetoothOutcome, OUTCOMES, friendly_reason, report},
+    state::BLUETOOTH_STATE,
+};
 
 /// An operation on a single device.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceAction {
     Connect,
     Disconnect,
@@ -21,9 +24,15 @@ pub enum DeviceAction {
 /// Runs `action` against the device at `address` in the background.
 pub fn spawn_device_action(adapter: Adapter, address: Address, action: DeviceAction) {
     relm4::spawn(async move {
-        if let Err(e) = run_device_action(&adapter, address, action).await {
-            tracing::warn!("couldn't {action:?} bluetooth device {address}: {e}");
-        }
+        report(address, action, ActionProgress::Started);
+        let progress = match run_device_action(&adapter, address, action).await {
+            Ok(()) => ActionProgress::Succeeded,
+            Err(e) => {
+                tracing::warn!("couldn't {action:?} bluetooth device {address}: {e}");
+                ActionProgress::Failed(friendly_reason(&e))
+            }
+        };
+        report(address, action, progress);
     });
 }
 
@@ -62,6 +71,11 @@ pub fn spawn_set_powered(adapter: Adapter, powered: bool) {
                 "couldn't turn bluetooth {}: {e}",
                 if powered { "on" } else { "off" }
             );
+
+            OUTCOMES.send(BluetoothOutcome::PowerFailed {
+                powered,
+                reason: friendly_reason(&e),
+            });
 
             // nothing changed on the bus, so republish the current state to
             // move the menu's switch back

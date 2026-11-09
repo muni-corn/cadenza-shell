@@ -11,8 +11,8 @@ use self::{
 };
 use crate::{
     bluetooth::{
-        self, BLUETOOTH_STATE, BluetoothState, PAIRING_PROMPT, PairingPrompt, PairingReply,
-        PairingRequest, get_icon,
+        self, BLUETOOTH_STATE, BluetoothOutcome, BluetoothState, PAIRING_PROMPT, PairingPrompt,
+        PairingReply, PairingRequest, get_icon,
     },
     widgets::menu_parts::{MenuHeader, PromptBox, menu_root, scrolled_content},
 };
@@ -29,6 +29,8 @@ pub struct BluetoothMenu {
     /// Set when new state arrives, so the switch only snaps to the real
     /// value then and not right after the user flips it.
     resync_power_switch: bool,
+    /// Why turning bluetooth on or off failed, until it's tried again.
+    power_error: Option<String>,
 }
 
 #[derive(Debug)]
@@ -45,6 +47,8 @@ pub enum BluetoothMenuMsg {
     PairingCancel,
     /// Sent by the owning tile when the menu window opens or closes.
     SetOpen(bool),
+    /// An operation requested from a menu progressed.
+    Outcome(BluetoothOutcome),
 }
 
 #[derive(Debug)]
@@ -75,6 +79,7 @@ impl SimpleComponent for BluetoothMenu {
         PAIRING_PROMPT.subscribe(sender.input_sender(), |prompt| {
             BluetoothMenuMsg::UpdatePairingPrompt(prompt.to_owned())
         });
+        forward_outcomes(&sender);
 
         let model = BluetoothMenu {
             bluetooth_state: BLUETOOTH_STATE.read().clone(),
@@ -83,6 +88,7 @@ impl SimpleComponent for BluetoothMenu {
             pairing_error: None,
             reset_pairing_entry: true,
             resync_power_switch: false,
+            power_error: None,
         };
 
         let header = MenuHeader::new(
@@ -200,6 +206,7 @@ impl SimpleComponent for BluetoothMenu {
                     return;
                 }
 
+                self.power_error = None;
                 bluetooth::set_powered(enabled);
             }
             BluetoothMenuMsg::ToggleDiscovery => {
@@ -262,6 +269,18 @@ impl SimpleComponent for BluetoothMenu {
             BluetoothMenuMsg::PairingCancel => {
                 bluetooth::cancel_pairing();
             }
+            BluetoothMenuMsg::Outcome(BluetoothOutcome::Device {
+                address,
+                action,
+                progress,
+            }) => {
+                self.devices.apply_progress(address, action, &progress);
+                self.devices.sync(self.bluetooth_state.as_ref());
+            }
+            BluetoothMenuMsg::Outcome(BluetoothOutcome::PowerFailed { powered, reason }) => {
+                let state = if powered { "on" } else { "off" };
+                self.power_error = Some(format!("Couldn't turn bluetooth {state}: {reason}"));
+            }
         }
     }
 
@@ -275,9 +294,11 @@ impl SimpleComponent for BluetoothMenu {
             widgets.header.sync_switch(is_powered);
         }
 
-        widgets
-            .status_label
-            .set_label(&get_status_text(&self.bluetooth_state));
+        let status = match &self.power_error {
+            Some(error) => error.clone(),
+            None => get_status_text(&self.bluetooth_state),
+        };
+        widgets.status_label.set_label(&status);
 
         widgets.scan_button.set_sensitive(is_powered);
         widgets
@@ -290,6 +311,26 @@ impl SimpleComponent for BluetoothMenu {
     fn init_root() -> Self::Root {
         menu_root()
     }
+}
+
+/// Forwards operation outcomes to the menu for as long as it's open.
+fn forward_outcomes(sender: &ComponentSender<BluetoothMenu>) {
+    let mut outcomes = bluetooth::subscribe_outcomes();
+    let input = sender.input_sender().clone();
+    sender.command(move |_, shutdown| {
+        shutdown
+            .register(async move {
+                loop {
+                    match outcomes.recv().await {
+                        Ok(outcome) => input.emit(BluetoothMenuMsg::Outcome(outcome)),
+                        // a missed outcome only leaves a stale error behind
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    }
+                }
+            })
+            .drop_on_shutdown()
+    });
 }
 
 fn scan_button_label(state: &Option<BluetoothState>) -> String {

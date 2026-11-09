@@ -45,5 +45,6 @@ fn ap_row(summary: &AccessPointSummary, active: bool) -> MenuRowData {
         title: summary.ssid.clone(),
         status,
         remove_tooltip: summary.is_saved().then_some("Forget this network"),
+        error: None,
     }
 }

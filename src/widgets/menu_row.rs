@@ -19,6 +19,8 @@ pub struct MenuRowData {
     pub status: Option<&'static str>,
     /// The remove button's tooltip; rows without one have no remove button.
     pub remove_tooltip: Option<&'static str>,
+    /// Why the last action on the row's item failed, shown under the title.
+    pub error: Option<String>,
 }
 
 /// What the user did with a row, identified by its key.
@@ -43,6 +45,7 @@ pub struct MenuRow {
 pub struct MenuRowWidgets {
     icon: gtk::Image,
     title: gtk::Label,
+    error: gtk::Label,
     status: gtk::Label,
     remove: gtk::Button,
 }
@@ -84,16 +87,25 @@ impl FactoryComponent for MenuRow {
             .hexpand(true)
             .build();
         let icon = gtk::Image::builder().width_request(24).build();
-        let title = gtk::Label::builder()
-            .halign(gtk::Align::Start)
+        let text = gtk::Box::builder()
+            .orientation(gtk::Orientation::Vertical)
             .hexpand(true)
             .build();
+        let title = gtk::Label::builder().halign(gtk::Align::Start).build();
+        let error = gtk::Label::builder()
+            .halign(gtk::Align::Start)
+            .css_classes(["warning"])
+            .wrap(true)
+            .xalign(0.0)
+            .build();
+        text.append(&title);
+        text.append(&error);
         let status = gtk::Label::builder()
             .css_classes(["dim"])
             .halign(gtk::Align::End)
             .build();
         content.append(&icon);
-        content.append(&title);
+        content.append(&text);
         content.append(&status);
         select.set_child(Some(&content));
 
@@ -108,6 +120,7 @@ impl FactoryComponent for MenuRow {
         let widgets = MenuRowWidgets {
             icon,
             title,
+            error,
             status,
             remove,
         };
@@ -139,6 +152,11 @@ impl MenuRow {
         widgets.icon.set_icon_name(icon);
 
         widgets.title.set_label(&self.data.title);
+
+        widgets.error.set_visible(self.data.error.is_some());
+        widgets
+            .error
+            .set_label(self.data.error.as_deref().unwrap_or_default());
 
         widgets.status.set_visible(self.data.status.is_some());
         widgets
@@ -194,6 +212,7 @@ mod tests {
             title: key.to_string(),
             status: None,
             remove_tooltip: None,
+            error: None,
         }
     }
 
