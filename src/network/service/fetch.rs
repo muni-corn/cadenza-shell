@@ -7,8 +7,8 @@ use crate::network::{
         AccessPointProxy, ActiveConnectionProxy, NetworkDeviceProxy, NetworkManagerProxy,
         WirelessDeviceProxy, proxy_at,
     },
-    state::{DeviceKind, NetworkInfo, SpecificNetworkInfo, WifiConnection},
-    types::{NM_DEVICE_TYPE_ETHERNET, NM_DEVICE_TYPE_WIFI, State},
+    state::{DeviceKind, NetworkInfo, WifiConnection},
+    types::NM_DEVICE_TYPE_WIFI,
 };
 
 /// Finds the first wifi-capable network device, regardless of its current
@@ -33,6 +33,15 @@ pub(super) async fn find_wireless_device(
     anyhow::bail!("no wireless device found")
 }
 
+/// The result of [`fetch_network_info`].
+pub(super) struct Fetched {
+    pub info: NetworkInfo,
+    /// The wifi device's active access point, for the strength subscription.
+    pub ap_path: Option<OwnedObjectPath>,
+    /// The wifi device, for the active access point subscription.
+    pub wifi_device_path: Option<OwnedObjectPath>,
+}
+
 /// Fetches full network info for the given primary connection path.
 ///
 /// Returns the `NetworkInfo`, the wifi device's active access point object
@@ -51,11 +60,7 @@ pub(super) async fn fetch_network_info(
     conn: &zbus::Connection,
     nm_proxy: &NetworkManagerProxy<'_>,
     primary_connection_path: OwnedObjectPath,
-) -> anyhow::Result<(
-    NetworkInfo,
-    Option<OwnedObjectPath>,
-    Option<OwnedObjectPath>,
-)> {
+) -> anyhow::Result<Fetched> {
     let connection_state = nm_proxy.state().await?;
     let connectivity = nm_proxy.connectivity().await?;
     // WirelessEnabled should basically never fail to read alongside State
@@ -91,11 +96,6 @@ pub(super) async fn fetch_network_info(
         .as_ref()
         .and_then(|(_, device_type)| DeviceKind::from_device_type(*device_type));
 
-    let is_connected = matches!(
-        connection_state,
-        State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal
-    );
-
     // the wifi device is read on its own so the menu still sees the wifi
     // network while ethernet or a vpn is primary; prefer the device behind
     // the primary connection on machines with several wifi cards
@@ -111,32 +111,20 @@ pub(super) async fn fetch_network_info(
         None => None,
     };
 
-    let specific_info = match (is_connected, &resolved_device) {
-        (true, Some((_, NM_DEVICE_TYPE_ETHERNET))) => Some(SpecificNetworkInfo::Wired),
-        (true, Some((_, NM_DEVICE_TYPE_WIFI))) => {
-            wifi.as_ref()
-                .map(|(ssid, strength, _)| SpecificNetworkInfo::WiFi {
-                    wifi_ssid: ssid.clone(),
-                    wifi_strength: *strength,
-                })
-        }
-        _ => None,
-    };
     let ap_path = wifi.as_ref().map(|(_, _, ap_path)| ap_path.clone());
     let wifi = wifi.map(|(ssid, strength, _)| WifiConnection { ssid, strength });
 
-    Ok((
-        NetworkInfo {
+    Ok(Fetched {
+        info: NetworkInfo {
             connection_state,
             connectivity,
-            specific_info,
             wifi_enabled,
             device_kind,
             wifi,
         },
         ap_path,
         wifi_device_path,
-    ))
+    })
 }
 
 /// Resolves the network device backing an active connection and its type.

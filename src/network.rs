@@ -13,8 +13,8 @@ pub use password::Password;
 pub use security::ApSecurity;
 pub use service::run_network_service;
 pub use state::{
-    AccessPointSummary, NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE,
-    WifiScanState, get_icon, get_strength_icon,
+    AccessPointSummary, DeviceKind, NETWORK_STATE, NetworkInfo, WIFI_SCAN_STATE, WifiScanState,
+    get_icon, get_strength_icon,
 };
 #[cfg(test)]
 pub use types::ConnectivityState;

@@ -60,10 +60,9 @@ impl AccessPointSummary {
 
 /// The kind of device backing the active or in-progress connection.
 ///
-/// Unlike [`SpecificNetworkInfo`], which only populates once a connection is
-/// fully activated, this is known as soon as NetworkManager picks a device
-/// to activate - which is what lets [`get_icon`] show a wifi- or
-/// ethernet-specific "acquiring" icon while still connecting.
+/// This is known as soon as NetworkManager picks a device to activate, which
+/// is what lets [`get_icon`] show a wifi- or ethernet-specific "acquiring"
+/// icon while still connecting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DeviceKind {
     Wired,
@@ -87,15 +86,13 @@ impl DeviceKind {
 pub struct NetworkInfo {
     pub connection_state: State,
     pub connectivity: ConnectivityState,
-    pub specific_info: Option<SpecificNetworkInfo>,
     /// Whether NetworkManager's wifi radio is enabled (the
     /// `WirelessEnabled` property). This is the correct source of truth for
     /// a wifi on/off toggle; `connection_state` reflects the overall
     /// connection, not the radio, and can be `Asleep` for reasons other than
     /// wifi being switched off.
     pub wifi_enabled: bool,
-    /// The device kind backing the active or in-progress connection. See
-    /// [`DeviceKind`] for how this differs from `specific_info`.
+    /// The device kind backing the active or in-progress connection.
     pub device_kind: Option<DeviceKind>,
     /// The network the wifi device is connected to, whether or not it's the
     /// primary connection (e.g. wifi stays up while ethernet is primary).
@@ -115,7 +112,6 @@ impl Default for NetworkInfo {
         Self {
             connection_state: State::Unknown,
             connectivity: ConnectivityState::Unknown,
-            specific_info: None,
             wifi_enabled: true,
             device_kind: None,
             wifi: None,
@@ -127,6 +123,16 @@ impl NetworkInfo {
     /// The SSID the wifi device is connected to, if any.
     pub fn wifi_ssid(&self) -> Option<String> {
         self.wifi.as_ref().map(|wifi| wifi.ssid.clone())
+    }
+
+    /// Whether the details for the connection's device kind are known; wifi
+    /// details can lag behind the connection itself.
+    pub fn has_connection_details(&self) -> bool {
+        match self.device_kind {
+            Some(DeviceKind::WiFi) => self.wifi.is_some(),
+            Some(DeviceKind::Wired) => true,
+            None => false,
+        }
     }
 
     /// Whether the connectivity check indicates a full route to the
@@ -144,15 +150,6 @@ impl NetworkInfo {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum SpecificNetworkInfo {
-    WiFi {
-        wifi_ssid: String,
-        wifi_strength: u8,
-    },
-    Wired,
-}
-
 /// Returns an appropriate icon name for the current networking state.
 pub fn get_icon(info: &NetworkInfo) -> &'static str {
     if info.connection_state == State::Connecting {
@@ -162,9 +159,7 @@ pub fn get_icon(info: &NetworkInfo) -> &'static str {
         };
     }
 
-    if let State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown =
-        info.connection_state
-    {
+    if info.connection_state.is_offline() {
         return if info.wifi_enabled {
             NETWORK_WIFI_DISCONNECTED
         } else {
@@ -172,15 +167,15 @@ pub fn get_icon(info: &NetworkInfo) -> &'static str {
         };
     }
 
-    match info.specific_info {
-        Some(SpecificNetworkInfo::WiFi { wifi_strength, .. }) => {
+    match (info.device_kind, &info.wifi) {
+        (Some(DeviceKind::WiFi), Some(wifi)) => {
             if info.has_full_route() {
-                get_strength_icon(wifi_strength)
+                get_strength_icon(wifi.strength)
             } else {
                 NETWORK_WIFI_NO_ROUTE
             }
         }
-        Some(SpecificNetworkInfo::Wired) => {
+        (Some(DeviceKind::Wired), _) => {
             if info.has_full_route() {
                 NETWORK_WIRED_CONNECTED
             } else {
@@ -188,9 +183,10 @@ pub fn get_icon(info: &NetworkInfo) -> &'static str {
             }
         }
         // connected, but to a device type we don't distinguish (e.g. mobile
-        // broadband); there's no generic "connected" icon bundled, so this
-        // falls back to the same icon as the wifi radio being off
-        None => NETWORK_WIFI_DISABLED,
+        // broadband) or without wifi details yet; there's no generic
+        // "connected" icon bundled, so this falls back to the same icon as
+        // the wifi radio being off
+        _ => NETWORK_WIFI_DISABLED,
     }
 }
 
@@ -225,13 +221,12 @@ mod get_icon_tests {
         NetworkInfo {
             connection_state: State::ConnectedGlobal,
             connectivity,
-            specific_info: Some(SpecificNetworkInfo::WiFi {
-                wifi_ssid: "test".to_string(),
-                wifi_strength: strength,
-            }),
             wifi_enabled: true,
             device_kind: Some(DeviceKind::WiFi),
-            wifi: None,
+            wifi: Some(WifiConnection {
+                ssid: "test".to_string(),
+                strength,
+            }),
         }
     }
 
@@ -239,7 +234,6 @@ mod get_icon_tests {
         NetworkInfo {
             connection_state: State::ConnectedGlobal,
             connectivity,
-            specific_info: Some(SpecificNetworkInfo::Wired),
             wifi_enabled: true,
             device_kind: Some(DeviceKind::Wired),
             wifi: None,

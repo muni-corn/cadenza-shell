@@ -13,7 +13,7 @@ use tokio::{
 use zbus::zvariant::OwnedObjectPath;
 
 use self::{
-    fetch::fetch_network_info,
+    fetch::{Fetched, fetch_network_info},
     handlers::{ensure_scan_watcher, handle_command, refresh_wifi_access_points},
     watchers::{
         spawn_name_owner_watcher, spawn_property_watchers, subscribe_active_ap,
@@ -24,7 +24,7 @@ use crate::{
     network::{
         commands::{self, NetworkCommand},
         dbus::NetworkManagerProxy,
-        state::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, WIFI_SCAN_STATE},
+        state::{NETWORK_STATE, NetworkInfo, WIFI_SCAN_STATE},
         types::{ConnectivityState, State},
     },
     settings, sleep_monitor,
@@ -195,15 +195,13 @@ impl NetworkService {
                     self.refetch("connection activating").await;
                 }
 
-                // if we just transitioned to a connected state but
-                // specific_info is still None (e.g. the wake refetch ran before
+                // if we just transitioned to a connected state but the device
+                // details are still missing (e.g. the wake refetch ran before
                 // NM finished reconnecting and no PrimaryConnection change will
                 // fire since we reconnected to the same network), do a full
-                // refetch now to populate the missing device details
-                let missing_details = NETWORK_STATE.read().specific_info.is_none();
-                if let State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal = state
-                    && missing_details
-                {
+                // refetch now to populate them
+                let missing_details = !NETWORK_STATE.read().has_connection_details();
+                if state.is_connected() && missing_details {
                     self.refetch("connected without device details").await;
                 }
             }
@@ -213,13 +211,6 @@ impl NetworkService {
             NetworkPropertyChange::Strength(strength) => update_network_state(|info| {
                 if let Some(wifi) = &mut info.wifi {
                     wifi.strength = strength;
-                }
-                if let Some(SpecificNetworkInfo::WiFi {
-                    ref mut wifi_strength,
-                    ..
-                }) = info.specific_info
-                {
-                    *wifi_strength = strength;
                 }
             }),
             NetworkPropertyChange::WifiEnabled(enabled) => {
@@ -292,8 +283,11 @@ impl NetworkService {
 
     async fn try_refetch(&mut self) -> anyhow::Result<()> {
         let primary_path = self.nm.primary_connection().await?;
-        let (info, ap_path, wifi_device_path) =
-            fetch_network_info(&self.conn, &self.nm, primary_path).await?;
+        let Fetched {
+            info,
+            ap_path,
+            wifi_device_path,
+        } = fetch_network_info(&self.conn, &self.nm, primary_path).await?;
 
         tracing::debug!("fetched network info: {:?}", info);
         set_if_changed(&NETWORK_STATE, info);

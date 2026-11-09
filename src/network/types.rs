@@ -63,6 +63,25 @@ impl From<u32> for State {
     }
 }
 
+impl State {
+    /// Whether there's an active connection, with or without a full route
+    /// to the internet.
+    pub fn is_connected(self) -> bool {
+        matches!(
+            self,
+            Self::ConnectedLocal | Self::ConnectedSite | Self::ConnectedGlobal
+        )
+    }
+
+    /// Whether there's no connection and none is being set up.
+    pub fn is_offline(self) -> bool {
+        matches!(
+            self,
+            Self::Disconnected | Self::Disconnecting | Self::Asleep | Self::Unknown
+        )
+    }
+}
+
 impl From<OwnedValue> for State {
     fn from(value: OwnedValue) -> Self {
         value

@@ -3,7 +3,7 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    network::{NETWORK_STATE, NetworkInfo, SpecificNetworkInfo, State, get_icon},
+    network::{DeviceKind, NETWORK_STATE, NetworkInfo, State, get_icon},
     network_menu::{NetworkMenu, NetworkMenuMsg},
     tiles::Attention,
     widgets::{
@@ -155,28 +155,24 @@ fn get_tooltip_text(info: &NetworkInfo) -> String {
     let state_text = info.connection_state.to_string();
 
     // add specific network info if available
-    match &info.specific_info {
-        Some(SpecificNetworkInfo::WiFi { wifi_ssid, .. }) => {
-            format!("{}\n{}", state_text, wifi_ssid)
-        }
-        Some(SpecificNetworkInfo::Wired) => format!("{}\nWired connection", state_text),
-        None => state_text,
+    match (info.device_kind, &info.wifi) {
+        _ if !info.connection_state.is_connected() => state_text,
+        (Some(DeviceKind::WiFi), Some(wifi)) => format!("{state_text}\n{}", wifi.ssid),
+        (Some(DeviceKind::Wired), _) => format!("{state_text}\nWired connection"),
+        _ => state_text,
     }
 }
 
 fn get_attention(info: &NetworkInfo) -> Attention {
-    match info.connection_state {
-        State::Disconnected | State::Disconnecting | State::Asleep | State::Unknown => {
-            Attention::Dim
-        }
+    let state = info.connection_state;
+    if state.is_offline() {
+        Attention::Dim
+    } else if state.is_connected() && !info.has_full_route() {
         // connected, but the connectivity check found no (or only a
         // limited/captive-portal) route to the internet
-        State::ConnectedLocal | State::ConnectedSite | State::ConnectedGlobal
-            if !info.has_full_route() =>
-        {
-            Attention::Warning
-        }
-        _ => Attention::Normal,
+        Attention::Warning
+    } else {
+        Attention::Normal
     }
 }
 
