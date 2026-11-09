@@ -7,14 +7,17 @@ use crate::{
         self, BLUETOOTH_STATE, BluetoothState, DeviceInfo, PAIRING_PROMPT, PairingPrompt,
         PairingReply, PairingRequest, get_icon,
     },
-    widgets::menu_parts::{MenuHeader, PromptBox, menu_root, scrolled_content},
+    widgets::{
+        menu_parts::{MenuHeader, PromptBox, menu_root, scrolled_content},
+        menu_row::{MenuRow, MenuRowData, MenuRowOutput, sync_rows},
+    },
 };
 
 #[derive(Debug)]
 pub struct BluetoothMenu {
     bluetooth_state: Option<BluetoothState>,
-    paired_devices: FactoryVecDeque<BluetoothDeviceWidget>,
-    nearby_devices: FactoryVecDeque<BluetoothDeviceWidget>,
+    paired_devices: FactoryVecDeque<MenuRow>,
+    nearby_devices: FactoryVecDeque<MenuRow>,
     pairing_prompt: Option<PairingPrompt>,
     /// Why the last PIN or passkey entry was rejected, if it was.
     pairing_error: Option<&'static str>,
@@ -29,9 +32,8 @@ pub struct BluetoothMenu {
 pub enum BluetoothMenuMsg {
     ToggleBluetooth(bool),
     ToggleDiscovery,
-    ConnectToDevice(Address),
-    DisconnectFromDevice(Address),
-    PairDevice(Address),
+    /// A device's row was clicked.
+    DeviceClicked(Address),
     RemoveDevice(Address),
     UpdateState(Option<BluetoothState>),
     UpdatePairingPrompt(Option<PairingPrompt>),
@@ -232,10 +234,18 @@ impl SimpleComponent for BluetoothMenu {
                     bluetooth::start_discovery();
                 }
             }
-            BluetoothMenuMsg::ConnectToDevice(addr) => bluetooth::connect(addr),
-            BluetoothMenuMsg::DisconnectFromDevice(addr) => bluetooth::disconnect(addr),
-            BluetoothMenuMsg::PairDevice(addr) => {
-                bluetooth::pair(addr);
+            BluetoothMenuMsg::DeviceClicked(addr) => {
+                let device = self
+                    .bluetooth_state
+                    .iter()
+                    .flat_map(|state| state.devices())
+                    .find(|device| device.address == addr);
+                match device {
+                    Some(device) if !device.paired => bluetooth::pair(addr),
+                    Some(device) if device.connected => bluetooth::disconnect(addr),
+                    Some(_) => bluetooth::connect(addr),
+                    None => {}
+                }
             }
             BluetoothMenuMsg::RemoveDevice(addr) => {
                 bluetooth::remove(addr);
@@ -301,12 +311,13 @@ impl SimpleComponent for BluetoothMenu {
     }
 }
 
-fn device_output_to_msg(output: BluetoothDeviceOutput) -> BluetoothMenuMsg {
+fn device_output_to_msg(output: MenuRowOutput) -> BluetoothMenuMsg {
+    let (MenuRowOutput::Activated(key) | MenuRowOutput::Remove(key)) = &output;
+    // rows are keyed by the address they were built from, so this can't fail
+    let address: Address = key.parse().expect("device rows are keyed by address");
     match output {
-        BluetoothDeviceOutput::Connect(addr) => BluetoothMenuMsg::ConnectToDevice(addr),
-        BluetoothDeviceOutput::Disconnect(addr) => BluetoothMenuMsg::DisconnectFromDevice(addr),
-        BluetoothDeviceOutput::Pair(addr) => BluetoothMenuMsg::PairDevice(addr),
-        BluetoothDeviceOutput::Remove(addr) => BluetoothMenuMsg::RemoveDevice(addr),
+        MenuRowOutput::Activated(_) => BluetoothMenuMsg::DeviceClicked(address),
+        MenuRowOutput::Remove(_) => BluetoothMenuMsg::RemoveDevice(address),
     }
 }
 
@@ -402,18 +413,12 @@ fn get_status_text(state: &Option<BluetoothState>) -> String {
     }
 }
 
-/// Diffs the factory's current rows against the latest device snapshots:
-/// removes rows for devices that disappeared, updates existing rows in
-/// place, and inserts new ones - instead of clearing and rebuilding the
-/// whole list on every state update. Since that update fires as often as
-/// every reconcile tick, a clear-and-rebuild would destroy and recreate
-/// every row's widgets on a timer even when nothing about them changed.
+/// Syncs device rows with the latest snapshots, connected devices first and
+/// then by name; devices come out of a hashmap, so they need a stable order.
 fn update_device_rows<'a>(
-    devices: &mut FactoryVecDeque<BluetoothDeviceWidget>,
+    rows: &mut FactoryVecDeque<MenuRow>,
     infos: impl Iterator<Item = &'a DeviceInfo>,
 ) {
-    // devices come out of a hashmap, so sort them for a stable order with
-    // connected devices on top
     let mut infos: Vec<&DeviceInfo> = infos.collect();
     infos.sort_by(|a, b| {
         b.connected
@@ -422,150 +427,17 @@ fn update_device_rows<'a>(
             .then_with(|| a.address.cmp(&b.address))
     });
 
-    let same_order = devices.len() == infos.len()
-        && devices
-            .iter()
-            .zip(&infos)
-            .all(|(row, info)| row.info.address == info.address);
-
-    if same_order {
-        for (index, info) in infos.into_iter().enumerate() {
-            devices.send(index, BluetoothDeviceMsg::UpdateInfo(info.clone()));
-        }
-    } else {
-        let mut guard = devices.guard();
-        guard.clear();
-        for info in infos {
-            guard.push_back(info.clone());
-        }
-    }
+    sync_rows(rows, infos.into_iter().map(device_row).collect());
 }
 
-// factory for individual device items
-#[derive(Debug)]
-struct BluetoothDeviceWidget {
-    info: DeviceInfo,
-}
-
-#[derive(Debug)]
-enum BluetoothDeviceMsg {
-    Toggle,
-    RemoveClicked,
-    UpdateInfo(DeviceInfo),
-}
-
-#[derive(Debug)]
-enum BluetoothDeviceOutput {
-    Connect(Address),
-    Disconnect(Address),
-    Pair(Address),
-    Remove(Address),
-}
-
-struct BluetoothDeviceWidgetWidgets {
-    device_label: gtk::Label,
-    status_label: gtk::Label,
-    remove_button: gtk::Button,
-}
-
-impl FactoryComponent for BluetoothDeviceWidget {
-    type CommandOutput = ();
-    type Index = DynamicIndex;
-    type Init = DeviceInfo;
-    type Input = BluetoothDeviceMsg;
-    type Output = BluetoothDeviceOutput;
-    type ParentWidget = gtk::Box;
-    type Root = gtk::Box;
-    type Widgets = BluetoothDeviceWidgetWidgets;
-
-    fn init_model(init: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
-        Self { info: init }
-    }
-
-    fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
-        match msg {
-            BluetoothDeviceMsg::Toggle => {
-                let addr = self.info.address;
-                if !self.info.paired {
-                    let _ = sender.output(BluetoothDeviceOutput::Pair(addr));
-                } else if self.info.connected {
-                    let _ = sender.output(BluetoothDeviceOutput::Disconnect(addr));
-                } else {
-                    let _ = sender.output(BluetoothDeviceOutput::Connect(addr));
-                }
-            }
-            BluetoothDeviceMsg::RemoveClicked => {
-                let _ = sender.output(BluetoothDeviceOutput::Remove(self.info.address));
-            }
-            BluetoothDeviceMsg::UpdateInfo(info) => {
-                self.info = info;
-            }
-        }
-    }
-
-    fn init_root(&self) -> Self::Root {
-        gtk::Box::builder().spacing(4).build()
-    }
-
-    fn init_widgets(
-        &mut self,
-        _index: &DynamicIndex,
-        root: Self::Root,
-        _returned_widget: &<Self::ParentWidget as relm4::factory::FactoryView>::ReturnedWidget,
-        sender: FactorySender<Self>,
-    ) -> Self::Widgets {
-        let select_button = gtk::Button::builder().hexpand(true).build();
-        select_button.connect_clicked({
-            let sender = sender.clone();
-            move |_| sender.input(BluetoothDeviceMsg::Toggle)
-        });
-
-        let main_box = gtk::Box::builder()
-            .orientation(gtk::Orientation::Horizontal)
-            .spacing(8)
-            .halign(gtk::Align::Start)
-            .hexpand(true)
-            .build();
-
-        let device_label = gtk::Label::builder()
-            .halign(gtk::Align::Start)
-            .hexpand(true)
-            .label(&self.info.alias)
-            .build();
-
-        let status_label = gtk::Label::builder()
-            .css_classes(["dim"])
-            .halign(gtk::Align::End)
-            .label("Connected")
-            .visible(self.info.connected)
-            .build();
-
-        main_box.append(&device_label);
-        main_box.append(&status_label);
-
-        select_button.set_child(Some(&main_box));
-
-        let remove_button = gtk::Button::builder()
-            .icon_name("user-trash-symbolic")
-            .tooltip_text("Remove this device")
-            .visible(self.info.paired)
-            .build();
-        remove_button.connect_clicked(move |_| sender.input(BluetoothDeviceMsg::RemoveClicked));
-
-        root.append(&select_button);
-        root.append(&remove_button);
-
-        BluetoothDeviceWidgetWidgets {
-            device_label,
-            status_label,
-            remove_button,
-        }
-    }
-
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: FactorySender<Self>) {
-        widgets.device_label.set_label(&self.info.alias);
-        widgets.status_label.set_visible(self.info.connected);
-        widgets.remove_button.set_visible(self.info.paired);
+/// How a device is shown in the list, keyed by its address.
+fn device_row(info: &DeviceInfo) -> MenuRowData {
+    MenuRowData {
+        key: info.address.to_string(),
+        icon: info.icon.clone(),
+        title: info.alias.clone(),
+        status: info.connected.then_some("Connected"),
+        remove_tooltip: info.paired.then_some("Remove this device"),
     }
 }
 
