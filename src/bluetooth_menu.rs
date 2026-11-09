@@ -1,7 +1,10 @@
+mod pairing_prompt;
+
 use bluer::Address;
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
+use self::pairing_prompt::{PromptView, parse_passkey, parse_pin_code, prompt_view};
 use crate::{
     bluetooth::{
         self, BLUETOOTH_STATE, BluetoothState, DeviceInfo, PAIRING_PROMPT, PairingPrompt,
@@ -344,29 +347,13 @@ fn render_pairing_prompt(model: &BluetoothMenu, widgets: &mut BluetoothMenuWidge
     };
 
     let device = device_name(&model.bluetooth_state, prompt.address);
-    let (label, show_entry, show_buttons) = match &prompt.request {
-        PairingRequest::PinCode => (format!("Enter the PIN code for {device}"), true, true),
-        PairingRequest::Passkey => (format!("Enter the passkey for {device}"), true, true),
-        PairingRequest::ConfirmPasskey(passkey) => (
-            format!("Does {device} show the passkey {passkey:06}?"),
-            false,
-            true,
-        ),
-        PairingRequest::Authorize => (format!("Allow pairing with {device}?"), false, true),
-        PairingRequest::DisplayPinCode(pin) => (format!("Enter {pin} on {device}"), false, false),
-        PairingRequest::DisplayPasskey { passkey, entered } => {
-            let digits = if *entered == 1 { "digit" } else { "digits" };
-            (
-                format!("Enter {passkey:06} on {device} ({entered} {digits} entered)"),
-                false,
-                false,
-            )
-        }
-    };
+    let PromptView {
+        text,
+        show_entry,
+        show_buttons,
+    } = prompt_view(&prompt.request, &device);
 
-    widgets
-        .pairing_prompt
-        .show(&label, show_entry, show_buttons);
+    widgets.pairing_prompt.show(&text, show_entry, show_buttons);
     widgets.pairing_prompt.set_error(model.pairing_error);
     if model.reset_pairing_entry {
         widgets.pairing_prompt.reset_entry();
@@ -380,24 +367,6 @@ fn device_name(state: &Option<BluetoothState>, address: Address) -> String {
         .flat_map(|state| state.devices())
         .find(|device| device.address == address)
         .map_or_else(|| address.to_string(), |device| device.alias.clone())
-}
-
-/// Validates a legacy PIN code, which bluez accepts as 1 to 16 characters.
-fn parse_pin_code(text: &str) -> Result<String, &'static str> {
-    if (1..=16).contains(&text.chars().count()) {
-        Ok(text.to_string())
-    } else {
-        Err("PIN codes are 1 to 16 characters")
-    }
-}
-
-/// Validates a numeric passkey, which is at most six digits.
-fn parse_passkey(text: &str) -> Result<u32, &'static str> {
-    text.trim()
-        .parse::<u32>()
-        .ok()
-        .filter(|passkey| *passkey <= 999_999)
-        .ok_or("Passkeys are numbers from 0 to 999999")
 }
 
 fn get_status_text(state: &Option<BluetoothState>) -> String {
@@ -438,24 +407,5 @@ fn device_row(info: &DeviceInfo) -> MenuRowData {
         title: info.alias.clone(),
         status: info.connected.then_some("Connected"),
         remove_tooltip: info.paired.then_some("Remove this device"),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn pin_codes_are_1_to_16_characters() {
-        assert!(parse_pin_code("").is_err());
-        assert_eq!(parse_pin_code("0000"), Ok("0000".to_string()));
-        assert!(parse_pin_code(&"1".repeat(17)).is_err());
-    }
-
-    #[test]
-    fn passkeys_are_at_most_six_digits() {
-        assert_eq!(parse_passkey(" 123456 "), Ok(123_456));
-        assert!(parse_passkey("1000000").is_err());
-        assert!(parse_passkey("abc").is_err());
     }
 }
