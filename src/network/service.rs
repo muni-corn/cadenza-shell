@@ -75,23 +75,42 @@ impl PropertyWatcherTasks {
     }
 }
 
-/// Tracks the abort handles for the per-connection subscription tasks that
-/// are cancelled and respawned every time the network state is refetched.
+/// The per-connection subscriptions, each with the object path it watches,
+/// so they're only respawned when that path changes.
 #[derive(Default)]
 struct SubscriptionTasks {
-    strength: Option<AbortHandle>,
-    active_ap: Option<AbortHandle>,
+    strength: Option<(OwnedObjectPath, AbortHandle)>,
+    active_ap: Option<(OwnedObjectPath, AbortHandle)>,
 }
 
 impl SubscriptionTasks {
     fn abort_all(&mut self) {
-        if let Some(handle) = self.strength.take() {
-            handle.abort();
-        }
-        if let Some(handle) = self.active_ap.take() {
+        for (_, handle) in [self.strength.take(), self.active_ap.take()]
+            .into_iter()
+            .flatten()
+        {
             handle.abort();
         }
     }
+}
+
+/// Keeps `slot` subscribed to `path`, respawning the task only when the
+/// path changed or the previous task ended.
+fn resubscribe(
+    slot: &mut Option<(OwnedObjectPath, AbortHandle)>,
+    path: Option<OwnedObjectPath>,
+    spawn: impl FnOnce(OwnedObjectPath) -> AbortHandle,
+) {
+    let unchanged = matches!((&*slot, &path), (Some((current, handle)), Some(path))
+        if current == path && !handle.is_finished());
+    if unchanged {
+        return;
+    }
+
+    if let Some((_, handle)) = slot.take() {
+        handle.abort();
+    }
+    *slot = path.map(|path| (path.clone(), spawn(path)));
 }
 
 /// Runs the network service: watches NetworkManager, publishes
@@ -280,8 +299,8 @@ impl NetworkService {
     /// (re)subscribes to access point signal strength changes and
     /// active-access-point changes if on WiFi.
     ///
-    /// Previously running subscription tasks are replaced once the fetch
-    /// succeeds; a failed fetch leaves them running.
+    /// Subscriptions are only replaced when the access point or device they
+    /// watch changed, and a failed fetch leaves them running.
     async fn refetch(&mut self, reason: &str) {
         tracing::debug!("refetching network state: {reason}");
         if let Err(e) = self.try_refetch().await {
@@ -294,29 +313,25 @@ impl NetworkService {
         let (info, ap_path, wifi_device_path) =
             fetch_network_info(&self.conn, &self.nm, primary_path).await?;
 
-        self.subscriptions.abort_all();
-
         tracing::debug!("fetched network info: {:?}", info);
         set_if_changed(&NETWORK_STATE, info);
 
-        // subscribe to strength changes for the new access point
-        if let Some(ap_path) = ap_path {
-            let tx = self.event_tx.clone();
-            let conn = self.conn.clone();
-            let handle = relm4::spawn(subscribe_ap_strength(conn, ap_path, tx));
-            self.subscriptions.strength = Some(handle.abort_handle());
-        }
+        // follow strength changes on the current access point
+        let (conn, tx) = (self.conn.clone(), self.event_tx.clone());
+        resubscribe(&mut self.subscriptions.strength, ap_path.clone(), |path| {
+            relm4::spawn(subscribe_ap_strength(conn, path, tx)).abort_handle()
+        });
 
-        // subscribe to active access point changes on the wireless device, so
+        // follow active access point changes on the wireless device, so
         // roaming to a different BSSID (which doesn't change PrimaryConnection)
         // still triggers a refetch instead of leaving strength/SSID frozen on
         // the now-disappeared access point object
-        if let Some(device_path) = wifi_device_path {
-            let tx = self.event_tx.clone();
-            let conn = self.conn.clone();
-            let handle = relm4::spawn(subscribe_active_ap(conn, device_path, tx));
-            self.subscriptions.active_ap = Some(handle.abort_handle());
-        }
+        let (conn, tx) = (self.conn.clone(), self.event_tx.clone());
+        resubscribe(
+            &mut self.subscriptions.active_ap,
+            wifi_device_path,
+            |path| relm4::spawn(subscribe_active_ap(conn, path, ap_path, tx)).abort_handle(),
+        );
 
         Ok(())
     }
