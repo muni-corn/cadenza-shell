@@ -179,8 +179,6 @@ impl BluetoothService {
                 Some(adapter) => actions::spawn_device_action(adapter, address, action),
                 None => tracing::warn!("can't {action:?} {address}: no adapter available"),
             },
-            BluetoothCommand::PairingReply(reply) => agent::respond(reply),
-            BluetoothCommand::CancelPairing => agent::cancel(),
         }
     }
 

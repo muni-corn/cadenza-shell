@@ -4,10 +4,11 @@ mod commands;
 mod service;
 mod state;
 
-pub use agent::PairingReply;
+// pairing replies go straight to the agent, which only touches local state,
+// rather than queueing behind slower work in the service loop
+pub use agent::{PairingReply, cancel as cancel_pairing, respond as pairing_reply};
 pub use commands::{
-    cancel_pairing, connect, disconnect, pair, pairing_reply, remove, set_powered, start_discovery,
-    stop_discovery,
+    connect, disconnect, pair, remove, set_powered, start_discovery, stop_discovery,
 };
 pub use service::run_bluetooth_service;
 pub use state::{

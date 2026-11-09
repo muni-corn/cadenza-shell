@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 use bluer::Address;
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::bluetooth::{actions::DeviceAction, agent::PairingReply};
+use crate::bluetooth::actions::DeviceAction;
 
 /// Commands the UI can send to the bluetooth service.
 ///
@@ -15,10 +15,6 @@ pub(crate) enum BluetoothCommand {
     StopDiscovery,
     SetPowered(bool),
     Device(Address, DeviceAction),
-    /// A reply to the currently pending pairing prompt, if any.
-    PairingReply(PairingReply),
-    /// Rejects the currently pending pairing prompt, if any.
-    CancelPairing,
 }
 
 static COMMAND_TX: OnceLock<UnboundedSender<BluetoothCommand>> = OnceLock::new();
@@ -73,14 +69,4 @@ pub fn pair(address: Address) {
 /// Removes (unpairs and forgets) a device by address.
 pub fn remove(address: Address) {
     send(BluetoothCommand::Device(address, DeviceAction::Remove));
-}
-
-/// Responds to the current pairing prompt, if any.
-pub fn pairing_reply(reply: PairingReply) {
-    send(BluetoothCommand::PairingReply(reply));
-}
-
-/// Rejects the current pairing prompt, if any.
-pub fn cancel_pairing() {
-    send(BluetoothCommand::CancelPairing);
 }
