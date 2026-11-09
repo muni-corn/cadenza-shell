@@ -4,29 +4,29 @@ use relm4::prelude::*;
 
 use crate::{
     bluetooth::{BLUETOOTH_STATE, BluetoothState, get_icon},
-    bluetooth_menu::BluetoothMenu,
+    bluetooth_menu::{BluetoothMenu, BluetoothMenuMsg},
     widgets::{
         menu_window::{MenuWindow, MenuWindowInit, MenuWindowMsg, MenuWindowOutput},
         tile::{Tile, TileOutput, TileState, state_tile},
     },
 };
 
+/// The bluetooth tile and the menu it opens.
 #[derive(Debug)]
 pub struct BluetoothTile {
-    menu_open: bool,
     menu_window: Controller<MenuWindow>,
+    bluetooth_menu: Controller<BluetoothMenu>,
 }
 
 #[derive(Debug)]
 pub struct BluetoothWidgets {
     _tile: Controller<Tile>,
-    _menu: Controller<BluetoothMenu>,
 }
 
 #[derive(Debug)]
 pub enum BluetoothTileMsg {
-    ToggleMenu,
-    MenuClosed,
+    TileClicked,
+    MenuShown(bool),
 }
 
 impl SimpleComponent for BluetoothTile {
@@ -41,14 +41,11 @@ impl SimpleComponent for BluetoothTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // toggle the menu window on click; authoritative for open/closed
-        // state so it doesn't depend on the window's own visibility
         let tile = state_tile(&BLUETOOTH_STATE, view)
             .forward(sender.input_sender(), |TileOutput::Clicked| {
-                BluetoothTileMsg::ToggleMenu
+                BluetoothTileMsg::TileClicked
             });
 
-        // initialize the bluetooth menu component
         let bluetooth_menu = BluetoothMenu::builder().launch(()).detach();
 
         // present it in a keyboard-interactive layer-shell window instead of
@@ -61,36 +58,26 @@ impl SimpleComponent for BluetoothTile {
                 width: 384,
                 content: bluetooth_menu.widget().clone().upcast(),
             })
-            .forward(sender.input_sender(), |output| match output {
-                MenuWindowOutput::Hidden => BluetoothTileMsg::MenuClosed,
+            .forward(sender.input_sender(), |output| {
+                BluetoothTileMsg::MenuShown(matches!(output, MenuWindowOutput::Shown))
             });
 
         root.append(tile.widget());
 
         ComponentParts {
             model: Self {
-                menu_open: false,
                 menu_window,
+                bluetooth_menu,
             },
-            widgets: BluetoothWidgets {
-                _tile: tile,
-                _menu: bluetooth_menu,
-            },
+            widgets: BluetoothWidgets { _tile: tile },
         }
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            BluetoothTileMsg::ToggleMenu => {
-                self.menu_open = !self.menu_open;
-                self.menu_window.emit(if self.menu_open {
-                    MenuWindowMsg::Show
-                } else {
-                    MenuWindowMsg::Hide
-                });
-            }
-            BluetoothTileMsg::MenuClosed => {
-                self.menu_open = false;
+            BluetoothTileMsg::TileClicked => self.menu_window.emit(MenuWindowMsg::Toggle),
+            BluetoothTileMsg::MenuShown(shown) => {
+                self.bluetooth_menu.emit(BluetoothMenuMsg::SetOpen(shown));
             }
         }
     }

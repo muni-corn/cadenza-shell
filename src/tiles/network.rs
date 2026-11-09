@@ -12,9 +12,9 @@ use crate::{
     },
 };
 
+/// The network tile and the menu it opens.
 #[derive(Debug)]
 pub struct NetworkTile {
-    menu_open: bool,
     menu_window: Controller<MenuWindow>,
     // kept alive so the menu's component runtime (and its NETWORK_STATE
     // subscription) isn't shut down; also notified when the menu window
@@ -24,8 +24,8 @@ pub struct NetworkTile {
 
 #[derive(Debug)]
 pub enum NetworkTileMsg {
-    ToggleMenu,
-    MenuClosed,
+    TileClicked,
+    MenuShown(bool),
 }
 
 #[derive(Debug)]
@@ -45,15 +45,11 @@ impl SimpleComponent for NetworkTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        // toggle the menu window on click; authoritative for open/closed
-        // state so it doesn't depend on the window's own visibility (see
-        // MenuWindow's docs on why it doesn't dismiss on focus loss)
         let tile = state_tile(&NETWORK_STATE, view)
             .forward(sender.input_sender(), |TileOutput::Clicked| {
-                NetworkTileMsg::ToggleMenu
+                NetworkTileMsg::TileClicked
             });
 
-        // initialize the network menu component
         let network_menu = NetworkMenu::builder().launch(()).detach();
 
         // present it in a keyboard-interactive layer-shell window instead of
@@ -65,15 +61,14 @@ impl SimpleComponent for NetworkTile {
                 width: 384,
                 content: network_menu.widget().clone().upcast(),
             })
-            .forward(sender.input_sender(), |output| match output {
-                MenuWindowOutput::Hidden => NetworkTileMsg::MenuClosed,
+            .forward(sender.input_sender(), |output| {
+                NetworkTileMsg::MenuShown(matches!(output, MenuWindowOutput::Shown))
             });
 
         root.append(tile.widget());
 
         ComponentParts {
             model: NetworkTile {
-                menu_open: false,
                 menu_window,
                 network_menu,
             },
@@ -82,21 +77,10 @@ impl SimpleComponent for NetworkTile {
     }
 
     fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
-        tracing::debug!("network tile received update: {msg:?}");
         match msg {
-            NetworkTileMsg::ToggleMenu => {
-                self.menu_open = !self.menu_open;
-                self.menu_window.emit(if self.menu_open {
-                    MenuWindowMsg::Show
-                } else {
-                    MenuWindowMsg::Hide
-                });
-                self.network_menu
-                    .emit(NetworkMenuMsg::SetOpen(self.menu_open));
-            }
-            NetworkTileMsg::MenuClosed => {
-                self.menu_open = false;
-                self.network_menu.emit(NetworkMenuMsg::SetOpen(false));
+            NetworkTileMsg::TileClicked => self.menu_window.emit(MenuWindowMsg::Toggle),
+            NetworkTileMsg::MenuShown(shown) => {
+                self.network_menu.emit(NetworkMenuMsg::SetOpen(shown));
             }
         }
     }

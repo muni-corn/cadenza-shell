@@ -35,6 +35,8 @@ pub enum BluetoothMenuMsg {
     PairingSubmit(String),
     PairingConfirm,
     PairingCancel,
+    /// Sent by the owning tile when the menu window opens or closes.
+    SetOpen(bool),
 }
 
 #[derive(Debug)]
@@ -351,6 +353,9 @@ impl SimpleComponent for BluetoothMenu {
                     Err(problem) => self.pairing_error = Some(problem),
                 }
             }
+            // scanning only matters while someone can see the results
+            BluetoothMenuMsg::SetOpen(false) => bluetooth::stop_discovery(),
+            BluetoothMenuMsg::SetOpen(true) => {}
             BluetoothMenuMsg::PairingConfirm => {
                 bluetooth::pairing_reply(PairingReply::Confirm);
             }

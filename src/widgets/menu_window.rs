@@ -35,16 +35,18 @@ pub struct MenuWindowInit {
 
 #[derive(Debug)]
 pub enum MenuWindowMsg {
-    Show,
+    /// Shows the window if it's hidden and hides it otherwise; what a tile
+    /// sends when clicked.
+    Toggle,
     Hide,
 }
 
-/// Emitted whenever the window transitions to hidden, whether requested
-/// externally or triggered internally (currently: pressing Escape), so the
-/// owning tile can keep its own open/closed tracking in sync without
-/// guessing at the window's actual visibility.
+/// Emitted whenever the window is shown or hidden, however that happened
+/// (including pressing Escape), so the menu inside can start or stop work
+/// that only matters while it's visible.
 #[derive(Debug)]
 pub enum MenuWindowOutput {
+    Shown,
     Hidden,
 }
 
@@ -119,15 +121,20 @@ impl SimpleComponent for MenuWindow {
     }
 
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
-        match msg {
-            MenuWindowMsg::Show => self.visible = true,
-            MenuWindowMsg::Hide => {
-                if self.visible {
-                    self.visible = false;
-                    let _ = sender.output(MenuWindowOutput::Hidden);
-                }
-            }
+        let visible = match msg {
+            MenuWindowMsg::Toggle => !self.visible,
+            MenuWindowMsg::Hide => false,
+        };
+        if visible == self.visible {
+            return;
         }
+
+        self.visible = visible;
+        let _ = sender.output(if visible {
+            MenuWindowOutput::Shown
+        } else {
+            MenuWindowOutput::Hidden
+        });
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
