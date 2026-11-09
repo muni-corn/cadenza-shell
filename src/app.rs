@@ -44,8 +44,6 @@ pub(crate) enum CadenzaShellMsg {
     /// The monitor list changed or a monitor was invalidated; bars are
     /// reconciled against the current list.
     MonitorsChanged,
-    /// A notification event forwarded from the global broadcast channel.
-    NotificationEvent(NotificationEvent),
     /// A notification was dismissed from the fresh panel.
     FreshNotificationDismissed(u32),
     /// A notification action was triggered from the fresh panel.
@@ -85,7 +83,7 @@ impl AsyncComponent for CadenzaShellModel {
 
         crate::services::start_all(&sender);
 
-        // subscribe to notification events and forward them into update()
+        // subscribe to notification events and forward them to the fresh panel
         sender.command(|out, shutdown| {
             shutdown
                 .register(async move {
@@ -151,7 +149,29 @@ impl AsyncComponent for CadenzaShellModel {
     ) {
         match msg {
             CadenzaShellMsg::MonitorsChanged => self.reconcile_bars(&sender),
-            CadenzaShellMsg::NotificationEvent(event) => {
+            CadenzaShellMsg::FreshNotificationDismissed(id) => {
+                tracing::debug!(notification.id = id, "fresh panel dismissed notification");
+                crate::notifications::dismiss(id);
+            }
+            CadenzaShellMsg::FreshNotificationAction(action) => {
+                tracing::debug!(
+                    notification.id = action.id,
+                    action = %action.key,
+                    "fresh panel triggered notification action"
+                );
+                crate::notifications::invoke_action(action);
+            }
+        }
+    }
+
+    async fn update_cmd(
+        &mut self,
+        message: Self::CommandOutput,
+        _sender: AsyncComponentSender<Self>,
+        _root: &Self::Root,
+    ) {
+        match message {
+            Self::CommandOutput::NotificationEvent(event) => {
                 let Some(panel) = &self.fresh_panel else {
                     return;
                 };
@@ -177,31 +197,6 @@ impl AsyncComponent for CadenzaShellModel {
                             .emit(FreshNotificationsMsg::RemoveNotification(id));
                     }
                 }
-            }
-            CadenzaShellMsg::FreshNotificationDismissed(id) => {
-                tracing::debug!(notification.id = id, "fresh panel dismissed notification");
-                crate::notifications::dismiss(id);
-            }
-            CadenzaShellMsg::FreshNotificationAction(action) => {
-                tracing::debug!(
-                    notification.id = action.id,
-                    action = %action.key,
-                    "fresh panel triggered notification action"
-                );
-                crate::notifications::invoke_action(action);
-            }
-        }
-    }
-
-    async fn update_cmd(
-        &mut self,
-        message: Self::CommandOutput,
-        sender: AsyncComponentSender<Self>,
-        _root: &Self::Root,
-    ) {
-        match message {
-            Self::CommandOutput::NotificationEvent(event) => {
-                sender.input(CadenzaShellMsg::NotificationEvent(event));
             }
             Self::CommandOutput::NotificationEventsMissed => {
                 if let Some(panel) = &self.fresh_panel {
