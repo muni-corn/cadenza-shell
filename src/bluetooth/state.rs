@@ -1,6 +1,6 @@
 use std::collections::{HashMap, hash_map};
 
-use bluer::{Adapter, Address};
+use bluer::Address;
 use relm4::SharedState;
 
 pub static BLUETOOTH_STATE: SharedState<Option<BluetoothState>> = SharedState::new();
@@ -43,7 +43,7 @@ pub enum PairingRequest {
 /// Snapshotting the properties we care about into shared state means the UI can
 /// render device rows and tooltips synchronously from cached data instead of
 /// doing D-Bus I/O on every render.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct DeviceInfo {
     pub address: Address,
     /// The device's display name. Falls back to the remote device name if
@@ -55,9 +55,9 @@ pub struct DeviceInfo {
     pub connected: bool,
 }
 
-#[derive(Clone, Debug)]
+/// The adapter's state, as plain data for the ui.
+#[derive(Clone, Debug, PartialEq)]
 pub struct BluetoothState {
-    pub adapter: Adapter,
     pub(super) devices: HashMap<Address, DeviceInfo>,
     pub discovering: bool,
 

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, time::Duration};
 
 use bluer::{
-    AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, DeviceProperty, Session,
+    Adapter, AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, DeviceProperty, Session,
     SessionEvent, agent::AgentHandle,
 };
 use futures_lite::StreamExt;
@@ -84,6 +84,9 @@ struct BluetoothService {
     event_tx: UnboundedSender<BluetoothEvent>,
     /// The agent stays registered for as long as its handle is held.
     agent: Option<AgentHandle>,
+    /// The adapter in use; kept out of shared state so the ui never does
+    /// D-Bus I/O itself.
+    adapter: Option<Adapter>,
     /// Session and bus name watchers that live as long as the service.
     background_tasks: Vec<AbortHandle>,
     adapter_events_task: Option<AbortHandle>,
@@ -105,6 +108,7 @@ impl BluetoothService {
             session,
             event_tx,
             agent: None,
+            adapter: None,
             background_tasks,
             adapter_events_task: None,
             device_event_tasks: HashMap::new(),
@@ -118,19 +122,18 @@ impl BluetoothService {
     async fn handle_event(&mut self, event: BluetoothEvent) {
         match event {
             BluetoothEvent::Session(SessionEvent::AdapterRemoved(name)) => {
-                let is_ours = BLUETOOTH_STATE
-                    .read()
+                let is_ours = self
+                    .adapter
                     .as_ref()
-                    .is_some_and(|state| state.adapter.name() == name);
+                    .is_some_and(|adapter| adapter.name() == name);
                 if is_ours {
                     tracing::warn!("bluetooth adapter '{name}' disappeared");
-                    *BLUETOOTH_STATE.write() = None;
                     // switch to any other adapter that's still present
                     self.reinitialize_adapter().await;
                 }
             }
             BluetoothEvent::Session(SessionEvent::AdapterAdded(name)) => {
-                if BLUETOOTH_STATE.read().is_none() {
+                if self.adapter.is_none() {
                     tracing::info!("bluetooth adapter '{name}' available, initializing");
                     self.reinitialize_adapter().await;
                 }
@@ -171,23 +174,15 @@ impl BluetoothService {
                     handle.abort();
                 }
             }
-            BluetoothCommand::SetPowered(powered) => match self.adapter() {
+            BluetoothCommand::SetPowered(powered) => match self.adapter.clone() {
                 Some(adapter) => actions::spawn_set_powered(adapter, powered),
                 None => tracing::warn!("can't toggle bluetooth: no adapter available"),
             },
-            BluetoothCommand::Device(address, action) => match self.adapter() {
+            BluetoothCommand::Device(address, action) => match self.adapter.clone() {
                 Some(adapter) => actions::spawn_device_action(adapter, address, action),
                 None => tracing::warn!("can't {action:?} {address}: no adapter available"),
             },
         }
-    }
-
-    /// The adapter currently in use, if any.
-    fn adapter(&self) -> Option<bluer::Adapter> {
-        BLUETOOTH_STATE
-            .read()
-            .as_ref()
-            .map(|state| state.adapter.clone())
     }
 
     /// Self-heals anything a missed event left stale.
@@ -198,7 +193,7 @@ impl BluetoothService {
     async fn reconcile(&mut self, reason: &str) {
         tracing::debug!("reconciling bluetooth state: {reason}");
         ensure_agent(&self.session, &mut self.agent).await;
-        if BLUETOOTH_STATE.read().is_none() {
+        if self.adapter.is_none() {
             self.reinitialize_adapter().await;
         } else {
             self.reconcile_devices().await;
@@ -207,6 +202,7 @@ impl BluetoothService {
 
     /// Stops every subscription tied to the current adapter.
     fn stop_adapter_tasks(&mut self) {
+        self.adapter = None;
         if let Some(handle) = self.adapter_events_task.take() {
             handle.abort();
         }
@@ -272,16 +268,16 @@ impl BluetoothService {
             powered: adapter.is_powered().await.unwrap_or(false),
             devices,
             discovering: adapter.is_discovering().await.unwrap_or(false),
-            adapter,
         };
 
+        self.adapter = Some(adapter);
         *BLUETOOTH_STATE.write() = Some(state);
     }
 
     /// Fetches a full property snapshot for a newly discovered device and
     /// inserts it into [`BLUETOOTH_STATE`].
     async fn add_device(&mut self, address: Address) {
-        let Some(adapter) = BLUETOOTH_STATE.read().as_ref().map(|s| s.adapter.clone()) else {
+        let Some(adapter) = self.adapter.clone() else {
             return;
         };
         let Ok(device) = adapter.device(address) else {
@@ -309,7 +305,7 @@ impl BluetoothService {
     /// never heard about are subscribed, and devices that can't be read are
     /// skipped.
     async fn reconcile_devices(&mut self) {
-        let Some(adapter) = BLUETOOTH_STATE.read().as_ref().map(|s| s.adapter.clone()) else {
+        let Some(adapter) = self.adapter.clone() else {
             return;
         };
 
@@ -410,13 +406,9 @@ impl BluetoothService {
             return;
         }
 
-        let adapter = {
-            let state = BLUETOOTH_STATE.read();
-            let Some(ref state) = *state else {
-                tracing::warn!("can't start discovery: no bluetooth adapter available");
-                return;
-            };
-            state.adapter.clone()
+        let Some(adapter) = self.adapter.clone() else {
+            tracing::warn!("can't start discovery: no bluetooth adapter available");
+            return;
         };
 
         let timeout_secs = settings::get_config().bluetooth.discovery_timeout;
