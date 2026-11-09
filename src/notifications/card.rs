@@ -5,6 +5,7 @@ use relm4::prelude::*;
 
 use crate::notifications::{
     image::NotificationImage,
+    markup,
     types::{DEFAULT_ACTION, Notification, NotificationUrgency},
 };
 
@@ -114,10 +115,9 @@ impl FactoryComponent for NotificationCard {
                             set_hexpand: true,
                         },
 
-                        // Body (if present)
+                        // body, rendered from the client's markup
                         gtk4::Label {
-                            #[watch]
-                            set_text: &self.notification.body,
+                            set_markup: &markup::to_label_markup(&self.notification.body),
                             add_css_class: "body",
                             set_wrap: true,
                             set_halign: gtk4::Align::Start,
@@ -126,7 +126,6 @@ impl FactoryComponent for NotificationCard {
                             set_ellipsize: gtk4::pango::EllipsizeMode::End,
                             set_max_width_chars: 1,
                             set_hexpand: true,
-                            #[watch]
                             set_visible: !self.notification.body.is_empty(),
                         },
                     },

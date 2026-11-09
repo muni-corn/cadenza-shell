@@ -4,6 +4,7 @@ pub mod fresh;
 mod hints;
 pub mod image;
 mod lifecycle;
+mod markup;
 pub mod panel;
 pub mod types;
 
