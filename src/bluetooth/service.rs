@@ -1,8 +1,11 @@
+mod apply;
+mod devices;
+mod watchers;
+
 use std::{collections::HashMap, time::Duration};
 
 use bluer::{
-    Adapter, AdapterEvent, AdapterProperty, Address, Device, DeviceEvent, DeviceProperty, Session,
-    SessionEvent, agent::AgentHandle,
+    Adapter, AdapterEvent, Address, DeviceEvent, Session, SessionEvent, agent::AgentHandle,
 };
 use futures_lite::StreamExt;
 use tokio::{
@@ -11,14 +14,16 @@ use tokio::{
     time::MissedTickBehavior,
 };
 
+use self::{
+    apply::{apply_adapter_property, apply_device_property, update_state},
+    watchers::{ensure_agent, spawn_bluez_owner_watcher, spawn_session_watcher},
+};
 use crate::{
     bluetooth::{
-        actions, agent,
+        actions,
         commands::{self, BluetoothCommand},
-        state::{BLUETOOTH_STATE, BluetoothState, DeviceInfo},
     },
     settings, sleep_monitor,
-    utils::shared_state::set_if_changed,
 };
 
 /// Events produced by the watcher tasks for the service loop.
@@ -215,172 +220,6 @@ impl BluetoothService {
         }
     }
 
-    /// (Re-)establishes [`BLUETOOTH_STATE`] and its watcher tasks against the
-    /// session's current default adapter, or clears state to `None` if none
-    /// is currently available.
-    ///
-    /// Called at startup and whenever the tracked adapter goes away, since a
-    /// restarted bluez or a replugged adapter needs fresh subscriptions.
-    async fn reinitialize_adapter(&mut self) {
-        self.stop_adapter_tasks();
-
-        let adapter = match self.session.default_adapter().await {
-            Ok(adapter) => adapter,
-            Err(e) => {
-                tracing::warn!("no bluetooth adapter currently available: {e}");
-                set_if_changed(&BLUETOOTH_STATE, None);
-                return;
-            }
-        };
-
-        // subscribe before snapshotting so devices and changes that appear in
-        // between are delivered as events instead of being lost
-        match adapter.events().await {
-            Ok(mut adapter_events) => {
-                let event_tx = self.event_tx.clone();
-                let handle = relm4::spawn(async move {
-                    while let Some(event) = adapter_events.next().await {
-                        if event_tx.send(BluetoothEvent::Adapter(event)).is_err() {
-                            break;
-                        }
-                    }
-                    tracing::warn!("bluetooth service has stopped receiving adapter events");
-                });
-                self.adapter_events_task = Some(handle.abort_handle());
-            }
-            Err(e) => tracing::error!("couldn't subscribe to bluetooth adapter events: {e}"),
-        }
-
-        let mut devices = HashMap::new();
-        for address in adapter.device_addresses().await.unwrap_or_default() {
-            let Ok(device) = adapter.device(address) else {
-                continue;
-            };
-            self.subscribe_device(address, device.clone()).await;
-            match build_device_info(&device).await {
-                Ok(info) => {
-                    devices.insert(address, info);
-                }
-                Err(e) => tracing::debug!("couldn't read bluetooth device {address}: {e}"),
-            }
-        }
-
-        let state = BluetoothState {
-            powered: adapter.is_powered().await.unwrap_or(false),
-            devices,
-            discovering: adapter.is_discovering().await.unwrap_or(false),
-        };
-
-        self.adapter = Some(adapter);
-        set_if_changed(&BLUETOOTH_STATE, Some(state));
-    }
-
-    /// Fetches a full property snapshot for a newly discovered device and
-    /// inserts it into [`BLUETOOTH_STATE`].
-    async fn add_device(&mut self, address: Address) {
-        let Some(adapter) = self.adapter.clone() else {
-            return;
-        };
-        let Ok(device) = adapter.device(address) else {
-            return;
-        };
-
-        // subscribe before fetching so a change in between isn't lost
-        self.subscribe_device(address, device.clone()).await;
-
-        match build_device_info(&device).await {
-            Ok(info) => update_state(|state| {
-                state.devices.insert(address, info);
-            }),
-            Err(e) => tracing::debug!("couldn't read new bluetooth device {address}: {e}"),
-        }
-    }
-
-    /// Re-polls adapter state and rebuilds the device list from the
-    /// adapter's own.
-    ///
-    /// The adapter's device list is the source of truth: devices it no
-    /// longer knows are dropped along with their subscriptions, devices we
-    /// never heard about are subscribed, and devices that can't be read are
-    /// skipped.
-    async fn reconcile_devices(&mut self) {
-        let Some(adapter) = self.adapter.clone() else {
-            return;
-        };
-
-        let addresses = match adapter.device_addresses().await {
-            Ok(addresses) => addresses,
-            Err(e) => {
-                tracing::warn!("couldn't list bluetooth devices: {e}");
-                return;
-            }
-        };
-
-        self.device_event_tasks.retain(|address, handle| {
-            let known = addresses.contains(address);
-            if !known {
-                handle.abort();
-            }
-            known
-        });
-
-        let mut devices = HashMap::with_capacity(addresses.len());
-        for address in addresses {
-            let Ok(device) = adapter.device(address) else {
-                continue;
-            };
-            if !self.device_event_tasks.contains_key(&address) {
-                self.subscribe_device(address, device.clone()).await;
-            }
-            match build_device_info(&device).await {
-                Ok(info) => {
-                    devices.insert(address, info);
-                }
-                Err(e) => tracing::debug!("couldn't read bluetooth device {address}: {e}"),
-            }
-        }
-
-        let powered = adapter.is_powered().await.unwrap_or(false);
-        let discovering = adapter.is_discovering().await.unwrap_or(false);
-
-        update_state(|state| {
-            state.powered = powered;
-            state.discovering = discovering;
-            state.devices = devices;
-        });
-    }
-
-    /// Forwards a device's property changes into the event channel,
-    /// replacing any stale subscription for the same address (e.g. it was
-    /// removed and re-added) rather than leaking it.
-    async fn subscribe_device(&mut self, address: Address, device: Device) {
-        let mut device_events = match device.events().await {
-            Ok(events) => events,
-            Err(e) => {
-                tracing::warn!("couldn't subscribe to events for device {address}: {e}");
-                return;
-            }
-        };
-
-        let event_tx = self.event_tx.clone();
-        let handle = relm4::spawn(async move {
-            while let Some(event) = device_events.next().await {
-                if event_tx
-                    .send(BluetoothEvent::Device(address, event))
-                    .is_err()
-                {
-                    break;
-                }
-            }
-            tracing::debug!("bluetooth event stream ended for device {address}");
-        })
-        .abort_handle();
-
-        if let Some(old_handle) = self.device_event_tasks.insert(address, handle) {
-            old_handle.abort();
-        }
-    }
-
     /// Starts a discovery session, holding it open (and thus BlueZ's
     /// `Discovering` state true) until `bluetooth.discovery_timeout` elapses or
     /// it's cancelled by a `StopDiscovery` command. A no-op if one is still
@@ -454,159 +293,4 @@ impl Drop for BluetoothService {
             handle.abort();
         }
     }
-}
-
-/// Applies an adapter property change to [`BLUETOOTH_STATE`].
-fn apply_adapter_property(property: AdapterProperty) {
-    // other properties (class, uuids, discoverable, ...) aren't shown, so
-    // don't wake every subscriber for them
-    if !matches!(
-        property,
-        AdapterProperty::Powered(_) | AdapterProperty::Discovering(_)
-    ) {
-        tracing::trace!("ignoring adapter property change: {property:?}");
-        return;
-    }
-
-    update_state(|state| match property {
-        AdapterProperty::Powered(powered) => state.powered = powered,
-        AdapterProperty::Discovering(discovering) => state.discovering = discovering,
-        _ => {}
-    });
-}
-
-/// Applies a device property change to [`BLUETOOTH_STATE`].
-fn apply_device_property(address: Address, property: DeviceProperty) {
-    // properties the shell doesn't show (rssi changes several times a second
-    // during discovery) would otherwise wake every subscriber for nothing
-    if !matches!(
-        property,
-        DeviceProperty::Connected(_)
-            | DeviceProperty::Alias(_)
-            | DeviceProperty::Icon(_)
-            | DeviceProperty::Paired(_)
-    ) {
-        tracing::trace!("ignoring device {address} property change: {property:?}");
-        return;
-    }
-
-    update_state(|state| {
-        let Some(info) = state.devices.get_mut(&address) else {
-            tracing::debug!("property change for untracked device {address}, ignoring");
-            return;
-        };
-        match property {
-            DeviceProperty::Connected(connected) => info.connected = connected,
-            DeviceProperty::Alias(alias) => info.alias = alias,
-            DeviceProperty::Icon(icon) => info.icon = Some(icon),
-            DeviceProperty::Paired(paired) => info.paired = paired,
-            _ => {}
-        }
-    });
-}
-
-/// Applies `update` to a copy of the current state and publishes it only if
-/// something changed, since every write wakes every tile and menu.
-fn update_state(update: impl FnOnce(&mut BluetoothState)) {
-    let Some(mut state) = BLUETOOTH_STATE.read().clone() else {
-        return;
-    };
-    update(&mut state);
-    set_if_changed(&BLUETOOTH_STATE, Some(state));
-}
-
-/// Registers the pairing agent unless it's already registered.
-///
-/// If becoming the default agent fails (e.g. another agent holds that role),
-/// registration is retried as a non-default agent, which still handles the
-/// pairings this shell starts itself.
-async fn ensure_agent(session: &Session, handle: &mut Option<bluer::agent::AgentHandle>) {
-    if handle.is_some() {
-        return;
-    }
-
-    let default_agent = settings::get_config().bluetooth.default_agent;
-    let registered = match agent::register_agent(session, default_agent).await {
-        Err(e) if default_agent => {
-            tracing::warn!("couldn't become the default pairing agent, registering normally: {e}");
-            agent::register_agent(session, false).await
-        }
-        result => result,
-    };
-
-    match registered {
-        Ok(agent_handle) => {
-            tracing::info!("bluetooth pairing agent registered");
-            *handle = Some(agent_handle);
-        }
-        Err(e) => tracing::warn!("couldn't register bluetooth pairing agent: {e}"),
-    }
-}
-
-/// Sends [`BluetoothEvent::BluezRestarted`] whenever `org.bluez` gets a new
-/// owner.
-fn spawn_bluez_owner_watcher(event_tx: UnboundedSender<BluetoothEvent>) -> AbortHandle {
-    relm4::spawn(async move {
-        let result: anyhow::Result<()> = async {
-            let conn = zbus::Connection::system().await?;
-            let dbus = zbus::fdo::DBusProxy::new(&conn).await?;
-            let mut changes = dbus.receive_name_owner_changed().await?;
-            while let Some(change) = changes.next().await {
-                let args = change.args()?;
-                if args.name.as_str() == "org.bluez" && args.new_owner.is_some() {
-                    event_tx.send(BluetoothEvent::BluezRestarted)?;
-                }
-            }
-            Ok(())
-        }
-        .await;
-
-        if let Err(e) = result {
-            tracing::warn!("stopped watching for bluetoothd restarts: {e}");
-        }
-    })
-    .abort_handle()
-}
-
-/// Watches for adapters appearing or disappearing and forwards them as
-/// [`BluetoothEvent::Session`] events.
-fn spawn_session_watcher(
-    session: Session,
-    event_tx: UnboundedSender<BluetoothEvent>,
-) -> AbortHandle {
-    relm4::spawn(async move {
-        let stream = match session.events().await {
-            Ok(s) => s,
-            Err(e) => {
-                tracing::error!("couldn't subscribe to bluetooth session events: {e}");
-                return;
-            }
-        };
-        // Session::events()'s stream isn't Unpin, unlike Adapter/Device's;
-        // pin it to a stack slot so StreamExt::next() can be called on it
-        let mut stream = std::pin::pin!(stream);
-
-        while let Some(event) = stream.next().await {
-            tracing::debug!("bluetooth session event: {event:?}");
-            if event_tx.send(BluetoothEvent::Session(event)).is_err() {
-                break;
-            }
-        }
-        tracing::warn!("stream for bluetooth session events has closed");
-    })
-    .abort_handle()
-}
-
-/// Fetches a full property snapshot for a device.
-///
-/// Fails if the device can't be read (usually because bluez forgot it), so
-/// callers can drop it instead of showing made-up defaults.
-async fn build_device_info(device: &Device) -> bluer::Result<DeviceInfo> {
-    Ok(DeviceInfo {
-        address: device.address(),
-        alias: device.alias().await?,
-        icon: device.icon().await?,
-        paired: device.is_paired().await?,
-        connected: device.is_connected().await?,
-    })
 }
