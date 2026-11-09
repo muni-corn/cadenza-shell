@@ -10,13 +10,14 @@ use crate::{
     tiles::{
         battery::battery_tile,
         bluetooth::BluetoothTile,
-        brightness::BrightnessTile,
+        brightness::brightness_tile,
         network::NetworkTile,
         notifications::notifications_tile,
-        pulseaudio::PulseAudioTile,
+        pulseaudio::volume_tile,
         tray::{TrayMsg, TrayWidget},
     },
     widgets::{
+        progress_tile::ProgressTile,
         tile::{Tile, TileOutput},
         tray_item::TrayItemOutput,
     },
@@ -29,8 +30,8 @@ pub struct RightGroup {
 
 #[derive(Debug)]
 pub struct RightWidgets {
-    _brightness: Controller<BrightnessTile>,
-    _volume: Controller<PulseAudioTile>,
+    _brightness: Controller<ProgressTile>,
+    _volume: Controller<ProgressTile>,
     _bluetooth: Controller<BluetoothTile>,
 
     _network: Controller<NetworkTile>,
@@ -81,8 +82,8 @@ impl SimpleComponent for RightGroup {
         root.set_spacing(bar_config.tile_spacing);
         root.set_margin_horizontal(bar_config.edge_padding);
 
-        let brightness = BrightnessTile::builder().launch(()).detach();
-        let volume = PulseAudioTile::builder().launch(()).detach();
+        let brightness = brightness_tile();
+        let volume = volume_tile();
         let bluetooth = BluetoothTile::builder().launch(monitor.clone()).detach();
         let network = NetworkTile::builder().launch(monitor.clone()).detach();
         let battery = battery_tile();
