@@ -8,7 +8,7 @@ use system_tray::{client::Event as TrayEvent, data::BaseMap};
 use crate::{
     settings::BarConfig,
     tiles::{
-        battery::BatteryTile,
+        battery::battery_tile,
         bluetooth::BluetoothTile,
         brightness::BrightnessTile,
         network::NetworkTile,
@@ -16,7 +16,7 @@ use crate::{
         pulseaudio::PulseAudioTile,
         tray::{TrayMsg, TrayWidget},
     },
-    widgets::tray_item::TrayItemOutput,
+    widgets::{tile::Tile, tray_item::TrayItemOutput},
 };
 
 #[derive(Debug)]
@@ -31,7 +31,7 @@ pub struct RightWidgets {
     _bluetooth: Controller<BluetoothTile>,
 
     _network: Controller<NetworkTile>,
-    _battery: Controller<BatteryTile>,
+    _battery: Controller<Tile>,
     _notifications: Controller<NotificationsTile>,
 }
 
@@ -82,7 +82,7 @@ impl SimpleComponent for RightGroup {
         let volume = PulseAudioTile::builder().launch(()).detach();
         let bluetooth = BluetoothTile::builder().launch(monitor.clone()).detach();
         let network = NetworkTile::builder().launch(monitor.clone()).detach();
-        let battery = BatteryTile::builder().launch(()).detach();
+        let battery = battery_tile();
         let notifications = NotificationsTile::builder().launch(()).forward(
             sender.output_sender(),
             |msg| match msg {
