@@ -26,10 +26,8 @@ pub enum TileMsg {
     Set(Option<TileState>),
     // legacy per-field setters, still used by tiles that haven't moved to
     // TileState
-    SetIcon(Option<String>),
     SetPrimary(Option<String>),
     SetSecondary(Option<String>),
-    SetTooltip(Option<String>),
 }
 
 #[derive(Debug)]
@@ -115,10 +113,8 @@ impl SimpleComponent for Tile {
         let state = self.state.get_or_insert_default();
         match msg {
             TileMsg::Set(_) => {}
-            TileMsg::SetIcon(icon) => state.icon = icon,
             TileMsg::SetPrimary(primary) => state.primary = primary,
             TileMsg::SetSecondary(secondary) => state.secondary = secondary,
-            TileMsg::SetTooltip(tooltip) => state.tooltip = tooltip,
         }
     }
 

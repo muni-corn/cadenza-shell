@@ -3,6 +3,8 @@ use std::collections::{HashMap, hash_map};
 use bluer::Address;
 use relm4::SharedState;
 
+use crate::icon_names::{BLUETOOTH, BLUETOOTH_DOTS, BLUETOOTH_NO, BLUETOOTH_X};
+
 pub static BLUETOOTH_STATE: SharedState<Option<BluetoothState>> = SharedState::new();
 
 /// The pairing prompt currently awaiting a response from the user, if any.
@@ -76,5 +78,16 @@ impl BluetoothState {
     /// out of sync with the devices it's supposed to be counting.
     pub fn connected_device_count(&self) -> usize {
         self.devices.values().filter(|d| d.connected).count()
+    }
+}
+
+/// The bluetooth icon for the adapter's state, used by both the tile and
+/// the menu.
+pub fn get_icon(state: Option<&BluetoothState>) -> &'static str {
+    match state {
+        Some(state) if state.powered && state.discovering => BLUETOOTH_DOTS,
+        Some(state) if state.powered && state.connected_device_count() > 0 => BLUETOOTH,
+        Some(state) if state.powered => BLUETOOTH_X,
+        _ => BLUETOOTH_NO,
     }
 }

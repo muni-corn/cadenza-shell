@@ -13,4 +13,5 @@ pub use commands::{
 pub use service::run_bluetooth_service;
 pub use state::{
     BLUETOOTH_STATE, BluetoothState, DeviceInfo, PAIRING_PROMPT, PairingPrompt, PairingRequest,
+    get_icon,
 };

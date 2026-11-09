@@ -3,36 +3,33 @@ use gtk4::prelude::*;
 use relm4::prelude::*;
 
 use crate::{
-    bluetooth::{BLUETOOTH_STATE, BluetoothState},
+    bluetooth::{BLUETOOTH_STATE, BluetoothState, get_icon},
     bluetooth_menu::BluetoothMenu,
-    icon_names::{BLUETOOTH, BLUETOOTH_DOTS, BLUETOOTH_NO, BLUETOOTH_X},
     widgets::{
         menu_window::{MenuWindow, MenuWindowInit, MenuWindowMsg, MenuWindowOutput},
-        tile::{Tile, TileMsg, TileState},
+        tile::{Tile, TileOutput, TileState, state_tile},
     },
 };
 
 #[derive(Debug)]
 pub struct BluetoothTile {
-    tile: Controller<Tile>,
     menu_open: bool,
     menu_window: Controller<MenuWindow>,
 }
 
 #[derive(Debug)]
 pub struct BluetoothWidgets {
+    _tile: Controller<Tile>,
     _menu: Controller<BluetoothMenu>,
 }
 
 #[derive(Debug)]
 pub enum BluetoothTileMsg {
-    Update(Option<BluetoothState>),
     ToggleMenu,
     MenuClosed,
 }
 
-impl Component for BluetoothTile {
-    type CommandOutput = ();
+impl SimpleComponent for BluetoothTile {
     type Init = Monitor;
     type Input = BluetoothTileMsg;
     type Output = ();
@@ -44,21 +41,12 @@ impl Component for BluetoothTile {
         root: Self::Root,
         sender: ComponentSender<Self>,
     ) -> ComponentParts<Self> {
-        BLUETOOTH_STATE.subscribe(sender.input_sender(), |state| {
-            BluetoothTileMsg::Update(state.to_owned())
-        });
-
-        // render whatever state already exists; tiles on hotplugged bars
-        // would otherwise stay blank until the next state change
-        let current_state = BLUETOOTH_STATE.read().clone();
-        root.set_visible(current_state.is_some());
-        let tile = Tile::builder()
-            .launch(Some(TileState {
-                icon: current_state.as_ref().map(get_bluetooth_icon),
-                tooltip: current_state.as_ref().map(get_tooltip_text),
-                ..Default::default()
-            }))
-            .detach();
+        // toggle the menu window on click; authoritative for open/closed
+        // state so it doesn't depend on the window's own visibility
+        let tile = state_tile(&BLUETOOTH_STATE, view)
+            .forward(sender.input_sender(), |TileOutput::Clicked| {
+                BluetoothTileMsg::ToggleMenu
+            });
 
         // initialize the bluetooth menu component
         let bluetooth_menu = BluetoothMenu::builder().launch(()).detach();
@@ -77,39 +65,22 @@ impl Component for BluetoothTile {
                 MenuWindowOutput::Hidden => BluetoothTileMsg::MenuClosed,
             });
 
-        // toggle the menu window on click; authoritative for open/closed
-        // state so it doesn't depend on the window's own visibility
-        tile.widget().connect_clicked({
-            let sender = sender.clone();
-            move |_| sender.input(BluetoothTileMsg::ToggleMenu)
-        });
-
         root.append(tile.widget());
 
         ComponentParts {
             model: Self {
-                tile,
                 menu_open: false,
                 menu_window,
             },
             widgets: BluetoothWidgets {
+                _tile: tile,
                 _menu: bluetooth_menu,
             },
         }
     }
 
-    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>, root: &Self::Root) {
+    fn update(&mut self, msg: Self::Input, _sender: ComponentSender<Self>) {
         match msg {
-            BluetoothTileMsg::Update(info) => {
-                root.set_visible(info.is_some());
-
-                if let Some(state) = info {
-                    self.tile
-                        .emit(TileMsg::SetIcon(Some(get_bluetooth_icon(&state))));
-                    self.tile
-                        .emit(TileMsg::SetTooltip(Some(get_tooltip_text(&state))));
-                }
-            }
             BluetoothTileMsg::ToggleMenu => {
                 self.menu_open = !self.menu_open;
                 self.menu_window.emit(if self.menu_open {
@@ -129,18 +100,14 @@ impl Component for BluetoothTile {
     }
 }
 
-fn get_bluetooth_icon(state: &BluetoothState) -> String {
-    // matches bluetooth_menu's four-state icon mapping
-    if !state.powered {
-        BLUETOOTH_NO
-    } else if state.discovering {
-        BLUETOOTH_DOTS
-    } else if state.connected_device_count() > 0 {
-        BLUETOOTH
-    } else {
-        BLUETOOTH_X
-    }
-    .to_string()
+/// Hidden without an adapter.
+fn view(state: &Option<BluetoothState>) -> Option<TileState> {
+    let state = state.as_ref()?;
+    Some(TileState {
+        icon: Some(get_icon(Some(state)).to_string()),
+        tooltip: Some(get_tooltip_text(state)),
+        ..Default::default()
+    })
 }
 
 /// Builds the tile's tooltip text from cached device snapshots.

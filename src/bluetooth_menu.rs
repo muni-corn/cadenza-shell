@@ -2,12 +2,9 @@ use bluer::Address;
 use gtk4::prelude::*;
 use relm4::prelude::*;
 
-use crate::{
-    bluetooth::{
-        self, BLUETOOTH_STATE, BluetoothState, DeviceInfo, PAIRING_PROMPT, PairingPrompt,
-        PairingReply, PairingRequest,
-    },
-    icon_names::{BLUETOOTH, BLUETOOTH_DOTS, BLUETOOTH_NO, BLUETOOTH_X},
+use crate::bluetooth::{
+    self, BLUETOOTH_STATE, BluetoothState, DeviceInfo, PAIRING_PROMPT, PairingPrompt, PairingReply,
+    PairingRequest, get_icon,
 };
 
 #[derive(Debug)]
@@ -118,7 +115,7 @@ impl SimpleComponent for BluetoothMenu {
             .icon_size(gtk::IconSize::Large)
             .hexpand(true)
             .halign(gtk::Align::Start)
-            .icon_name(get_icon(&model.bluetooth_state))
+            .icon_name(get_icon(model.bluetooth_state.as_ref()))
             .build();
 
         // create toggle switch
@@ -366,7 +363,7 @@ impl SimpleComponent for BluetoothMenu {
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
         widgets
             .icon
-            .set_icon_name(Some(get_icon(&self.bluetooth_state)));
+            .set_icon_name(Some(get_icon(self.bluetooth_state.as_ref())));
 
         let is_powered = self.bluetooth_state.as_ref().map_or_default(|s| s.powered);
 
@@ -504,15 +501,6 @@ fn parse_passkey(text: &str) -> Result<u32, &'static str> {
         .ok()
         .filter(|passkey| *passkey <= 999_999)
         .ok_or("Passkeys are numbers from 0 to 999999")
-}
-
-fn get_icon(state: &Option<BluetoothState>) -> &str {
-    match state {
-        Some(s) if s.powered && s.discovering => BLUETOOTH_DOTS,
-        Some(s) if s.powered && s.connected_device_count() > 0 => BLUETOOTH,
-        Some(s) if s.powered => BLUETOOTH_X,
-        _ => BLUETOOTH_NO,
-    }
 }
 
 fn get_status_text(state: &Option<BluetoothState>) -> String {
