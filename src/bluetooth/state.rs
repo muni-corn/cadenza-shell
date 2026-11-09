@@ -61,8 +61,11 @@ pub struct DeviceInfo {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BluetoothState {
     pub(super) devices: HashMap<Address, DeviceInfo>,
+    /// Whether the adapter is discovering, for any client.
     pub discovering: bool,
-
+    /// Whether this shell holds a discovery session, which is the only kind
+    /// it can stop; another client's scan also sets `discovering`.
+    pub discovery_owned: bool,
     pub powered: bool,
 }
 

@@ -66,6 +66,8 @@ impl BluetoothService {
             powered: adapter.is_powered().await.unwrap_or(false),
             devices,
             discovering: adapter.is_discovering().await.unwrap_or(false),
+            // any session we held belonged to the previous adapter
+            discovery_owned: false,
         };
 
         self.adapter = Some(adapter);

@@ -37,6 +37,8 @@ enum BluetoothEvent {
     /// bluetoothd gained a new owner on the bus (it started or restarted),
     /// which loses our agent registration and every adapter subscription.
     BluezRestarted,
+    /// Our discovery session ended on its own.
+    DiscoveryEnded,
 }
 
 /// Runs the bluetooth service: watches bluez, publishes [`BLUETOOTH_STATE`],
@@ -166,6 +168,16 @@ impl BluetoothService {
             BluetoothEvent::Device(address, DeviceEvent::PropertyChanged(property)) => {
                 apply_device_property(address, property);
             }
+            BluetoothEvent::DiscoveryEnded => {
+                // a newer session may have started since this one ended
+                let current_running = self
+                    .discovery_task
+                    .as_ref()
+                    .is_some_and(|handle| !handle.is_finished());
+                if !current_running {
+                    self.stop_discovery();
+                }
+            }
         }
     }
 
@@ -174,11 +186,7 @@ impl BluetoothService {
     async fn handle_command(&mut self, cmd: BluetoothCommand) {
         match cmd {
             BluetoothCommand::StartDiscovery => self.start_discovery().await,
-            BluetoothCommand::StopDiscovery => {
-                if let Some(handle) = self.discovery_task.take() {
-                    handle.abort();
-                }
-            }
+            BluetoothCommand::StopDiscovery => self.stop_discovery(),
             BluetoothCommand::SetPowered(powered) => match self.adapter.clone() {
                 Some(adapter) => actions::spawn_set_powered(adapter, powered),
                 None => tracing::warn!("can't toggle bluetooth: no adapter available"),
@@ -214,9 +222,15 @@ impl BluetoothService {
         for (_, handle) in self.device_event_tasks.drain() {
             handle.abort();
         }
+        self.stop_discovery();
+    }
+
+    /// Ends our discovery session, if we hold one.
+    fn stop_discovery(&mut self) {
         if let Some(handle) = self.discovery_task.take() {
             handle.abort();
         }
+        update_state(|state| state.discovery_owned = false);
     }
 
     /// Starts a discovery session, holding it open (and thus BlueZ's
@@ -258,6 +272,7 @@ impl BluetoothService {
             }
         };
 
+        let event_tx = self.event_tx.clone();
         let handle = relm4::spawn(async move {
             let sleep = tokio::time::sleep(Duration::from_secs(timeout_secs));
             tokio::pin!(sleep);
@@ -276,12 +291,15 @@ impl BluetoothService {
                     }
                 }
             }
-            // dropping `stream` here (end of scope) drops its internal
-            // discovery session token, which is what actually stops discovery
+            // dropping the stream drops its discovery session token, which is
+            // what actually stops discovery
+            drop(stream);
+            let _ = event_tx.send(BluetoothEvent::DiscoveryEnded);
         })
         .abort_handle();
 
         self.discovery_task = Some(handle);
+        update_state(|state| state.discovery_owned = true);
     }
 }
 

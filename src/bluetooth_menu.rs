@@ -230,8 +230,13 @@ impl SimpleComponent for BluetoothMenu {
                 bluetooth::set_powered(enabled);
             }
             BluetoothMenuMsg::ToggleDiscovery => {
-                let discovering = self.bluetooth_state.as_ref().is_some_and(|s| s.discovering);
-                if discovering {
+                // only our own session can be stopped, so another client's
+                // scan still offers to start one
+                let owned = self
+                    .bluetooth_state
+                    .as_ref()
+                    .is_some_and(|s| s.discovery_owned);
+                if owned {
                     bluetooth::stop_discovery();
                 } else {
                     bluetooth::start_discovery();
@@ -333,7 +338,7 @@ fn nearby_devices_iter(state: &Option<BluetoothState>) -> impl Iterator<Item = &
 }
 
 fn scan_button_label(state: &Option<BluetoothState>) -> String {
-    if state.as_ref().is_some_and(|s| s.discovering) {
+    if state.as_ref().is_some_and(|s| s.discovery_owned) {
         "Stop scanning".to_string()
     } else {
         "Scan for devices".to_string()
