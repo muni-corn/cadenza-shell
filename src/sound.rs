@@ -11,6 +11,14 @@ pub fn play(event_id: &str) {
     spawn_and_reap(command);
 }
 
+/// Play a sound file using `canberra-gtk-play`, in the background like
+/// [`play`].
+pub fn play_file(path: &str) {
+    let mut command = Command::new("canberra-gtk-play");
+    command.arg("--file").arg(path);
+    spawn_and_reap(command);
+}
+
 /// Starts `command` and waits for it in the background, so finished players
 /// don't linger as zombie processes.
 fn spawn_and_reap(mut command: Command) {

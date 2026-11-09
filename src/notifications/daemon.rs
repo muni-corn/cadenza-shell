@@ -6,11 +6,14 @@ use std::{
 
 use zbus::{interface, object_server::SignalEmitter, zvariant::OwnedValue};
 
-use crate::notifications::{
-    NOTIFICATIONS_STATE, NotificationEvent, event_tx,
-    hints::Hints,
-    lifecycle::{self, CloseReason},
-    types::{Notification, NotificationUrgency},
+use crate::{
+    notifications::{
+        NOTIFICATIONS_STATE, NotificationEvent, event_tx,
+        hints::Hints,
+        lifecycle::{self, CloseReason},
+        types::{Notification, NotificationUrgency},
+    },
+    sound,
 };
 
 static NOTIFICATION_ID: AtomicU32 = AtomicU32::new(1);
@@ -82,6 +85,10 @@ impl NotificationsDaemon {
             resident: hints.flag("resident"),
             action_icons: hints.flag("action-icons"),
         };
+
+        if !hints.flag("suppress-sound") {
+            play_sound(&hints);
+        }
 
         // write to the global state
         NOTIFICATIONS_STATE
@@ -161,4 +168,14 @@ impl NotificationsDaemon {
         id: u32,
         action_key: String,
     ) -> zbus::Result<()>;
+}
+
+/// Plays the notification's `sound-file`, or else its `sound-name` theme
+/// event, if it has either.
+fn play_sound(hints: &Hints) {
+    if let Some(file) = hints.string("sound-file") {
+        sound::play_file(file.strip_prefix("file://").unwrap_or(&file));
+    } else if let Some(name) = hints.string("sound-name") {
+        sound::play(&name);
+    }
 }
