@@ -1,6 +1,4 @@
-mod center;
-mod left;
-mod right;
+mod tiles;
 
 use std::sync::Arc;
 
@@ -12,14 +10,7 @@ use relm4::prelude::*;
 use crate::{
     notifications::panel::{ActionPanel, ActionPanelMsg},
     settings,
-    widgets::{
-        bar::{
-            center::CenterGroup,
-            left::{LeftGroup, LeftGroupInit},
-            right::{RightGroup, RightGroupInit, RightGroupOutput},
-        },
-        tray_item::TrayClient,
-    },
+    widgets::{bar::tiles::BarTiles, tray_item::TrayClient},
 };
 
 #[derive(Debug)]
@@ -30,10 +21,7 @@ pub struct Bar {
     /// compositor from migrating the layer surface to another output.
     window: gtk::Window,
 
-    // save Controllers so they aren't dropped
-    left: Controller<LeftGroup>,
-    center: Controller<CenterGroup>,
-    right: Controller<RightGroup>,
+    _tiles: BarTiles,
 
     /// This bar's own action panel, toggled by its bell button.
     action_panel: Controller<ActionPanel>,
@@ -79,26 +67,12 @@ impl SimpleAsyncComponent for Bar {
         // each bar owns the action panel for its own monitor
         let action_panel = ActionPanel::builder().launch(monitor.clone()).detach();
 
+        let (tiles, groups) =
+            BarTiles::launch(config.bar, &monitor, tray_client, sender.input_sender());
+
         let model = Bar {
-            left: LeftGroup::builder()
-                .launch(LeftGroupInit {
-                    bar_config: config.bar,
-                    monitor: monitor.clone(),
-                })
-                .detach(),
-            center: CenterGroup::builder().launch(config.bar).detach(),
-            right: RightGroup::builder()
-                .launch(RightGroupInit {
-                    bar_config: config.bar,
-                    tray_client,
-                    monitor: monitor.clone(),
-                })
-                .forward(sender.input_sender(), |output| match output {
-                    RightGroupOutput::ToggleActionPanel => BarMsg::ToggleActionPanel,
-                }),
-
+            _tiles: tiles,
             action_panel,
-
             window: window.clone(),
             monitor,
         };
@@ -108,9 +82,9 @@ impl SimpleAsyncComponent for Bar {
             .height_request(config.bar.height)
             .hexpand(true)
             .shrink_center_last(true)
-            .start_widget(model.left.widget())
-            .center_widget(model.center.widget())
-            .end_widget(model.right.widget())
+            .start_widget(&groups.start)
+            .center_widget(&groups.center)
+            .end_widget(&groups.end)
             .build();
 
         // gtk4-layer-shell must be initialized before the window is realized
