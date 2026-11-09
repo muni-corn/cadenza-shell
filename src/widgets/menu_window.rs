@@ -38,6 +38,7 @@ pub enum MenuWindowMsg {
     /// Shows the window if it's hidden and hides it otherwise; what a tile
     /// sends when clicked.
     Toggle,
+    Show,
     Hide,
 }
 
@@ -123,6 +124,7 @@ impl SimpleComponent for MenuWindow {
     fn update(&mut self, msg: Self::Input, sender: ComponentSender<Self>) {
         let visible = match msg {
             MenuWindowMsg::Toggle => !self.visible,
+            MenuWindowMsg::Show => true,
             MenuWindowMsg::Hide => false,
         };
         if visible == self.visible {
