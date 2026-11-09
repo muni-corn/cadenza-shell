@@ -21,6 +21,9 @@ pub struct MenuRowData {
     pub remove_tooltip: Option<&'static str>,
     /// Why the last action on the row's item failed, shown under the title.
     pub error: Option<String>,
+    /// Whether an action on the row's item is in flight; busy rows show a
+    /// spinner and ignore clicks so the action isn't started twice.
+    pub busy: bool,
 }
 
 /// What the user did with a row, identified by its key.
@@ -47,6 +50,7 @@ pub struct MenuRowWidgets {
     title: gtk::Label,
     error: gtk::Label,
     status: gtk::Label,
+    spinner: gtk::Spinner,
     remove: gtk::Button,
 }
 
@@ -105,8 +109,10 @@ impl FactoryComponent for MenuRow {
             .halign(gtk::Align::End)
             .build();
         content.append(&icon);
+        let spinner = gtk::Spinner::new();
         content.append(&text);
         content.append(&status);
+        content.append(&spinner);
         select.set_child(Some(&content));
 
         let remove = gtk::Button::builder()
@@ -122,6 +128,7 @@ impl FactoryComponent for MenuRow {
             title,
             error,
             status,
+            spinner,
             remove,
         };
         self.render(&widgets);
@@ -130,6 +137,7 @@ impl FactoryComponent for MenuRow {
 
     fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
         match msg {
+            MenuRowMsg::Activate | MenuRowMsg::Remove if self.data.busy => {}
             MenuRowMsg::Activate => {
                 let _ = sender.output(MenuRowOutput::Activated(self.data.key.clone()));
             }
@@ -158,7 +166,12 @@ impl MenuRow {
             .error
             .set_label(self.data.error.as_deref().unwrap_or_default());
 
-        widgets.status.set_visible(self.data.status.is_some());
+        widgets.spinner.set_visible(self.data.busy);
+        widgets.spinner.set_spinning(self.data.busy);
+
+        widgets
+            .status
+            .set_visible(self.data.status.is_some() && !self.data.busy);
         widgets
             .status
             .set_label(self.data.status.unwrap_or_default());
@@ -213,6 +226,7 @@ mod tests {
             status: None,
             remove_tooltip: None,
             error: None,
+            busy: false,
         }
     }
 

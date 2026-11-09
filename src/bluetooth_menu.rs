@@ -49,6 +49,8 @@ pub enum BluetoothMenuMsg {
     SetOpen(bool),
     /// An operation requested from a menu progressed.
     Outcome(BluetoothOutcome),
+    /// Some outcomes were missed, so busy rows may never hear back.
+    OutcomesMissed,
 }
 
 #[derive(Debug)]
@@ -277,6 +279,11 @@ impl SimpleComponent for BluetoothMenu {
                 self.devices.apply_progress(address, action, &progress);
                 self.devices.sync(self.bluetooth_state.as_ref());
             }
+            BluetoothMenuMsg::OutcomesMissed => {
+                // better to allow a second click than to block a row forever
+                self.devices.clear_busy();
+                self.devices.sync(self.bluetooth_state.as_ref());
+            }
             BluetoothMenuMsg::Outcome(BluetoothOutcome::PowerFailed { powered, reason }) => {
                 let state = if powered { "on" } else { "off" };
                 self.power_error = Some(format!("Couldn't turn bluetooth {state}: {reason}"));
@@ -323,8 +330,9 @@ fn forward_outcomes(sender: &ComponentSender<BluetoothMenu>) {
                 loop {
                     match outcomes.recv().await {
                         Ok(outcome) => input.emit(BluetoothMenuMsg::Outcome(outcome)),
-                        // a missed outcome only leaves a stale error behind
-                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                            input.emit(BluetoothMenuMsg::OutcomesMissed);
+                        }
                         Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
                     }
                 }

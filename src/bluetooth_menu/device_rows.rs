@@ -1,6 +1,6 @@
 //! The menu's paired and nearby device lists.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use bluer::Address;
 use relm4::{Sender, prelude::*};
@@ -18,6 +18,8 @@ pub struct DeviceRows {
     nearby: FactoryVecDeque<MenuRow>,
     /// Why the last action on each device failed, until the next one starts.
     errors: HashMap<Address, String>,
+    /// Devices with an action in flight.
+    busy: HashSet<Address>,
 }
 
 impl DeviceRows {
@@ -27,6 +29,7 @@ impl DeviceRows {
             paired: device_list(menu),
             nearby: device_list(menu),
             errors: HashMap::new(),
+            busy: HashSet::new(),
         }
     }
 
@@ -39,11 +42,16 @@ impl DeviceRows {
         progress: &ActionProgress,
     ) {
         match progress {
-            ActionProgress::Failed(reason) => {
-                self.errors.insert(address, failure_text(action, reason));
-            }
-            ActionProgress::Started | ActionProgress::Succeeded => {
+            ActionProgress::Started => {
+                self.busy.insert(address);
                 self.errors.remove(&address);
+            }
+            ActionProgress::Succeeded => {
+                self.busy.remove(&address);
+            }
+            ActionProgress::Failed(reason) => {
+                self.busy.remove(&address);
+                self.errors.insert(address, failure_text(action, reason));
             }
         }
     }
@@ -56,13 +64,43 @@ impl DeviceRows {
         self.nearby.widget()
     }
 
+    /// Forgets which devices have actions in flight; call [`Self::sync`]
+    /// afterwards to show it.
+    pub fn clear_busy(&mut self) {
+        self.busy.clear();
+    }
+
     /// Makes the lists show the devices in `state`.
     pub fn sync(&mut self, state: Option<&BluetoothState>) {
         let devices = || state.into_iter().flat_map(BluetoothState::devices);
-        let paired = device_rows(devices().filter(|d| d.paired), &self.errors);
-        let nearby = device_rows(devices().filter(|d| !d.paired), &self.errors);
+        let paired = self.rows_for(devices().filter(|d| d.paired));
+        let nearby = self.rows_for(devices().filter(|d| !d.paired));
         sync_rows(&mut self.paired, paired);
         sync_rows(&mut self.nearby, nearby);
+    }
+
+    /// Rows for `devices`, connected devices first and then by name; devices
+    /// come out of a hashmap, so they need a stable order.
+    fn rows_for<'a>(&self, devices: impl Iterator<Item = &'a DeviceInfo>) -> Vec<MenuRowData> {
+        let mut devices: Vec<&DeviceInfo> = devices.collect();
+        devices.sort_by(|a, b| {
+            b.connected
+                .cmp(&a.connected)
+                .then_with(|| a.alias.cmp(&b.alias))
+                .then_with(|| a.address.cmp(&b.address))
+        });
+        devices
+            .into_iter()
+            .map(|info| MenuRowData {
+                key: info.address.to_string(),
+                icon: info.icon.clone(),
+                title: info.alias.clone(),
+                status: info.connected.then_some("Connected"),
+                remove_tooltip: info.paired.then_some("Remove this device"),
+                error: self.errors.get(&info.address).cloned(),
+                busy: self.busy.contains(&info.address),
+            })
+            .collect()
     }
 }
 
@@ -84,37 +122,6 @@ fn device_output_to_msg(output: MenuRowOutput) -> BluetoothMenuMsg {
     match output {
         MenuRowOutput::Activated(_) => BluetoothMenuMsg::DeviceClicked(address),
         MenuRowOutput::Remove(_) => BluetoothMenuMsg::RemoveDevice(address),
-    }
-}
-
-/// Rows for `devices`, connected devices first and then by name; devices
-/// come out of a hashmap, so they need a stable order.
-fn device_rows<'a>(
-    devices: impl Iterator<Item = &'a DeviceInfo>,
-    errors: &HashMap<Address, String>,
-) -> Vec<MenuRowData> {
-    let mut devices: Vec<&DeviceInfo> = devices.collect();
-    devices.sort_by(|a, b| {
-        b.connected
-            .cmp(&a.connected)
-            .then_with(|| a.alias.cmp(&b.alias))
-            .then_with(|| a.address.cmp(&b.address))
-    });
-    devices
-        .into_iter()
-        .map(|device| device_row(device, errors.get(&device.address)))
-        .collect()
-}
-
-/// How a device is shown in the list, keyed by its address.
-fn device_row(info: &DeviceInfo, error: Option<&String>) -> MenuRowData {
-    MenuRowData {
-        key: info.address.to_string(),
-        icon: info.icon.clone(),
-        title: info.alias.clone(),
-        status: info.connected.then_some("Connected"),
-        remove_tooltip: info.paired.then_some("Remove this device"),
-        error: error.cloned(),
     }
 }
 

@@ -46,5 +46,6 @@ fn ap_row(summary: &AccessPointSummary, active: bool) -> MenuRowData {
         status,
         remove_tooltip: summary.is_saved().then_some("Forget this network"),
         error: None,
+        busy: false,
     }
 }
