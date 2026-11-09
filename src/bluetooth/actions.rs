@@ -22,18 +22,31 @@ pub enum DeviceAction {
 }
 
 /// Runs `action` against the device at `address` in the background.
+///
+/// A freshly paired device is connected right away, since using it is why
+/// it was paired; the connect is reported as its own action.
 pub fn spawn_device_action(adapter: Adapter, address: Address, action: DeviceAction) {
     relm4::spawn(async move {
-        report(address, action, ActionProgress::Started);
-        let progress = match run_device_action(&adapter, address, action).await {
-            Ok(()) => ActionProgress::Succeeded,
-            Err(e) => {
-                tracing::warn!("couldn't {action:?} bluetooth device {address}: {e}");
-                ActionProgress::Failed(friendly_reason(&e))
-            }
-        };
-        report(address, action, progress);
+        let succeeded = run_and_report(&adapter, address, action).await;
+        if succeeded && action == DeviceAction::Pair {
+            run_and_report(&adapter, address, DeviceAction::Connect).await;
+        }
     });
+}
+
+/// Runs `action` and reports its progress, returning whether it succeeded.
+async fn run_and_report(adapter: &Adapter, address: Address, action: DeviceAction) -> bool {
+    report(address, action, ActionProgress::Started);
+    let progress = match run_device_action(adapter, address, action).await {
+        Ok(()) => ActionProgress::Succeeded,
+        Err(e) => {
+            tracing::warn!("couldn't {action:?} bluetooth device {address}: {e}");
+            ActionProgress::Failed(friendly_reason(&e))
+        }
+    };
+    let succeeded = progress == ActionProgress::Succeeded;
+    report(address, action, progress);
+    succeeded
 }
 
 async fn run_device_action(
