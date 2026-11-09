@@ -28,6 +28,7 @@ use crate::{
         types::{ConnectivityState, State},
     },
     settings, sleep_monitor,
+    utils::shared_state::set_if_changed,
 };
 
 /// Events produced by the watcher tasks for the service loop.
@@ -145,6 +146,9 @@ pub async fn run_network_service() {
 /// it started.
 struct NetworkService {
     conn: zbus::Connection,
+    /// Kept for the service's lifetime so its property cache stays warm;
+    /// rebuilt when NetworkManager restarts.
+    nm: NetworkManagerProxy<'static>,
     event_tx: UnboundedSender<NetworkPropertyChange>,
     property_tasks: PropertyWatcherTasks,
     name_owner_task: Option<AbortHandle>,
@@ -160,11 +164,13 @@ impl NetworkService {
         let conn = zbus::Connection::system().await?;
         let (event_tx, event_rx) = mpsc::unbounded_channel();
 
+        let nm = NetworkManagerProxy::new(&conn).await?;
         let property_tasks = spawn_property_watchers(&conn, &event_tx).await?;
         let name_owner_task = spawn_name_owner_watcher(&conn, &event_tx).await;
 
         let service = Self {
             conn,
+            nm,
             event_tx,
             property_tasks,
             name_owner_task,
@@ -178,7 +184,7 @@ impl NetworkService {
     async fn handle_event(&mut self, event: NetworkPropertyChange) {
         match event {
             NetworkPropertyChange::State(state) => {
-                NETWORK_STATE.write().connection_state = state;
+                update_network_state(|info| info.connection_state = state);
 
                 // refetch as soon as a connection starts activating, so
                 // device_kind (and thus the wifi/wired acquiring icon) is
@@ -201,31 +207,30 @@ impl NetworkService {
                 }
             }
             NetworkPropertyChange::Connectivity(connectivity) => {
-                NETWORK_STATE.write().connectivity = connectivity;
+                update_network_state(|info| info.connectivity = connectivity);
             }
-            NetworkPropertyChange::Strength(strength) => {
-                let mut state = NETWORK_STATE.write();
-                if let Some(wifi) = &mut state.wifi {
+            NetworkPropertyChange::Strength(strength) => update_network_state(|info| {
+                if let Some(wifi) = &mut info.wifi {
                     wifi.strength = strength;
                 }
                 if let Some(SpecificNetworkInfo::WiFi {
                     ref mut wifi_strength,
                     ..
-                }) = state.specific_info
+                }) = info.specific_info
                 {
                     *wifi_strength = strength;
                 }
-            }
+            }),
             NetworkPropertyChange::WifiEnabled(enabled) => {
-                NETWORK_STATE.write().wifi_enabled = enabled;
+                update_network_state(|info| info.wifi_enabled = enabled);
             }
             NetworkPropertyChange::Refetch(reason) => self.refetch(reason).await,
             NetworkPropertyChange::NetworkManagerVanished => {
                 tracing::warn!("networkmanager disappeared from the bus");
                 self.nm_present = false;
                 self.subscriptions.abort_all();
-                *NETWORK_STATE.write() = NetworkInfo::default();
-                *WIFI_SCAN_STATE.write() = Default::default();
+                set_if_changed(&NETWORK_STATE, NetworkInfo::default());
+                set_if_changed(&WIFI_SCAN_STATE, Default::default());
             }
             NetworkPropertyChange::NetworkManagerRestarted => {
                 tracing::info!(
@@ -233,6 +238,12 @@ impl NetworkService {
                 );
                 self.nm_present = true;
                 self.property_tasks.abort_all();
+
+                // a fresh proxy refills its property cache from the new owner
+                match NetworkManagerProxy::new(&self.conn).await {
+                    Ok(nm) => self.nm = nm,
+                    Err(e) => tracing::error!("couldn't rebuild the networkmanager proxy: {e}"),
+                }
                 match spawn_property_watchers(&self.conn, &self.event_tx).await {
                     Ok(tasks) => self.property_tasks = tasks,
                     Err(e) => tracing::error!("couldn't re-establish property watchers: {e}"),
@@ -279,15 +290,14 @@ impl NetworkService {
     }
 
     async fn try_refetch(&mut self) -> anyhow::Result<()> {
-        let nm_proxy = NetworkManagerProxy::new(&self.conn).await?;
-        let primary_path = nm_proxy.primary_connection().await?;
+        let primary_path = self.nm.primary_connection().await?;
         let (info, ap_path, wifi_device_path) =
-            fetch_network_info(&self.conn, primary_path).await?;
+            fetch_network_info(&self.conn, &self.nm, primary_path).await?;
 
         self.subscriptions.abort_all();
 
         tracing::debug!("fetched network info: {:?}", info);
-        *NETWORK_STATE.write() = info;
+        set_if_changed(&NETWORK_STATE, info);
 
         // subscribe to strength changes for the new access point
         if let Some(ap_path) = ap_path {
@@ -310,6 +320,14 @@ impl NetworkService {
 
         Ok(())
     }
+}
+
+/// Applies `update` to a copy of the network state and publishes it only if
+/// something changed, since every write wakes the tile and the menu.
+fn update_network_state(update: impl FnOnce(&mut NetworkInfo)) {
+    let mut info = NETWORK_STATE.read().clone();
+    update(&mut info);
+    set_if_changed(&NETWORK_STATE, info);
 }
 
 impl Drop for NetworkService {

@@ -22,7 +22,7 @@ pub static NETWORK_STATE: SharedState<NetworkInfo> = SharedState::new();
 /// access point list on every scan; only the menu subscribes to this.
 pub static WIFI_SCAN_STATE: SharedState<WifiScanState> = SharedState::new();
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct WifiScanState {
     /// Access points, deduplicated by SSID and sorted by descending signal
     /// strength.
@@ -83,7 +83,7 @@ impl DeviceKind {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NetworkInfo {
     pub connection_state: State,
     pub connectivity: ConnectivityState,
@@ -144,7 +144,7 @@ impl NetworkInfo {
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum SpecificNetworkInfo {
     WiFi {
         wifi_ssid: String,

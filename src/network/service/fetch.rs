@@ -49,14 +49,13 @@ pub(super) async fn find_wireless_device(
 /// after a transient read failure.
 pub(super) async fn fetch_network_info(
     conn: &zbus::Connection,
+    nm_proxy: &NetworkManagerProxy<'_>,
     primary_connection_path: OwnedObjectPath,
 ) -> anyhow::Result<(
     NetworkInfo,
     Option<OwnedObjectPath>,
     Option<OwnedObjectPath>,
 )> {
-    let nm_proxy = NetworkManagerProxy::new(conn).await?;
-
     let connection_state = nm_proxy.state().await?;
     let connectivity = nm_proxy.connectivity().await?;
     // WirelessEnabled should basically never fail to read alongside State
