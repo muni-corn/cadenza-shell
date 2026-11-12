@@ -51,6 +51,18 @@ impl BatteryCapacity {
             _ => None,
         }
     }
+
+    /// Converts the BatteryCapacity to watt-hours.
+    pub fn as_wh(self, microvolts: u64) -> f64 {
+        match self {
+            BatteryCapacity::MicroWattHours(uwh) => uwh as f64 / 1_000_000.0,
+            BatteryCapacity::MicroAmpereHours(uah) => {
+                // convert µV × µAh = pWh (picowatt-hours), then to watt-hours
+                let capacity_pwh = microvolts * uah;
+                capacity_pwh as f64 / 1e12_f64
+            }
+        }
+    }
 }
 
 /// Charging status of the battery.

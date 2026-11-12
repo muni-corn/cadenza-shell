@@ -30,14 +30,7 @@ pub struct SysfsReading {
 impl SysfsReading {
     /// Returns the remaining capacity in this reading, in Wh.
     pub fn remaining_wh(&self) -> f64 {
-        match self.capacity_now {
-            BatteryCapacity::MicroWattHours(uwh) => uwh as f64 / 1_000_000.0,
-            BatteryCapacity::MicroAmpereHours(uah) => {
-                // convert µV × µAh = pWh (picowatt-hours), then to watt-hours
-                let capacity_pwh = self.voltage_now * uah;
-                capacity_pwh as f64 / 1e12_f64
-            }
-        }
+        self.capacity_now.as_wh(self.voltage_now)
     }
 
     /// Calculate precise percentage remaining.
