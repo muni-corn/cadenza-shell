@@ -28,7 +28,7 @@ fn view(volume: &PulseAudioData) -> Option<ProgressState> {
 fn get_icon(volume: &PulseAudioData) -> &'static str {
     if volume.muted {
         VOLUME_MUTED
-    } else if volume_data.volume == 0.0 {
+    } else if volume.volume == 0.0 {
         VOLUME_ZERO
     } else {
         percentage_to_icon_from_list(volume.volume / 100.0, VOLUME_ICONS)
