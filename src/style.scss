@@ -1,6 +1,18 @@
 @use "sass:string";
 
 $warn-color: #fa0;
+$bar-opacity: 0.75;
+$surface-opacity: 0.85;
+
+@function gtkalpha($c, $a) {
+  @return string.unquote("alpha(#{$c},#{$a})");
+}
+
+// translucent version of one of the gtk theme's named colors (e.g.
+// "window_bg_color"), so surfaces follow the active theme's palette
+@function translucent($named-color, $a) {
+  @return gtkalpha("@#{$named-color}", $a);
+}
 
 .tile {
   min-width: 0;
@@ -99,10 +111,6 @@ progressbar {
 
 .warning {
   color: $warn-color;
-}
-
-@function gtkalpha($c, $a) {
-  @return string.unquote("alpha(#{$c},#{$a})");
 }
 
 box.notification-card {
