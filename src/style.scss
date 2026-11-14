@@ -240,6 +240,7 @@ box.notification-card {
 .action-panel {
   padding: 16px 16px 0px 16px;
   border-radius: 16px;
+  background-color: translucent(window_bg_color, $surface-opacity);
 }
 
 // content wrapper for MenuWindow (the wifi/bluetooth dropdowns)
