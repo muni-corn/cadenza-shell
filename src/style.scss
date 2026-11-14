@@ -30,7 +30,7 @@ window {
 }
 
 .bar {
-  background-color: rgba(0, 0, 0, 0.5);
+  background-color: translucent(window_bg_color, $bar-opacity);
 }
 
 // active progress tiles brighten even though they're dimmed at rest
