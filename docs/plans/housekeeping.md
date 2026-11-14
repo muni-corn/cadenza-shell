@@ -395,8 +395,8 @@ fix(app): move the popup panel to a remaining monitor
 - `src/widgets/bar.rs`: handle the right group's toggle output inside `Bar` by
   toggling its own `ActionPanel`.
 - Rename the relay variants to `ToggleActionPanel`; remove
-  `BarOutput::ToggleNotificationCenter` and
-  `CadenzaShellMsg::ToggleNotificationCenter`.
+  `BarOutput::ToggleActionPanel` and
+  `CadenzaShellMsg::ToggleActionPanel`.
 
 ```text
 fix(bar): open the action panel only on the clicked monitor

@@ -41,7 +41,7 @@
 - **battery:** replace charging time prediction module with "good for" predictions
 - **panel:** add digital clock and date display
 - **notifications:** add analog clock widget to notification center
-- **bar:** wire up ToggleNotificationCenter to the notification center
+- **bar:** wire up ToggleActionPanel to the notification center
 - **app:** start run_notifications_service from app.rs
 - **notifications:** implement run_notifications_service entry point
 - **notifications:** add command channel and free-function command API
@@ -235,7 +235,7 @@
 - add analog clock and calendar widgets to notification center header
 - reduce content-title font-weight from 900 to 700
 - **notifications:** add auto-dismiss for fresh notifications
-- **notification-center:** add bottom anchor and remove fixed height
+- **action-panel:** add bottom anchor and remove fixed height
 - add notification tile component to display unread count in bar
 - add notification center widget with history and clear functionality
 - add hexpand property to notification title and body labels

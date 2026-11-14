@@ -88,7 +88,7 @@ impl SimpleComponent for ActionPanel {
         // set up layer shell properties
         window.init_layer_shell();
         window.set_monitor(Some(&model.monitor));
-        window.set_namespace(Some("notification-center"));
+        window.set_namespace(Some("action-panel"));
         window.set_layer(Layer::Top);
         window.set_anchor(Edge::Top, true);
         window.set_anchor(Edge::Right, true);
@@ -107,7 +107,7 @@ impl SimpleComponent for ActionPanel {
                     }
                 }),
             panel: gtk4::Box::builder()
-                .css_classes(["notification-center", "background"])
+                .css_classes(["action-panel", "background"])
                 .orientation(gtk4::Orientation::Vertical)
                 .hexpand(true)
                 .vexpand(true)
