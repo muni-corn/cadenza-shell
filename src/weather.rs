@@ -9,7 +9,7 @@ use tokio::time::sleep;
 use crate::{
     icon_names::{
         FEW_CLOUDS, FOG, MOON, MOON_CLOUD, RAIN, RAINDROPS, ROUND_CLOUD, SNOW, SNOWFLAKE, STORM,
-        WEATHER_SUNNY_REGULAR,
+        SUN_OUTLINE,
     },
     sleep_monitor,
     utils::{backoff::Backoff, shared_state::set_if_changed},
@@ -91,7 +91,7 @@ fn map_icon(code: &str, dark: bool) -> &'static str {
             if dark {
                 MOON
             } else {
-                WEATHER_SUNNY_REGULAR
+                SUN_OUTLINE
             }
         }
         "116" => {
