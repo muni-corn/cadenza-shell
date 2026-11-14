@@ -43,6 +43,23 @@ mod tests {
     }
 
     #[test]
+    fn alarm_uses_theme_error_color() {
+        let css = compile_styles().unwrap();
+        assert!(
+            css.contains("color: @error_color"),
+            "alarm should use the theme's error_color, got:\n{css}"
+        );
+        assert!(
+            css.contains("alpha(@error_color,0.5)"),
+            "alarm pulse should fade the theme's error_color, got:\n{css}"
+        );
+        assert!(
+            !css.contains("rgba(255, 0, 0"),
+            "hardcoded red ignores the theme, got:\n{css}"
+        );
+    }
+
+    #[test]
     fn highlights_use_theme_foreground() {
         let css = compile_styles().unwrap();
         assert!(

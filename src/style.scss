@@ -93,7 +93,7 @@ progressbar {
 }
 
 .alarm {
-  color: rgba(255, 0, 0, 1);
+  color: $error-color;
   animation-duration: 0.5s;
   animation-timing-function: ease-in;
   animation-iteration-count: infinite;
@@ -103,11 +103,11 @@ progressbar {
 
 @keyframes alarm {
   from {
-    color: rgba(255, 0, 0, 1);
+    color: $error-color;
   }
 
   to {
-    color: rgba(255, 0, 0, 0.5);
+    color: translucent(error_color, 0.5);
   }
 }
 
