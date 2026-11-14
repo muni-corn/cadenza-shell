@@ -296,4 +296,10 @@ box.notification-card {
   &.tray-needs-attention {
     color: $warn-color;
   }
+
+  // the arrow is styled too, or it would show as a solid triangle
+  > popover > contents,
+  > popover > arrow {
+    background-color: translucent(popover_bg_color, $surface-opacity);
+  }
 }
