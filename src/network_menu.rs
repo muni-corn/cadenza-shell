@@ -107,7 +107,7 @@ impl Component for NetworkMenu {
             .launch(
                 gtk::Box::builder()
                     .orientation(gtk::Orientation::Vertical)
-                    .spacing(4)
+                    .spacing(8)
                     .build(),
             )
             .forward(sender.input_sender(), |output| match output {
