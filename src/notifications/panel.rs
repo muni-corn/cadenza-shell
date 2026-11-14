@@ -1,3 +1,5 @@
+mod slide;
+
 use std::cmp::Reverse;
 
 use chrono::Local;
@@ -6,6 +8,7 @@ use glib::ControlFlow;
 use gtk4::prelude::*;
 use gtk4_layer_shell::{Edge, Layer, LayerShell};
 use relm4::{factory::FactoryVecDeque, prelude::*};
+use slide::{PANEL_MARGIN, PanelSlide};
 
 use crate::{
     analog_clock::AnalogClock,
@@ -37,6 +40,7 @@ pub enum ActionPanelMsg {
 #[derive(Debug)]
 pub struct ActionPanelWidgets {
     window: gtk4::Window,
+    slide: PanelSlide,
     cards: FactoryVecDeque<NotificationCard>,
     panel: gtk4::Box,
     clock: Controller<AnalogClock>,
@@ -93,10 +97,11 @@ impl SimpleComponent for ActionPanel {
         window.set_anchor(Edge::Top, true);
         window.set_anchor(Edge::Right, true);
         window.set_anchor(Edge::Bottom, true);
-        window.set_margin_all(8);
+        window.set_margin_all(PANEL_MARGIN);
         window.set_width_request(settings::get_config().notifications.center_width);
 
         let mut widgets = ActionPanelWidgets {
+            slide: PanelSlide::new(&window),
             window,
             cards: FactoryVecDeque::builder()
                 .launch(gtk4::Box::default())
@@ -213,8 +218,6 @@ impl SimpleComponent for ActionPanel {
     }
 
     fn update_view(&self, widgets: &mut Self::Widgets, _sender: ComponentSender<Self>) {
-        widgets.window.set_visible(self.visible);
-
         if self.visible {
             let state = NOTIFICATIONS_STATE.read();
             widgets
@@ -230,6 +233,13 @@ impl SimpleComponent for ActionPanel {
             for notification in notifications {
                 guard.push_back(notification.clone());
             }
+            drop(guard);
+
+            // after the cards are built, so the window is sized for them
+            widgets.slide.slide_in();
+        } else {
+            // the window is unmapped once the slide-out finishes
+            widgets.slide.slide_out();
         }
     }
 
