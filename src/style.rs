@@ -28,4 +28,17 @@ mod tests {
             "bar should be a translucent window_bg_color, got:\n{css}"
         );
     }
+
+    #[test]
+    fn highlights_use_theme_foreground() {
+        let css = compile_styles().unwrap();
+        assert!(
+            css.contains("alpha(@window_fg_color,"),
+            "highlights should use window_fg_color, got:\n{css}"
+        );
+        assert!(
+            !css.contains("rgba(255, 255, 255"),
+            "hardcoded white breaks light themes, got:\n{css}"
+        );
+    }
 }
