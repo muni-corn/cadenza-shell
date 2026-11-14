@@ -56,28 +56,31 @@ impl FactoryComponent for MenuRow {
     view! {
         #[root]
         gtk::Box {
-            set_spacing: 4,
+            set_spacing: 8,
 
             gtk::Button {
                 set_hexpand: true,
                 connect_clicked => MenuRowMsg::Activate,
 
+                // main button content: the title line, and an error status below it
                 gtk::Box {
-                    set_spacing: 8,
+                    set_orientation: gtk::Orientation::Vertical,
+                    set_valign: gtk::Align::Center,
                     set_halign: gtk::Align::Start,
                     set_hexpand: true,
 
-                    gtk::Image {
-                        set_width_request: 24,
-                        #[watch]
-                        set_visible: self.icon().is_some(),
-                        #[watch]
-                        set_icon_name: self.icon(),
-                    },
-
+                    // title line: icon, title, status, spinner
                     gtk::Box {
-                        set_orientation: gtk::Orientation::Vertical,
+                        set_spacing: 8,
                         set_hexpand: true,
+
+                        gtk::Image {
+                            set_width_request: 24,
+                            #[watch]
+                            set_visible: self.icon().is_some(),
+                            #[watch]
+                            set_icon_name: self.icon(),
+                        },
 
                         gtk::Label {
                             set_halign: gtk::Align::Start,
@@ -86,31 +89,31 @@ impl FactoryComponent for MenuRow {
                         },
 
                         gtk::Label {
-                            set_halign: gtk::Align::Start,
-                            set_css_classes: &["warning"],
-                            set_wrap: true,
-                            set_xalign: 0.0,
+                            set_css_classes: &["dim"],
+                            set_halign: gtk::Align::End,
                             #[watch]
-                            set_visible: self.data.error.is_some(),
+                            set_visible: self.data.status.is_some() && !self.data.busy,
                             #[watch]
-                            set_label: self.data.error.as_deref().unwrap_or_default(),
+                            set_label: self.data.status.unwrap_or_default(),
+                        },
+
+                        gtk::Spinner {
+                            #[watch]
+                            set_visible: self.data.busy,
+                            #[watch]
+                            set_spinning: self.data.busy,
                         },
                     },
 
                     gtk::Label {
-                        set_css_classes: &["dim"],
-                        set_halign: gtk::Align::End,
+                        set_halign: gtk::Align::Start,
+                        set_css_classes: &["warning"],
+                        set_wrap: true,
+                        set_xalign: 0.0,
                         #[watch]
-                        set_visible: self.data.status.is_some() && !self.data.busy,
+                        set_visible: self.data.error.is_some(),
                         #[watch]
-                        set_label: self.data.status.unwrap_or_default(),
-                    },
-
-                    gtk::Spinner {
-                        #[watch]
-                        set_visible: self.data.busy,
-                        #[watch]
-                        set_spinning: self.data.busy,
+                        set_label: self.data.error.as_deref().unwrap_or_default(),
                     },
                 },
             },
