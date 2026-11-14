@@ -22,7 +22,7 @@ $surface-opacity: 0.85;
 }
 
 button.tile:hover {
-  background-color: rgba(255, 255, 255, 0.1);
+  background-color: translucent(window_fg_color, 0.1);
 }
 
 window {
@@ -50,10 +50,10 @@ progressbar {
 
   trough {
     min-width: 16px;
-    background-color: rgba(255, 255, 255, 0.1);
+    background-color: translucent(window_fg_color, 0.1);
 
     progress {
-      background-color: rgba(255, 255, 255, 0.5);
+      background-color: translucent(window_fg_color, 0.5);
     }
   }
 
@@ -69,10 +69,10 @@ progressbar {
   &.active {
     trough {
       min-width: 128px;
-      background-color: rgba(255, 255, 255, 0.25);
+      background-color: translucent(window_fg_color, 0.25);
 
       progress {
-        background-color: rgba(255, 255, 255, 1);
+        background-color: translucent(window_fg_color, 1);
       }
     }
   }
