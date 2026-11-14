@@ -236,8 +236,10 @@ box.notification-card {
   }
 }
 
+// a recessed well behind the tray icons; the theme's shade (rather than a
+// foreground tint) keeps the tiles' own hover highlight visible against it
 .tray-revealer {
-  background-color: rgba(0, 0, 0, 0.1);
+  background-color: string.unquote("@shade_color");
 }
 
 .action-panel {

@@ -60,6 +60,19 @@ mod tests {
     }
 
     #[test]
+    fn tray_revealer_uses_theme_shade() {
+        let css = compile_styles().unwrap();
+        assert!(
+            css.contains("background-color: @shade_color"),
+            "tray revealer should use the theme's shade_color, got:\n{css}"
+        );
+        assert!(
+            !css.contains("rgba(0, 0, 0"),
+            "hardcoded black overlays ignore the theme, got:\n{css}"
+        );
+    }
+
+    #[test]
     fn highlights_use_theme_foreground() {
         let css = compile_styles().unwrap();
         assert!(
