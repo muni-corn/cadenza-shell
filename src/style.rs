@@ -30,6 +30,19 @@ mod tests {
     }
 
     #[test]
+    fn warnings_use_theme_color() {
+        let css = compile_styles().unwrap();
+        assert!(
+            css.contains("color: @warning_color"),
+            "warnings should use the theme's warning_color, got:\n{css}"
+        );
+        assert!(
+            !css.contains("#fa0"),
+            "hardcoded warning orange ignores the theme, got:\n{css}"
+        );
+    }
+
+    #[test]
     fn highlights_use_theme_foreground() {
         let css = compile_styles().unwrap();
         assert!(

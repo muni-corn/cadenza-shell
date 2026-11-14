@@ -1,6 +1,8 @@
 @use "sass:string";
 
-$warn-color: #fa0;
+// semantic colors come from the active gtk theme's named colors
+$warn-color: string.unquote("@warning_color");
+$error-color: string.unquote("@error_color");
 $bar-opacity: 0.75;
 $surface-opacity: 0.85;
 
