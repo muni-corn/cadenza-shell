@@ -122,20 +122,10 @@ box.notification-card {
     box-shadow: none;
   }
 
-  &:first-child > box {
-    margin-top: 16px;
-  }
-
-  &:last-child > box {
-    margin-bottom: 16px;
-  }
-
   > box {
     min-width: 400px;
-    margin: 8px 16px;
     border-radius: 12px;
     background-color: translucent(popover_bg_color, $surface-opacity);
-    box-shadow: 0px 4px 8px gtkalpha(black, 0.5);
   }
 
   &.low > box {
