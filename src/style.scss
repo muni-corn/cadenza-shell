@@ -246,6 +246,7 @@ box.notification-card {
 .menu-window {
   padding: 16px;
   border-radius: 16px;
+  background-color: translucent(popover_bg_color, $surface-opacity);
   box-shadow: 0px 4px 8px gtkalpha(black, 0.5);
 }
 
