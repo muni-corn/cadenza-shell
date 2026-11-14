@@ -1,7 +1,7 @@
 //! A clickable row for the lists in the quick-settings menus.
 
 use relm4::{
-    factory::{FactoryVecDeque, FactoryView},
+    factory::FactoryVecDeque,
     gtk::{self, gdk, prelude::*},
     prelude::*,
 };
@@ -45,94 +45,89 @@ pub struct MenuRow {
     data: MenuRowData,
 }
 
-pub struct MenuRowWidgets {
-    icon: gtk::Image,
-    title: gtk::Label,
-    error: gtk::Label,
-    status: gtk::Label,
-    spinner: gtk::Spinner,
-    remove: gtk::Button,
-}
-
+#[relm4::factory(pub)]
 impl FactoryComponent for MenuRow {
     type CommandOutput = ();
-    type Index = DynamicIndex;
     type Init = MenuRowData;
     type Input = MenuRowMsg;
     type Output = MenuRowOutput;
     type ParentWidget = gtk::Box;
-    type Root = gtk::Box;
-    type Widgets = MenuRowWidgets;
+
+    view! {
+        #[root]
+        gtk::Box {
+            set_spacing: 4,
+
+            gtk::Button {
+                set_hexpand: true,
+                connect_clicked => MenuRowMsg::Activate,
+
+                gtk::Box {
+                    set_spacing: 8,
+                    set_halign: gtk::Align::Start,
+                    set_hexpand: true,
+
+                    gtk::Image {
+                        set_width_request: 24,
+                        #[watch]
+                        set_visible: self.icon().is_some(),
+                        #[watch]
+                        set_icon_name: self.icon(),
+                    },
+
+                    gtk::Box {
+                        set_orientation: gtk::Orientation::Vertical,
+                        set_hexpand: true,
+
+                        gtk::Label {
+                            set_halign: gtk::Align::Start,
+                            #[watch]
+                            set_label: &self.data.title,
+                        },
+
+                        gtk::Label {
+                            set_halign: gtk::Align::Start,
+                            set_css_classes: &["warning"],
+                            set_wrap: true,
+                            set_xalign: 0.0,
+                            #[watch]
+                            set_visible: self.data.error.is_some(),
+                            #[watch]
+                            set_label: self.data.error.as_deref().unwrap_or_default(),
+                        },
+                    },
+
+                    gtk::Label {
+                        set_css_classes: &["dim"],
+                        set_halign: gtk::Align::End,
+                        #[watch]
+                        set_visible: self.data.status.is_some() && !self.data.busy,
+                        #[watch]
+                        set_label: self.data.status.unwrap_or_default(),
+                    },
+
+                    gtk::Spinner {
+                        #[watch]
+                        set_visible: self.data.busy,
+                        #[watch]
+                        set_spinning: self.data.busy,
+                    },
+                },
+            },
+
+            gtk::Button {
+                set_icon_name: "user-trash-symbolic",
+                connect_clicked => MenuRowMsg::Remove,
+                #[watch]
+                set_visible: self.data.remove_tooltip.is_some(),
+                #[watch]
+                set_tooltip_text: self.data.remove_tooltip,
+            },
+        }
+    }
 
     fn init_model(data: Self::Init, _index: &DynamicIndex, _sender: FactorySender<Self>) -> Self {
         Self { data }
-    }
-
-    fn init_root(&self) -> Self::Root {
-        gtk::Box::builder().spacing(4).build()
-    }
-
-    fn init_widgets(
-        &mut self,
-        _index: &DynamicIndex,
-        root: Self::Root,
-        _returned_widget: &<Self::ParentWidget as FactoryView>::ReturnedWidget,
-        sender: FactorySender<Self>,
-    ) -> Self::Widgets {
-        let select = gtk::Button::builder().hexpand(true).build();
-        select.connect_clicked({
-            let sender = sender.clone();
-            move |_| sender.input(MenuRowMsg::Activate)
-        });
-
-        let content = gtk::Box::builder()
-            .spacing(8)
-            .halign(gtk::Align::Start)
-            .hexpand(true)
-            .build();
-        let icon = gtk::Image::builder().width_request(24).build();
-        let text = gtk::Box::builder()
-            .orientation(gtk::Orientation::Vertical)
-            .hexpand(true)
-            .build();
-        let title = gtk::Label::builder().halign(gtk::Align::Start).build();
-        let error = gtk::Label::builder()
-            .halign(gtk::Align::Start)
-            .css_classes(["warning"])
-            .wrap(true)
-            .xalign(0.0)
-            .build();
-        text.append(&title);
-        text.append(&error);
-        let status = gtk::Label::builder()
-            .css_classes(["dim"])
-            .halign(gtk::Align::End)
-            .build();
-        content.append(&icon);
-        let spinner = gtk::Spinner::new();
-        content.append(&text);
-        content.append(&status);
-        content.append(&spinner);
-        select.set_child(Some(&content));
-
-        let remove = gtk::Button::builder()
-            .icon_name("user-trash-symbolic")
-            .build();
-        remove.connect_clicked(move |_| sender.input(MenuRowMsg::Remove));
-
-        root.append(&select);
-        root.append(&remove);
-
-        let widgets = MenuRowWidgets {
-            icon,
-            title,
-            error,
-            status,
-            spinner,
-            remove,
-        };
-        self.render(&widgets);
-        widgets
     }
 
     fn update(&mut self, msg: Self::Input, sender: FactorySender<Self>) {
@@ -147,39 +142,12 @@ impl FactoryComponent for MenuRow {
             MenuRowMsg::Update(data) => self.data = data,
         }
     }
-
-    fn update_view(&self, widgets: &mut Self::Widgets, _sender: FactorySender<Self>) {
-        self.render(widgets);
-    }
 }
 
 impl MenuRow {
-    fn render(&self, widgets: &MenuRowWidgets) {
-        let icon = self.data.icon.as_deref().filter(|icon| has_icon(icon));
-        widgets.icon.set_visible(icon.is_some());
-        widgets.icon.set_icon_name(icon);
-
-        widgets.title.set_label(&self.data.title);
-
-        widgets.error.set_visible(self.data.error.is_some());
-        widgets
-            .error
-            .set_label(self.data.error.as_deref().unwrap_or_default());
-
-        widgets.spinner.set_visible(self.data.busy);
-        widgets.spinner.set_spinning(self.data.busy);
-
-        widgets
-            .status
-            .set_visible(self.data.status.is_some() && !self.data.busy);
-        widgets
-            .status
-            .set_label(self.data.status.unwrap_or_default());
-
-        widgets
-            .remove
-            .set_visible(self.data.remove_tooltip.is_some());
-        widgets.remove.set_tooltip_text(self.data.remove_tooltip);
+    /// The row's icon, if it has one that the theme can show.
+    fn icon(&self) -> Option<&str> {
+        self.data.icon.as_deref().filter(|icon| has_icon(icon))
     }
 }
 
