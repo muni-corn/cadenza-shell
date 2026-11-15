@@ -1,0 +1,2 @@
+[version]
+commit_version_files = ["Cargo.toml", "Cargo.lock"]
