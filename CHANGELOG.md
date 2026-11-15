@@ -1,5 +1,156 @@
 # Changelog
 
+## **v0.2.0**
+
+### **Breaking changes**
+
+- refactor(tiles): port the progress tiles to the shared-state helper
+
+### Features
+
+- **style:** make the action panel translucent
+- **style:** make menu windows translucent
+- **style:** make tray menus translucent
+- **style:** make notification cards translucent
+- **notifications:** slide action panel in and out
+- **bluetooth:** prompt for service authorization
+- **bluetooth:** connect devices after pairing
+- **bluetooth-menu:** show busy states for devices
+- **bluetooth:** report action outcomes to the menu
+- **bluetooth:** open the menu on the focused monitor for pairing
+- **bluetooth:** track whether this shell owns discovery
+- **widgets:** add a menu list row with keyed sync
+- **widgets:** add shared menu header, prompt and layout parts
+- **tiles:** add TileState and a shared-state tile helper
+- **notifications:** render action icons
+- **notifications:** show images embedded in notification bodies
+- **notifications:** open hyperlinks from notification bodies
+- **notifications:** send activation tokens with invoked actions
+- **notifications:** play notification sounds
+- **notifications:** render body markup
+- **notifications:** show image-data and image-path hints
+- **settings:** use notification and icon size settings
+- **notifications:** wire up the clear-all button
+- **utils:** add a set_if_changed helper for shared state
+- **weather:** add instrumentation to polling loop
+
+### Bug fixes
+
+- **style:** fix scrollbar collisions with content in menus
+- **style:** reduce surface opacity to match bar opacity
+- **style:** remove shadow from notification cards
+- **style:** remove notification card margins and shadow
+- **style:** shade the tray revealer with the theme's shade color
+- **style:** color the alarm pulse with the theme's error color
+- **style:** color warnings with the theme's warning color
+- **style:** color workspace indicators with the theme's foreground
+- **style:** color tile highlights with the theme's foreground
+- **style:** tint the bar with the theme's window background
+- **tiles:** avoid adding an empty css class
+- **style:** style tray attention, active tiles and card classes
+- **sleep-monitor:** reconnect when the system bus drops
+- **tray:** use bundled icons for the expand toggle
+- **tray:** apply menu diffs once and unparent the popover
+- **tray:** update icon, tooltip and status on change
+- **tiles:** order workspace dots by index
+- **weather:** map missing condition codes and use a sun icon
+- **weather:** compare sun times in the location's local time
+- **weather:** refresh after resume
+- **weather:** add request timeouts and keep the last good report
+- **weather:** fetch over https with rustls
+- **widgets:** only highlight progress tiles when the value changes
+- **tiles:** render initial weather and notification state
+- **notifications:** resync popups after the event receiver lags
+- **notifications:** keep cards in a stable order
+- **notifications:** invoke the default action and close afterwards
+- **notifications:** report the crate version in server information
+- **notifications:** avoid id collisions with client-chosen ids
+- **notifications:** parse hints leniently
+- **notifications:** replace popups in place
+- **notifications:** keep notifications when popups time out
+- **sound:** reap child processes
+- **tiles:** only show battery warnings while discharging
+- **battery:** only reset alerts once charging
+- **battery:** refresh state after resume
+- **battery:** fall back to polling when udev is unavailable
+- **battery:** ignore peripheral batteries
+- **battery:** pair energy and charge readings consistently
+- **battery:** read power_now when current_now is missing
+- **tiles:** render initial bluetooth state and pluralize the count
+- **bluetooth-menu:** validate pairing input and show device aliases
+- **bluetooth-menu:** subscribe to state before reading it
+- **bluetooth:** fall back to another adapter when ours is removed
+- **bluetooth:** reconcile devices against the adapter
+- **bluetooth:** subscribe to events before snapshotting devices
+- **bluetooth:** re-register the agent after bluetoothd restarts
+- **bluetooth:** reply to display requests immediately
+- **bluetooth:** clear pairing prompts when requests end
+- **bluetooth-menu:** use a synchronous factory for device rows
+- **network:** prefer wpa-psk on transition networks and accept wep passphrases
+- **network:** redact passwords from debug output
+- **bluetooth-menu:** resync the power switch when toggling fails
+- **network:** resync the wifi switch when toggling fails
+- **network:** clear state when NetworkManager disappears
+- **network:** forget every saved profile for an ssid
+- **network:** sort access points deterministically and skip idle scans
+- **network:** derive the active access point from live state
+- **network:** refresh access points when scans complete
+- **network:** show the wifi connection even when it isn't primary
+- **network:** disconnect the wifi device instead of the primary connection
+- **network:** report connect errors to the menu
+- **network:** track connect outcomes through the active connection
+- **network:** activate saved profiles instead of creating duplicates
+- **pulseaudio:** only publish volume when it changes
+- **pulseaudio:** reconnect when the sound server restarts
+- **pulseaudio:** run the main loop on a blocking thread
+- **brightness:** pick the preferred backlight and reject a zero maximum
+- **brightness:** read inotify events asynchronously
+- **widgets:** align menu and popup margins with the bar
+- **bar:** open the action panel only on the clicked monitor
+- **app:** move the popup panel to a remaining monitor
+- **bar:** configure layer shell before the window is realized
+- **network-menu:** tie scan loops to the menu's lifetime
+- **analog-clock:** honour the radius passed by the caller
+- **analog-clock:** redraw with a tick callback
+- **notifications:** stop the action panel clock when the panel is dropped
+- **tiles:** tie the clock loop to the tile's lifetime
+- **notifications:** destroy panel windows on shutdown
+- **widgets:** destroy menu windows on shutdown
+- **bluetooth-menu:** stop the power switch from re-triggering itself
+- **network-menu:** stop the wifi switch from re-triggering itself
+- **bluetooth:** allow discovery to restart after it ends
+- **network:** reset the scanning flag when a scan fails early
+- **app:** stop the tray event loop when its channel closes
+- **main:** exit with a success code
+- **settings:** clamp polling intervals to at least one second
+- **notifications:** stop the popup auto-dismiss timer from panicking
+- **widgets:** stop the progress tile fade timer from panicking
+- **niri:** reconnect when the event socket closes
+- **weather:** use http instead of https for wttr.in API
+
+### Performance
+
+- **network:** read access points concurrently
+- **bluetooth:** skip writes that don't change state
+- **main:** lower the relm4 worker thread count
+
+### Tests
+
+- **style:** assert highlights use theme foreground color
+
+### Build system
+
+- **devenv:** switch rust build from crate2nix to crane
+
+### Documentation
+
+- **app:** remove stale service ordering comments
+- **network:** correct stale doc comments
+- **plans:** use git wt for housekeeping worktrees
+- **plans:** add housekeeping commit recipe
+
+---
+
 ## **v0.1.0**
 
 ### **Breaking changes**
@@ -41,7 +192,7 @@
 - **battery:** replace charging time prediction module with "good for" predictions
 - **panel:** add digital clock and date display
 - **notifications:** add analog clock widget to notification center
-- **bar:** wire up ToggleActionPanel to the notification center
+- **bar:** wire up ToggleNotificationCenter to the notification center
 - **app:** start run_notifications_service from app.rs
 - **notifications:** implement run_notifications_service entry point
 - **notifications:** add command channel and free-function command API
@@ -83,7 +234,7 @@
 - **charging:** add ChargingSession and ChargingPhase types
 - **charging:** add ChargeProfile struct with persistence
 - add ReadingRecord for more reliable csv tracking
-- add conversion utility functions to `BatteryCapacity`
+- add conversion utility functions to `BatteryCapcity`
 - **history:** give more info when history fails to save
 - **sysfs:** add time of reading to SysfsReading
 - **battery:** add serde support to ChargingStatus
@@ -235,7 +386,7 @@
 - add analog clock and calendar widgets to notification center header
 - reduce content-title font-weight from 900 to 700
 - **notifications:** add auto-dismiss for fresh notifications
-- **action-panel:** add bottom anchor and remove fixed height
+- **notification-center:** add bottom anchor and remove fixed height
 - add notification tile component to display unread count in bar
 - add notification center widget with history and clear functionality
 - add hexpand property to notification title and body labels
@@ -396,7 +547,7 @@
 - **tray:** fix icons
 - **hyprland:** use connector name for monitors, not model
 - fix button styling for hyprland workspaces
-- **notifications:** fix notifications being replaced
+- **notifications:** fix notifcations being replaced
 - **tray:** update module with updated libraries
 - **bluetooth:** hide module properly when unavailable
 - fix crash when wifi is null, maybe
