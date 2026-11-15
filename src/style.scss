@@ -4,7 +4,7 @@
 $warn-color: string.unquote("@warning_color");
 $error-color: string.unquote("@error_color");
 $bar-opacity: 0.75;
-$surface-opacity: 0.85;
+$surface-opacity: 0.75;
 
 @function gtkalpha($c, $a) {
   @return string.unquote("alpha(#{$c},#{$a})");
