@@ -240,7 +240,7 @@ box.notification-card {
 
 // content wrapper for MenuWindow (the wifi/bluetooth dropdowns)
 .menu-window {
-  padding: 16px;
+  padding-top: 16px;
   border-radius: 16px;
   background-color: translucent(popover_bg_color, $surface-opacity);
 }

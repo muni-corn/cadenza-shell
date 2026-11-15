@@ -21,6 +21,9 @@ pub fn scrolled_content() -> (gtk::ScrolledWindow, gtk::Box) {
     let content = gtk::Box::builder()
         .orientation(gtk::Orientation::Vertical)
         .spacing(16)
+        .margin_start(16)
+        .margin_end(16)
+        .margin_bottom(16)
         .build();
     let scroller = gtk::ScrolledWindow::builder()
         .vscrollbar_policy(gtk::PolicyType::Automatic)
@@ -47,6 +50,8 @@ impl MenuHeader {
         let root = gtk::Box::builder()
             .spacing(20)
             .hexpand(true)
+            .margin_start(16)
+            .margin_end(16)
             .css_classes(["content-title"])
             .build();
         let icon = gtk::Image::builder()
