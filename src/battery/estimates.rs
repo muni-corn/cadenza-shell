@@ -19,7 +19,7 @@ const MIN_POWER_WATTS: f64 = 0.05;
 /// Keeps two exponential moving averages of power: a short one (minutes) that
 /// tracks the current load and a long one (hours) that remembers the typical
 /// load. Updates are weighted by the time since the previous reading, so
-/// irregularly spaced readings (udev events arrive whenever the battery
+/// irregularly spaced readings (upower events arrive whenever the battery
 /// changes) don't skew the averages.
 ///
 /// # Example

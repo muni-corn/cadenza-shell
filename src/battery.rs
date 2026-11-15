@@ -5,7 +5,7 @@ use relm4::SharedState;
 mod alerts;
 mod estimates;
 mod sysfs;
-mod udev;
+mod upower;
 mod watcher;
 
 pub use watcher::start_battery_service;

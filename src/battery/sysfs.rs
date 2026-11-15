@@ -147,11 +147,22 @@ fn read_sysfs_i64(battery_path: &Path, file: &str) -> Option<i64> {
         .ok()
 }
 
-/// Read charging status from sysfs, delegating to the shared parser in `udev`.
+/// Parses a charging status string into a [`ChargingStatus`] variant.
+pub fn parse_charging_status(value: &str) -> ChargingStatus {
+    match value.trim() {
+        "Charging" => ChargingStatus::Charging,
+        "Discharging" => ChargingStatus::Discharging,
+        "Full" => ChargingStatus::Full,
+        "Not charging" => ChargingStatus::NotCharging,
+        _ => ChargingStatus::Unknown,
+    }
+}
+
+/// Read charging status from sysfs.
 fn read_charging_status(battery_path: &Path) -> ChargingStatus {
     fs::read_to_string(battery_path.join("status"))
         .ok()
-        .map(|s| crate::battery::udev::parse_charging_status(&s))
+        .map(|s| parse_charging_status(&s))
         .unwrap_or(ChargingStatus::Unknown)
 }
 

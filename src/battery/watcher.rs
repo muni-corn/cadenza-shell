@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use tokio::io::unix::{AsyncFd, AsyncFdReadyGuard};
+use tokio::sync::mpsc;
 
 use super::{BATTERY_STATE, BatteryState, ChargingStatus};
 use crate::{
@@ -12,7 +12,7 @@ use crate::{
         alerts::AlertState,
         estimates::PowerModel,
         sysfs::{detect_battery_path, read_battery_sysfs},
-        udev::{create_battery_monitor, is_battery_change},
+        upower::run_upower_trigger,
     },
     sleep_monitor,
 };
@@ -51,26 +51,33 @@ pub async fn start_battery_service() {
         });
     }
 
-    // udev reports status changes right away; without it the poll interval
-    // still keeps the tile current, just less promptly
-    let udev = match create_battery_monitor().and_then(|monitor| Ok(AsyncFd::new(monitor)?)) {
-        Ok(fd) => Some(fd),
-        Err(e) => {
-            tracing::warn!("couldn't monitor udev for battery changes, polling instead: {e}");
-            None
-        }
+    let Some(battery_name) = battery_path.file_name() else {
+        tracing::error!("battery path {} has no name", battery_path.display());
+        return;
     };
+
+    // upower reports status changes right away; without it the poll interval
+    // still keeps the tile current, just less promptly
+    let (changed_tx, changed_rx) = mpsc::channel(1);
 
     let mut alert_state = AlertState::default();
 
-    watch_battery(&battery_path, udev, &mut power_model, &mut alert_state).await;
+    tokio::join!(
+        run_upower_trigger(battery_name.to_owned(), changed_tx),
+        watch_battery(
+            &battery_path,
+            changed_rx,
+            &mut power_model,
+            &mut alert_state
+        ),
+    );
 }
 
-/// Updates the battery state on every udev change event for the battery and
-/// on every poll tick, forever.
+/// Updates the battery state on every upower change for the battery and on
+/// every poll tick, forever.
 async fn watch_battery(
     battery_path: &Path,
-    mut udev: Option<AsyncFd<udev::MonitorSocket>>,
+    mut changed: mpsc::Receiver<()>,
     power_model: &mut PowerModel,
     alert_state: &mut AlertState,
 ) {
@@ -85,26 +92,9 @@ async fn watch_battery(
 
     loop {
         tokio::select! {
-            ready = udev_readable(udev.as_ref()) => match ready {
-                Ok(mut guard) => {
-                    // drain every pending event, but update once per batch
-                    let battery_changed = guard
-                        .get_inner()
-                        .iter()
-                        .filter(|event| is_battery_change(event, battery_path))
-                        .count()
-                        > 0;
-                    guard.clear_ready();
-
-                    if battery_changed {
-                        update_battery_state(battery_path, power_model, alert_state).await;
-                    }
-                }
-                Err(e) => {
-                    tracing::error!("udev battery monitor failed, polling instead: {e}");
-                    udev = None;
-                }
-            },
+            Some(()) = changed.recv() => {
+                update_battery_state(battery_path, power_model, alert_state).await;
+            }
 
             _ = poll_interval.tick() => {
                 update_battery_state(battery_path, power_model, alert_state).await;
@@ -114,16 +104,6 @@ async fn watch_battery(
                 update_battery_state(battery_path, power_model, alert_state).await;
             }
         }
-    }
-}
-
-/// Waits for the udev monitor to become readable, or forever without one.
-async fn udev_readable(
-    udev: Option<&AsyncFd<udev::MonitorSocket>>,
-) -> std::io::Result<AsyncFdReadyGuard<'_, udev::MonitorSocket>> {
-    match udev {
-        Some(fd) => fd.readable().await,
-        None => std::future::pending().await,
     }
 }
 
