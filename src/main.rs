@@ -32,11 +32,7 @@ use crate::{app::CadenzaShellModel, style::compile_styles};
 
 fn main() -> glib::ExitCode {
     // default to info; bump notifications to debug for richer diagnostics
-    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| {
-        EnvFilter::new(
-            "info,cadenza_shell::notifications=debug,cadenza_shell::tiles::notifications=debug",
-        )
-    });
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     fmt().with_env_filter(filter).with_target(true).init();
 
