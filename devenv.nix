@@ -14,7 +14,6 @@ let
     gdk-pixbuf
     libadwaita
     libpulseaudio.dev
-    udev.dev
     pipewire
     wireplumber
     networkmanager
