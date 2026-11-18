@@ -1,5 +1,17 @@
 # Changelog
 
+## **v0.2.1**
+
+### Bug fixes
+
+- **main:** restore default log filter to info only
+
+### Build system
+
+- **nix:** drop libudev from the dev environment
+
+---
+
 ## **v0.2.0**
 
 ### **Breaking changes**
